@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { SubmissionData, School } from '../types';
+import { SubmissionData, School, Badge } from '../types';
 import { BrainCircuit, RefreshCw, BarChart3, Database, Trash2, Sparkles, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { analyzeData } from '../services/geminiService';
@@ -8,6 +8,7 @@ import { analyzeData } from '../services/geminiService';
 interface AdminDashboardProps {
   data: SubmissionData[];
   schools: School[]; // Added schools prop to check locked status
+  badges?: Badge[];
   onRefresh: () => void;
   onDelete: (item: SubmissionData) => void;
 }

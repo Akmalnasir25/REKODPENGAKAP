@@ -106,7 +106,7 @@ function isValidSchoolCode(code) { if (!code) return false; return /^[A-Z0-9\-\_
 function _ensureUsersSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET_USERS);
-  if (!sh) { sh = ss.insertSheet(SHEET_USERS); sh.appendRow(["SchoolName","SchoolCode","PasswordHash","Salt","SecretKey"]); }
+  if (!sh) { sh = ss.insertSheet(SHEET_USERS); sh.appendRow(["SchoolName","SchoolCode","NegeriCode","DaerahCode","PasswordHash","Salt","SecretKey","CreatedDate"]); }
   return sh;
 }
 
@@ -264,6 +264,7 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     if (action === 'update_data') return updateParticipantId(params);
     if (action === 'delete_data') return deleteData(params);
     if (action === 'migrate_year') return migrateYear(params);
+    if (action === 'repair_data_location_codes') return repairDataLocationCodes(params);
     if (action === 'add_school') return addSchool(params);
     if (action === 'delete_school') return deleteSchool(params);
     if (action === 'update_school_permission') return updateSchoolPermission(params);
@@ -649,11 +650,129 @@ function submitForm(p) {
   return createJSONOutput({ status: 'success', count: rowsToAdd.length });
 }
 
-function updateParticipantId(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DATA); sheet.getRange(p.rowIndex, 8).setValue(p.newId); return createJSONOutput({ status: 'success' }); }
+function updateParticipantId(p) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DATA);
+  var rowIndex = parseInt(p.rowIndex, 10);
+  if (!sheet || !rowIndex || rowIndex <= 1 || rowIndex > sheet.getLastRow()) {
+    return createJSONOutput({ status: 'error', message: 'Row rekod tidak sah.' });
+  }
 
-function deleteData(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DATA); if (p.rowIndex) { sheet.deleteRow(p.rowIndex); return createJSONOutput({ status: 'success' }); } var data = sheet.getDataRange().getValues(); for (var i = 1; i < data.length; i++) { if (data[i][7] == p.id && data[i][4] == p.name) { sheet.deleteRow(i + 1); return createJSONOutput({ status: 'success' }); } } return createJSONOutput({ status: 'error', message: 'Rekod tidak dijumpai.' }); }
+  var row = sheet.getRange(rowIndex, 1, 1, 14).getValues()[0];
+  if (p.schoolCode && String(row[2]).toUpperCase() !== String(p.schoolCode).toUpperCase()) {
+    return createJSONOutput({ status: 'error', message: 'Rekod bukan milik sekolah ini.' });
+  }
 
-function migrateYear(p) { var ss = SpreadsheetApp.getActiveSpreadsheet(); var sheet = ss.getSheetByName(SHEET_DATA); var data = sheet.getDataRange().getValues(); var sourceYear = parseInt(p.sourceYear); var targetYear = parseInt(p.targetYear); var newRows = []; for (var i = 1; i < data.length; i++) { var rowDate = new Date(data[i][0]); var rowYear = rowDate.getFullYear(); var badge = data[i][3]; if (rowYear === sourceYear) { var newBadge = ""; if (badge === "Keris Gangsa") newBadge = "Keris Perak"; else if (badge === "Keris Perak") newBadge = "Keris Emas"; if (newBadge !== "") { var row = data[i].slice(); row[0] = targetYear + "-01-01"; row[3] = newBadge; row[7] = ""; row[11] = "MIGRASI DARI " + sourceYear; newRows.push(row); } } } if (newRows.length > 0) { sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows); return createJSONOutput({ status: 'success', count: newRows.length }); } else { return createJSONOutput({ status: 'error', message: 'Tiada data layak untuk migrasi.' }); } }
+  sheet.getRange(rowIndex, 10).setValue(sanitizeString(p.newId || '').toUpperCase());
+  return createJSONOutput({ status: 'success' });
+}
+
+function deleteData(p) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DATA);
+  if (!sheet) return createJSONOutput({ status: 'error', message: 'Sheet DATA tidak wujud.' });
+
+  var rowIndex = parseInt(p.rowIndex, 10);
+  if (rowIndex && rowIndex > 1 && rowIndex <= sheet.getLastRow()) {
+    var row = sheet.getRange(rowIndex, 1, 1, 14).getValues()[0];
+    var sameSchool = !p.schoolCode || String(row[2]).toUpperCase() === String(p.schoolCode).toUpperCase();
+    var sameStudent = !p.name || String(row[6]).toUpperCase() === String(p.name).toUpperCase();
+    var sameId = !p.id || String(row[9]).toUpperCase() === String(p.id).toUpperCase();
+    var sameIc = !p.icNumber || String(row[10]).replace(/-/g, '') === String(p.icNumber).replace(/-/g, '');
+    if (sameSchool && sameStudent && sameId && sameIc) {
+      sheet.deleteRow(rowIndex);
+      return createJSONOutput({ status: 'success' });
+    }
+    return createJSONOutput({ status: 'error', message: 'Pengesahan rekod gagal. Data tidak dipadam.' });
+  }
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var matchName = !p.name || String(data[i][6]).toUpperCase() === String(p.name).toUpperCase();
+    var matchId = !p.id || String(data[i][9]).toUpperCase() === String(p.id).toUpperCase();
+    var matchIc = !p.icNumber || String(data[i][10]).replace(/-/g, '') === String(p.icNumber).replace(/-/g, '');
+    var matchSchool = !p.schoolCode || String(data[i][2]).toUpperCase() === String(p.schoolCode).toUpperCase();
+    if (matchName && matchId && matchIc && matchSchool) {
+      sheet.deleteRow(i + 1);
+      return createJSONOutput({ status: 'success' });
+    }
+  }
+  return createJSONOutput({ status: 'error', message: 'Rekod tidak dijumpai.' });
+}
+
+function migrateYear(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_DATA);
+  if (!sheet) return createJSONOutput({ status: 'error', message: 'Sheet DATA tidak wujud.' });
+
+  var data = sheet.getDataRange().getValues();
+  var sourceYear = parseInt(p.sourceYear, 10);
+  var targetYear = parseInt(p.targetYear, 10);
+  var newRows = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var rowDate = new Date(data[i][0]);
+    var rowYear = rowDate.getFullYear();
+    var badge = data[i][5];
+    if (rowYear === sourceYear) {
+      var newBadge = "";
+      if (badge === "Keris Gangsa") newBadge = "Keris Perak";
+      else if (badge === "Keris Perak") newBadge = "Keris Emas";
+
+      if (newBadge !== "") {
+        var row = data[i].slice(0, 14);
+        row[0] = targetYear + "-01-01";
+        row[5] = newBadge;
+        row[9] = "";
+        row[13] = "MIGRASI DARI " + sourceYear;
+        newRows.push(row);
+      }
+    }
+  }
+
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 14).setValues(newRows);
+    return createJSONOutput({ status: 'success', count: newRows.length });
+  }
+  return createJSONOutput({ status: 'error', message: 'Tiada data layak untuk migrasi.' });
+}
+
+function repairDataLocationCodes(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dataSheet = ss.getSheetByName(SHEET_DATA);
+  var schoolsSheet = ss.getSheetByName(SHEET_SCHOOLS);
+  if (!dataSheet || !schoolsSheet) return createJSONOutput({ status: 'error', message: 'Sheet DATA atau SCHOOLS tidak wujud.' });
+
+  var schools = schoolsSheet.getDataRange().getValues();
+  var schoolMap = {};
+  for (var s = 1; s < schools.length; s++) {
+    var code = String(schools[s][1] || '').toUpperCase().replace(/\s+/g, '');
+    if (code) schoolMap[code] = { negeriCode: schools[s][2] || '', daerahCode: schools[s][3] || '' };
+  }
+
+  var data = dataSheet.getDataRange().getValues();
+  var updates = [];
+  var fixed = 0;
+  var missing = {};
+  for (var i = 1; i < data.length; i++) {
+    var schoolCode = String(data[i][2] || '').toUpperCase().replace(/\s+/g, '');
+    var mapped = schoolMap[schoolCode];
+    if (mapped && (data[i][3] !== mapped.negeriCode || data[i][4] !== mapped.daerahCode)) {
+      updates.push({ row: i + 1, negeriCode: mapped.negeriCode, daerahCode: mapped.daerahCode });
+      fixed++;
+    } else if (!mapped) {
+      missing[String(data[i][2] || '(blank)')] = true;
+    }
+  }
+
+  if (String(p.dryRun) === 'true') {
+    return createJSONOutput({ status: 'success', dryRun: true, fixable: fixed, missingSchoolCodes: Object.keys(missing) });
+  }
+
+  updates.forEach(function(update) {
+    dataSheet.getRange(update.row, 4, 1, 2).setValues([[update.negeriCode, update.daerahCode]]);
+  });
+
+  return createJSONOutput({ status: 'success', fixed: fixed, missingSchoolCodes: Object.keys(missing) });
+}
 
 function addSchool(p) { 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); 
@@ -677,7 +796,7 @@ function deleteSchool(p) {
     var data = sheet.getDataRange().getValues(); 
     for(var i=0; i<data.length; i++) { 
         // Match by schoolCode (more unique) or schoolName
-        if(data[i][1] == p.schoolCode || data[i][0] == p.schoolName) { 
+        if(data[i][1] == p.schoolCode || data[i][0] == p.schoolCode || data[i][0] == p.schoolName) { 
             sheet.deleteRow(i+1); 
             return createJSONOutput({ status: 'success' }); 
         } 
@@ -685,11 +804,72 @@ function deleteSchool(p) {
     return createJSONOutput({ status: 'error', message: 'Sekolah tak jumpa' }); 
 }
 
-function updateSchoolPermission(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); var data = sheet.getDataRange().getValues(); var colIndex = -1; if (p.permissionType === 'students') colIndex = 2; else if (p.permissionType === 'assistants') colIndex = 3; else if (p.permissionType === 'examiners') colIndex = 4; for(var i=1; i<data.length; i++) { if(data[i][0] == p.schoolName) { if (p.permissionType === 'all') sheet.getRange(i+1, 2, 1, 3).setValue(p.status); else sheet.getRange(i+1, colIndex).setValue(p.status); return createJSONOutput({ status: 'success' }); } } return createJSONOutput({ status: 'error' }); }
+function updateSchoolPermission(p) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS);
+  var data = sheet.getDataRange().getValues();
+  var colIndex = -1;
+  if (p.permissionType === 'students') colIndex = 5;
+  else if (p.permissionType === 'assistants') colIndex = 6;
+  else if (p.permissionType === 'examiners') colIndex = 7;
 
-function toggleSchoolEditBatch(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); var lastRow = sheet.getLastRow(); if (lastRow <= 1) return createJSONOutput({ status: 'success' }); var colIndex = -1; if (p.permissionType === 'students') colIndex = 2; else if (p.permissionType === 'assistants') colIndex = 3; else if (p.permissionType === 'examiners') colIndex = 4; if (p.permissionType === 'all') sheet.getRange(2, 2, lastRow - 1, 3).setValue(p.status); else sheet.getRange(2, colIndex, lastRow - 1, 1).setValue(p.status); return createJSONOutput({ status: 'success' }); }
+  for(var i=1; i<data.length; i++) {
+    if(data[i][0] == p.schoolName) {
+      if (p.permissionType === 'all') sheet.getRange(i+1, 5, 1, 3).setValues([[p.status, p.status, p.status]]);
+      else if (colIndex > 0) sheet.getRange(i+1, colIndex).setValue(p.status);
+      else return createJSONOutput({ status: 'error', message: 'Jenis permission tidak sah.' });
+      return createJSONOutput({ status: 'success' });
+    }
+  }
+  return createJSONOutput({ status: 'error' });
+}
 
-function updateSchoolBadgeStatus(p, type) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); var data = sheet.getDataRange().getValues(); for(var i=1; i<data.length; i++) { if(data[i][0] == p.schoolName) { var locked = data[i][4] ? data[i][4].toString().split(',') : []; var approved = data[i][5] ? data[i][5].toString().split(',') : []; if (type === 'lock') { if (locked.indexOf(p.badge) === -1) locked.push(p.badge); } else if (type === 'unlock') { var index = locked.indexOf(p.badge); if (index > -1) locked.splice(index, 1); var appIndex = approved.indexOf(p.badge); if (appIndex > -1) approved.splice(appIndex, 1); } else if (type === 'approve') { if (approved.indexOf(p.badge) === -1) approved.push(p.badge); } sheet.getRange(i+1, 5).setValue(locked.join(',')); sheet.getRange(i+1, 6).setValue(approved.join(',')); return createJSONOutput({ status: 'success' }); } } return createJSONOutput({ status: 'error' }); }
+function toggleSchoolEditBatch(p) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS);
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return createJSONOutput({ status: 'success' });
+
+  var colIndex = -1;
+  if (p.permissionType === 'students') colIndex = 5;
+  else if (p.permissionType === 'assistants') colIndex = 6;
+  else if (p.permissionType === 'examiners') colIndex = 7;
+
+  if (p.permissionType === 'all') {
+    var rows = [];
+    for (var i = 2; i <= lastRow; i++) rows.push([p.status, p.status, p.status]);
+    sheet.getRange(2, 5, lastRow - 1, 3).setValues(rows);
+  } else if (colIndex > 0) {
+    sheet.getRange(2, colIndex, lastRow - 1, 1).setValue(p.status);
+  } else {
+    return createJSONOutput({ status: 'error', message: 'Jenis permission tidak sah.' });
+  }
+  return createJSONOutput({ status: 'success' });
+}
+
+function updateSchoolBadgeStatus(p, type) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS);
+  var data = sheet.getDataRange().getValues();
+  for(var i=1; i<data.length; i++) {
+    if(data[i][0] == p.schoolName) {
+      var locked = data[i][7] ? data[i][7].toString().split(',').filter(String) : [];
+      var approved = data[i][8] ? data[i][8].toString().split(',').filter(String) : [];
+      if (type === 'lock') {
+        if (locked.indexOf(p.badge) === -1) locked.push(p.badge);
+      } else if (type === 'unlock') {
+        var index = locked.indexOf(p.badge);
+        if (index > -1) locked.splice(index, 1);
+        var appIndex = approved.indexOf(p.badge);
+        if (appIndex > -1) approved.splice(appIndex, 1);
+      } else if (type === 'approve') {
+        if (locked.indexOf(p.badge) === -1) locked.push(p.badge);
+        if (approved.indexOf(p.badge) === -1) approved.push(p.badge);
+      }
+      sheet.getRange(i+1, 8).setValue(locked.join(','));
+      sheet.getRange(i+1, 9).setValue(approved.join(','));
+      return createJSONOutput({ status: 'success' });
+    }
+  }
+  return createJSONOutput({ status: 'error' });
+}
 
 // ---------------- Authentication: users ----------------
 function loginUser(p) {
@@ -911,7 +1091,7 @@ function setupDatabase() {
   
   if (!ss.getSheetByName(SHEET_USER_PROFILES)) { 
     var s5 = ss.insertSheet(SHEET_USER_PROFILES); 
-    s5.appendRow(["SchoolCode", "SchoolName", "NegeriCode", "DaerahCode", "Phone", "GroupNumber", "PrincipalName", "PrincipalPhone", "LeaderName", "LeaderPhone", "LeaderIC", "LeaderGender", "LeaderMembershipId", "LeaderRace", "Remarks", "LastUpdated"]); 
+    s5.appendRow(["SchoolCode", "SchoolName", "Phone", "GroupNumber", "PrincipalName", "PrincipalPhone", "LeaderName", "LeaderPhone", "LeaderIC", "LeaderGender", "LeaderMembershipId", "LeaderRace", "Remarks", "LastUpdated"]); 
   }
 }
 

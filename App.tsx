@@ -372,9 +372,13 @@ function AppContent() {
       if(!confirm(`Padam rekod peserta: ${item.student}?`)) return;
       try {
         const token = await fetchServerCsrf(scriptUrl);
-        await deleteSubmission(scriptUrl, item, token || undefined);
-          alert("Permintaan padam rekod dihantar.");
-          setTimeout(handleRefreshData, 2000);
+        const result = await deleteSubmission(scriptUrl, item, token || undefined);
+        if (result.status === 'success') {
+          alert("Rekod berjaya dipadam.");
+          setTimeout(handleRefreshData, 1000);
+        } else {
+          alert("Gagal memadam: " + (result.message || 'Ralat tidak diketahui.'));
+        }
       } catch (err) {
           alert("Gagal memadam.");
       }

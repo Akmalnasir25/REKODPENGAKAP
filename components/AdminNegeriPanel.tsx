@@ -434,13 +434,13 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
 
             {tab === 'history' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                  <AdminHistory data={filteredData} />
+                  <AdminHistory data={filteredData} schools={filteredSchools} onRefresh={refreshData} />
               </div>
             )}
 
             {tab === 'dashboard' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} onDelete={deleteData} />
+                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} onRefresh={refreshData} onDelete={deleteData} />
               </div>
             )}
 

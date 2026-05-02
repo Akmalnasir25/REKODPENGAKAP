@@ -14,6 +14,7 @@ export interface Participant {
 export interface LeaderInfo {
   schoolName: string;
   schoolCode: string;
+  groupNumber?: string;
   principalName: string; 
   principalPhone: string; 
   leaderName: string;
@@ -37,6 +38,10 @@ export interface SubmissionData {
   icNumber?: string;
   studentPhone?: string; 
   role?: string;
+  groupNumber?: string;
+  principalName?: string;
+  principalPhone?: string;
+  leader?: string;
   remarks: string;
 }
 

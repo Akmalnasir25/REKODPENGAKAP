@@ -244,14 +244,14 @@ export const addSchoolBatch = async (url: string, schools: string[], negeriCode?
   return { status: 'success' };
 };
 
-export const deleteSchool = async (url: string, schoolCode: string) => {
+export const deleteSchool = async (url: string, schoolCodeOrName: string) => {
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'omit',
     redirect: 'follow',
     mode: 'cors',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'delete_school', schoolCode: schoolCode })
+    body: JSON.stringify({ action: 'delete_school', schoolCode: schoolCodeOrName, schoolName: schoolCodeOrName })
   });
   return await handleResponse(response);
 };
@@ -402,8 +402,11 @@ export const deleteSubmission = async (url: string, submission: SubmissionData, 
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ 
         action: 'delete_data', 
+        rowIndex: submission.rowIndex,
         name: submission.student,
+        schoolCode: submission.schoolCode,
         id: submission.id,
+        icNumber: submission.icNumber,
         csrfToken: csrfToken
     })
   });

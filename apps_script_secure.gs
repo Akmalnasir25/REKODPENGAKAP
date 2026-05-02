@@ -265,6 +265,7 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     if (action === 'delete_data') return deleteData(params);
     if (action === 'migrate_year') return migrateYear(params);
     if (action === 'repair_data_location_codes') return repairDataLocationCodes(params);
+    if (action === 'repair_known_school_references') return repairKnownSchoolReferences(params);
     if (action === 'add_school') return addSchool(params);
     if (action === 'delete_school') return deleteSchool(params);
     if (action === 'update_school_permission') return updateSchoolPermission(params);
@@ -415,7 +416,14 @@ function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode) 
       var sub = submissions[s];
       var key = sub.schoolCode + '|' + sub.badge;
       if (!schoolBadgeMap[key]) {
-        schoolBadgeMap[key] = { schoolCode: sub.schoolCode, school: sub.school, badge: sub.badge, date: sub.date };
+        schoolBadgeMap[key] = {
+          schoolCode: sub.schoolCode,
+          school: sub.school,
+          negeriCode: sub.negeriCode || '',
+          daerahCode: sub.daerahCode || '',
+          badge: sub.badge,
+          date: sub.date
+        };
       }
     }
     
@@ -439,6 +447,8 @@ function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode) 
           date: combo.date,
           school: combo.school,
           schoolCode: combo.schoolCode,
+          negeriCode: combo.negeriCode,
+          daerahCode: combo.daerahCode,
           badge: combo.badge,
           student: profile.leaderName.toUpperCase(),
           gender: profile.leaderGender || '',
@@ -772,6 +782,84 @@ function repairDataLocationCodes(p) {
   });
 
   return createJSONOutput({ status: 'success', fixed: fixed, missingSchoolCodes: Object.keys(missing) });
+}
+
+function repairKnownSchoolReferences(p) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dataSheet = ss.getSheetByName(SHEET_DATA);
+  var schoolsSheet = ss.getSheetByName(SHEET_SCHOOLS);
+  if (!dataSheet || !schoolsSheet) return createJSONOutput({ status: 'error', message: 'Sheet DATA atau SCHOOLS tidak wujud.' });
+
+  var dryRun = String(p.dryRun) === 'true';
+  var aliases = [
+    { fromCode: 'ABA2082', fromName: 'SK LA SALLE', toCode: 'ABB2082' }
+  ];
+  var requiredSchools = [
+    { schoolName: 'SK PERPADUAN', schoolCode: 'ABA2053', negeriCode: 'PRK', daerahCode: 'PRK-KU' },
+    { schoolName: 'SK PAKATAN JAYA', schoolCode: 'ABA2072', negeriCode: 'PRK', daerahCode: 'PRK-KU' }
+  ];
+
+  var schools = schoolsSheet.getDataRange().getValues();
+  var existingSchoolCodes = {};
+  for (var s = 1; s < schools.length; s++) {
+    var schoolCode = String(schools[s][1] || '').toUpperCase().replace(/\s+/g, '');
+    if (schoolCode) existingSchoolCodes[schoolCode] = true;
+  }
+
+  var schoolsToAdd = [];
+  for (var r = 0; r < requiredSchools.length; r++) {
+    var requiredCode = requiredSchools[r].schoolCode.toUpperCase().replace(/\s+/g, '');
+    if (!existingSchoolCodes[requiredCode]) schoolsToAdd.push(requiredSchools[r]);
+  }
+
+  var data = dataSheet.getDataRange().getValues();
+  var aliasUpdates = [];
+  for (var i = 1; i < data.length; i++) {
+    var dataCode = String(data[i][2] || '').toUpperCase().replace(/\s+/g, '');
+    var dataSchool = String(data[i][1] || '').toUpperCase().trim();
+    for (var a = 0; a < aliases.length; a++) {
+      var alias = aliases[a];
+      if (dataCode === alias.fromCode && (!alias.fromName || dataSchool === alias.fromName)) {
+        aliasUpdates.push({ row: i + 1, toCode: alias.toCode });
+      }
+    }
+  }
+
+  if (dryRun) {
+    return createJSONOutput({
+      status: 'success',
+      dryRun: true,
+      schoolCodeAliasesToFix: aliasUpdates.length,
+      schoolsToAdd: schoolsToAdd
+    });
+  }
+
+  for (var u = 0; u < aliasUpdates.length; u++) {
+    dataSheet.getRange(aliasUpdates[u].row, 3).setValue(aliasUpdates[u].toCode);
+  }
+
+  for (var x = 0; x < schoolsToAdd.length; x++) {
+    schoolsSheet.appendRow([
+      schoolsToAdd[x].schoolName,
+      schoolsToAdd[x].schoolCode,
+      schoolsToAdd[x].negeriCode,
+      schoolsToAdd[x].daerahCode,
+      true,
+      true,
+      true,
+      '',
+      '',
+      new Date()
+    ]);
+  }
+
+  var locationRepair = JSON.parse(repairDataLocationCodes({ dryRun: 'false' }).getContent());
+  return createJSONOutput({
+    status: 'success',
+    schoolCodeAliasesFixed: aliasUpdates.length,
+    schoolsAdded: schoolsToAdd.length,
+    locationRepair: locationRepair
+  });
 }
 
 function addSchool(p) { 

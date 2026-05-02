@@ -176,35 +176,8 @@ export function DeveloperAdminDashboard({ onLogout, scriptUrl, setScriptUrl, onO
 
   const handleChangePassword = () => {
     setPasswordError('');
-    const storedPassword = localStorage.getItem('DEV_PASSWORD') || 'Dev@123456';
-    
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError('Sila isi semua medan');
-      return;
-    }
-
-    if (currentPassword !== storedPassword) {
-      setPasswordError('Kata laluan semasa tidak betul');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Kata laluan baru tidak sepadan');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setPasswordError('Kata laluan baru mesti sekurang-kurangnya 6 aksara');
-      return;
-    }
-
-    localStorage.setItem('DEV_PASSWORD', newPassword);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setShowPasswordChange(false);
-    addActivityLog('Developer', 'Security', 'success', 'Developer password changed');
-    showSuccess('Developer password updated successfully');
+    setPasswordError('Kata laluan developer kini diurus di Apps Script Script Properties, bukan localStorage.');
+    addActivityLog('Developer', 'Security', 'warning', 'Developer password change blocked in frontend');
   };
 
   const toggleDistrictAccess = (districtId: string, accessType: 'user' | 'admin' | 'district') => {
@@ -576,7 +549,7 @@ export function DeveloperAdminDashboard({ onLogout, scriptUrl, setScriptUrl, onO
                 <Lock className="text-green-600" size={24} />
                 <h3 className="text-xl font-bold">Security</h3>
               </div>
-              <p className="text-slate-400 mb-6">Manage developer credentials</p>
+              <p className="text-slate-400 mb-6">Developer credentials are managed in Apps Script Script Properties</p>
               
               {!showPasswordChange ? (
                 <button

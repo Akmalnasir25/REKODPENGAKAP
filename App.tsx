@@ -11,7 +11,7 @@ import { MaintenancePage } from './components/MaintenancePage';
 import { DeveloperPanel } from './components/DeveloperPanel';
 import { DeveloperAdminDashboard } from './components/DeveloperAdminDashboard';
 import { DeveloperDashboard } from './components/DeveloperDashboard';
-import { fetchCloudData, deleteSubmission, loginAdmin, loginAdminRegional } from './services/api';
+import { fetchCloudData, deleteSubmission, loginAdmin, loginAdminRegional, loginDeveloper } from './services/api';
 import { fetchServerCsrf } from './services/security';
 import { DEFAULT_SERVER_URL, LOCAL_STORAGE_KEYS, LOGO_URL } from './constants';
 import { SubmissionData, UserSession, Badge, School, UserProfile, Negeri, Daerah, AdminRegional } from './types';
@@ -20,14 +20,7 @@ import { generateCSRFToken, isSessionExpired, clearSessionActivity, updateSessio
 
 // Helper functions for access control (independent of localStorage)
 const getAccessState = async () => {
-  // Priority: URL params > config.json (production) > localStorage (development)
-  const params = new URLSearchParams(window.location.search);
-  const userAccessParam = params.get('userAccess');
-  const adminAccessParam = params.get('adminAccess');
-  const districtAccessParam = params.get('districtAccess');
-  const maintenanceParam = params.get('maintenance');
-  
-  // Try to fetch config.json for deployed instances (HIGHER PRIORITY than localStorage)
+  // Priority: config.json in deployed builds, localStorage only while running Vite dev.
   let deployedConfig = null;
   try {
     const response = await fetch('/config.json?t=' + Date.now()); // Cache buster
@@ -39,20 +32,20 @@ const getAccessState = async () => {
     console.log('ℹ️ Config file not found, using localStorage (development mode)');
   }
   
-  // If config.json exists (production), use it. Otherwise fall back to localStorage (development)
+  // If config.json exists, use it. Otherwise allow local overrides only in dev mode.
   const useProduction = deployedConfig !== null;
+  const allowLocalOverrides = Boolean((import.meta as any).env?.DEV);
   
   return {
-    userAccess: userAccessParam ? userAccessParam === 'true' : 
-                (useProduction ? deployedConfig.userAccess : localStorage.getItem('userAccess') !== 'false'),
-    adminAccess: adminAccessParam ? adminAccessParam === 'true' : 
-                 (useProduction ? deployedConfig.adminAccess : localStorage.getItem('adminAccess') !== 'false'),
-    districtAccess: districtAccessParam ? districtAccessParam === 'true' : 
-                    (useProduction ? deployedConfig.districtAccess : localStorage.getItem('districtAccess') !== 'false'),
-    maintenance: maintenanceParam ? maintenanceParam === 'true' : 
-                 (useProduction ? deployedConfig.maintenance : localStorage.getItem('maintenanceMode') === 'true')
+    userAccess: useProduction ? deployedConfig.userAccess : (allowLocalOverrides ? localStorage.getItem('userAccess') !== 'false' : true),
+    adminAccess: useProduction ? deployedConfig.adminAccess : (allowLocalOverrides ? localStorage.getItem('adminAccess') !== 'false' : true),
+    districtAccess: useProduction ? deployedConfig.districtAccess : (allowLocalOverrides ? localStorage.getItem('districtAccess') !== 'false' : true),
+    maintenance: useProduction ? deployedConfig.maintenance : (allowLocalOverrides ? localStorage.getItem('maintenanceMode') === 'true' : false)
   };
 };
+
+const ADMIN_SESSION_KEY = 'ADMIN_SESSION_DATA';
+const DEVELOPER_SESSION_KEY = 'DEVELOPER_SESSION_DATA';
 
 export default function App() {
   return <AppContent />;
@@ -77,7 +70,7 @@ function AppContent() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [adminRole, setAdminRole] = useState<'admin' | 'district' | null>(null);
   const [adminSession, setAdminSession] = useState<AdminRegional | null>(null);
-  const [isDeveloperMode, setIsDeveloperMode] = useState(localStorage.getItem('developerSession') === 'true');
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false);
 
   // Access Control State
   const [accessState, setAccessState] = useState({
@@ -172,8 +165,9 @@ function AppContent() {
             try {
                 const parsedSession = JSON.parse(savedSession);
                 if (parsedSession && parsedSession.isLoggedIn) {
-                    // Check if user access is enabled
-                    const userAccessEnabled = localStorage.getItem('userAccess') !== 'false';
+                    // Check if user access is enabled from hardened access state.
+                    const currentAccessState = await getAccessState();
+                    const userAccessEnabled = currentAccessState.userAccess;
                     if (userAccessEnabled) {
                         setUserSession(parsedSession);
                         setView('user_dashboard');
@@ -258,6 +252,11 @@ function AppContent() {
             }
 
             setAdminRole(result.role); // 'admin' or 'district'
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+              role: result.role,
+              authToken: result.authToken,
+              expiresAt: result.expiresAt
+            }));
             setView('admin');
             setUserSession(null);
             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
@@ -284,6 +283,7 @@ function AppContent() {
         
         if (result.status === 'success' && result.admin) {
             setAdminSession(result.admin);
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(result.admin));
             setView('admin'); // Will be replaced with specific panel routing later
             setUserSession(null);
             setAdminRole(null); // Clear old admin role
@@ -303,21 +303,29 @@ function AppContent() {
     }
   };
 
-  const handleDeveloperLogin = (username: string, password: string): {success: boolean, message?: string} => {
-    // Hardcoded developer credentials
-    const devUsername = 'DEVELOPER';
-    const devPassword = localStorage.getItem('DEV_PASSWORD') || 'Dev@123456';
-    
-    if (username.trim().toUpperCase() === devUsername && password.trim() === devPassword) {
-      localStorage.setItem('developerSession', 'true');
-      setIsDeveloperMode(true);
-      setView('developer');
-      setUserSession(null);
-      setAdminRole(null);
-      localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
-      return { success: true };
+  const handleDeveloperLogin = async (username: string, password: string): Promise<{success: boolean, message?: string}> => {
+    try {
+      const result = await loginDeveloper(scriptUrl, username, password);
+      if (result.status === 'success' && result.authToken) {
+        localStorage.setItem(DEVELOPER_SESSION_KEY, JSON.stringify({
+          role: 'developer',
+          username: username.trim().toUpperCase(),
+          authToken: result.authToken,
+          expiresAt: result.expiresAt
+        }));
+        setIsDeveloperMode(true);
+        setView('developer');
+        setUserSession(null);
+        setAdminRole(null);
+        setAdminSession(null);
+        localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        return { success: true };
+      }
+      return { success: false, message: result.message || 'Log masuk developer gagal.' };
+    } catch (error) {
+      return { success: false, message: 'Gagal menghubungi server developer.' };
     }
-    return { success: false, message: 'Invalid developer credentials' };
   };
 
   const handleUserLoginSuccess = (user: UserSession) => {
@@ -330,16 +338,18 @@ function AppContent() {
   const handleLogout = () => {
       setUserSession(null);
       setAdminRole(null);
+      setAdminSession(null);
       setIsDeveloperMode(false);
       localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION); // Clear Session
-      localStorage.removeItem('developerSession');
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+      localStorage.removeItem(DEVELOPER_SESSION_KEY);
       clearSessionActivity();
       setView('auth');
   };
 
   // Session Timeout & Activity Monitoring
   useEffect(() => {
-    if (!userSession && !adminRole) return; // No session active
+    if (!userSession && !adminRole && !adminSession && !isDeveloperMode) return; // No session active
 
     // Add activity listeners
     const handleActivity = () => {
@@ -362,7 +372,7 @@ function AppContent() {
       events.forEach(event => document.removeEventListener(event, handleActivity));
       clearInterval(sessionCheckInterval);
     };
-  }, [userSession, adminRole]);
+  }, [userSession, adminRole, adminSession, isDeveloperMode]);
 
   const handleRefreshData = () => {
       handleFetchData(scriptUrl);
@@ -387,7 +397,7 @@ function AppContent() {
   const renderContent = () => {
       // Check for maintenance mode using accessState (respects config.json priority)
       const isMaintenanceMode = accessState.maintenance;
-      const isAdminAccess = new URLSearchParams(window.location.search).get('admin') === 'true';
+      const isAdminAccess = Boolean(adminRole || adminSession || isDeveloperMode);
       
       // Show maintenance page if enabled and user is not admin
       if (isMaintenanceMode && !isAdminAccess && !userSession) {
@@ -487,7 +497,7 @@ function AppContent() {
                   if ((adminRole === 'admin' && !adminAccessEnabledCheck) || (adminRole === 'district' && !districtAccessEnabledCheck) || (!adminAccessEnabledCheck && !districtAccessEnabledCheck)) {
                       // Access disabled, force logout
                       handleLogout();
-                      return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} isLoading={fetchingData} />;
+                      return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
                   }
               }
               
@@ -513,7 +523,7 @@ function AppContent() {
                       // Clear session if user access was disabled
                       handleLogout();
                   }
-                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} isLoading={fetchingData} />;
+                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
               }
               return (
                   <UserDashboard 
@@ -538,7 +548,7 @@ function AppContent() {
                       // Clear session if user access was disabled
                       handleLogout();
                   }
-                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} isLoading={fetchingData} />;
+                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
               }
               return (
                   <UserForm 
@@ -567,6 +577,7 @@ function AppContent() {
                     schools={schoolsList}
                     negeriList={negeriList}
                     daerahList={daerahList}
+                    userAccessEnabled={accessState.userAccess}
                     isLoading={fetchingData}
                 />
               );

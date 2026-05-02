@@ -87,6 +87,8 @@ export interface AdminRegional {
   email?: string;
   negeriCode?: string;
   daerahCode?: string;
+  authToken?: string;
+  expiresAt?: number;
   scope?: {
     canManageNegeri: boolean;
     canManageDaerah: boolean;
@@ -135,6 +137,8 @@ export interface ApiResponse {
   fullName?: string;
   negeriCode?: string;
   daerahCode?: string;
+  authToken?: string;
+  expiresAt?: number;
 }
 
 export interface UserSession {
@@ -142,6 +146,8 @@ export interface UserSession {
   schoolCode: string;
   isLoggedIn: boolean;
   groupNumber?: string;
+  authToken?: string;
+  expiresAt?: number;
 }
 
 export enum BadgeType {

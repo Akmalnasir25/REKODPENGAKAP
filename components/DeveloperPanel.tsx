@@ -79,38 +79,7 @@ export function DeveloperPanel({ onLogout, scriptUrl, setScriptUrl, onOpenHierar
 
   const handleChangePassword = () => {
     setPasswordError('');
-    
-    // Get stored credentials
-    const storedPassword = localStorage.getItem('DEV_PASSWORD') || 'Dev@123456';
-    
-    // Validate inputs
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError('Sila isi semua medan');
-      return;
-    }
-
-    if (currentPassword !== storedPassword) {
-      setPasswordError('Kata laluan semasa tidak betul');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Kata laluan baru tidak sepadan');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setPasswordError('Kata laluan baru mesti sekurang-kurangnya 6 aksara');
-      return;
-    }
-
-    // Update password
-    localStorage.setItem('DEV_PASSWORD', newPassword);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setShowPasswordChange(false);
-    showSuccess('Developer password updated successfully');
+    setPasswordError('Kata laluan developer kini diurus di Apps Script Script Properties, bukan localStorage.');
   };
 
   return (
@@ -320,7 +289,7 @@ export function DeveloperPanel({ onLogout, scriptUrl, setScriptUrl, onOpenHierar
             <h2 className="text-2xl font-bold">Security</h2>
           </div>
           <p className="text-slate-400 mb-6">
-            Manage developer credentials
+            Developer credentials
           </p>
           
           {!showPasswordChange ? (

@@ -1,4 +1,39 @@
 import { SubmissionData, Participant, LeaderInfo, ApiResponse } from '../types';
+import { LOCAL_STORAGE_KEYS } from '../constants';
+
+const ADMIN_SESSION_KEY = 'ADMIN_SESSION_DATA';
+const DEVELOPER_SESSION_KEY = 'DEVELOPER_SESSION_DATA';
+
+const readStoredAuthToken = (): string | null => {
+    const keys = [LOCAL_STORAGE_KEYS.SESSION, ADMIN_SESSION_KEY, DEVELOPER_SESSION_KEY];
+    for (const key of keys) {
+        const stored = localStorage.getItem(key);
+        if (!stored) continue;
+        try {
+            const parsed = JSON.parse(stored);
+            if (parsed?.authToken) return parsed.authToken;
+        } catch {
+            // Ignore invalid local storage values.
+        }
+    }
+    return null;
+};
+
+const fetch: typeof globalThis.fetch = (input, init) => {
+    const authToken = readStoredAuthToken();
+    if (authToken && init && typeof init.body === 'string') {
+        try {
+            const payload = JSON.parse(init.body);
+            init = {
+                ...init,
+                body: JSON.stringify({ ...payload, authToken })
+            };
+        } catch {
+            // Keep original body if it is not JSON.
+        }
+    }
+    return globalThis.fetch(input, init);
+};
 
 // Password Validation: Min 6 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special char
 export const validatePassword = (password: string): { valid: boolean; errors: string[] } => {
@@ -45,6 +80,8 @@ export const fetchCloudData = async (
   try {
     // Build query parameters for hierarchical filtering
     const params = new URLSearchParams({ t: Date.now().toString() });
+    const authToken = readStoredAuthToken();
+    if (authToken) params.append('authToken', authToken);
     if (role) params.append('role', role);
     if (negeriCode) params.append('negeriCode', negeriCode);
     if (daerahCode) params.append('daerahCode', daerahCode);
@@ -103,16 +140,21 @@ export const loginAdminRegional = async (url: string, credentials: { username: s
     return await handleResponse(response);
 };
 
-// NEW: Developer Login (Local only - for system control)
-export const loginDeveloper = (username: string, password: string): { success: boolean; message?: string } => {
-    // Hardcoded developer credentials (stored securely in localStorage)
-    const devUsername = localStorage.getItem('DEV_USERNAME') || 'DEVELOPER';
-    const devPassword = localStorage.getItem('DEV_PASSWORD') || 'Dev@123456';
-    
-    if (username.trim().toUpperCase() === devUsername && password.trim() === devPassword) {
-        return { success: true };
-    }
-    return { success: false, message: 'Invalid developer credentials' };
+// Developer Login (server-side)
+export const loginDeveloper = async (url: string, username: string, password: string) => {
+    const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'omit',
+        redirect: 'follow',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+            action: 'login_developer',
+            username: username.trim().toUpperCase(),
+            password: password.trim()
+        })
+    });
+    return await handleResponse(response);
 };
 
 export const changeAdminPassword = async (url: string, role: string, newPassword: string) => {

@@ -23,6 +23,7 @@ var SCRIPT_PROP = PropertiesService.getScriptProperties();
 var CSRF_TTL_SECONDS = parseInt(SCRIPT_PROP.getProperty('CSRF_TTL_SECONDS') || '3600', 10);
 var RATE_LIMIT_WINDOW_SECONDS = parseInt(SCRIPT_PROP.getProperty('RATE_LIMIT_WINDOW_SECONDS') || '900', 10);
 var RATE_LIMIT_MAX_ATTEMPTS = parseInt(SCRIPT_PROP.getProperty('RATE_LIMIT_MAX_ATTEMPTS') || '5', 10);
+var SESSION_TTL_SECONDS = parseInt(SCRIPT_PROP.getProperty('SESSION_TTL_SECONDS') || '21600', 10);
 
 // Utility: hex conversion
 function _toHex(bytes) {
@@ -61,6 +62,85 @@ function validateCsrfToken(token) {
   // one-time token
   SCRIPT_PROP.deleteProperty(key);
   return true;
+}
+
+// ---------------- Server-side sessions ----------------
+function issueSessionToken(sessionData) {
+  var token = Utilities.getUuid().replace(/-/g,'') + '_' + Utilities.getUuid().replace(/-/g,'');
+  var expiresAt = Date.now() + SESSION_TTL_SECONDS * 1000;
+  sessionData = sessionData || {};
+  sessionData.expiresAt = expiresAt;
+  SCRIPT_PROP.setProperty('session_' + token, JSON.stringify(sessionData));
+  return { token: token, expiresAt: expiresAt };
+}
+
+function validateSessionToken(token) {
+  if (!token) return null;
+  var key = 'session_' + token;
+  var raw = SCRIPT_PROP.getProperty(key);
+  if (!raw) return null;
+  try {
+    var sessionData = JSON.parse(raw);
+    if (!sessionData.expiresAt || Date.now() > sessionData.expiresAt) {
+      SCRIPT_PROP.deleteProperty(key);
+      return null;
+    }
+    sessionData.token = token;
+    return sessionData;
+  } catch (e) {
+    SCRIPT_PROP.deleteProperty(key);
+    return null;
+  }
+}
+
+function hasRole(sessionData, roles) {
+  if (!sessionData || !sessionData.role) return false;
+  return roles.indexOf(sessionData.role) !== -1;
+}
+
+function requireSession(sessionData, roles) {
+  if (!sessionData) {
+    return createJSONOutput({ status: 'error', message: 'Sesi tidak sah atau telah tamat. Sila log masuk semula.' });
+  }
+  if (roles && roles.length && !hasRole(sessionData, roles)) {
+    return createJSONOutput({ status: 'error', message: 'Akses tidak dibenarkan untuk tindakan ini.' });
+  }
+  return null;
+}
+
+function normalizeComparable(value) {
+  return String(value || '').toUpperCase().trim();
+}
+
+function validateUserScope(sessionData, p) {
+  if (!sessionData || sessionData.role !== 'user') return null;
+  if (p.schoolCode && normalizeComparable(p.schoolCode) !== normalizeComparable(sessionData.schoolCode)) {
+    return createJSONOutput({ status: 'error', message: 'Tindakan bukan untuk sekolah sesi ini.' });
+  }
+  if (p.schoolName && normalizeComparable(p.schoolName) !== normalizeComparable(sessionData.schoolName)) {
+    return createJSONOutput({ status: 'error', message: 'Tindakan bukan untuk sekolah sesi ini.' });
+  }
+  return null;
+}
+
+function _getDeveloperHashes() {
+  var hash = SCRIPT_PROP.getProperty('DEV_PASS_HASH');
+  var salt = SCRIPT_PROP.getProperty('DEV_PASS_SALT');
+  var oldPass = SCRIPT_PROP.getProperty('DEV_PASS');
+  if (oldPass && !hash) {
+    salt = generateSalt();
+    hash = hashPassword(oldPass, salt);
+    SCRIPT_PROP.setProperty('DEV_PASS_HASH', hash);
+    SCRIPT_PROP.setProperty('DEV_PASS_SALT', salt);
+    SCRIPT_PROP.deleteProperty('DEV_PASS');
+  }
+  return { hash: hash, salt: salt };
+}
+
+function validateDeveloperPassword(passwordPlain) {
+  var hashes = _getDeveloperHashes();
+  if (!hashes.hash || !hashes.salt) return false;
+  return hashPassword(passwordPlain, hashes.salt) === hashes.hash;
 }
 
 // ---------------- Rate limit (per identifier) ----------------
@@ -207,32 +287,69 @@ function doGet(e) {
     var tok = issueCsrfToken();
     return createJSONOutput({ status: 'success', csrfToken: tok.token, expiresAt: tok.expiresAt });
   }
-  
-  // Get filtering parameters for hierarchical access
-  var role = (e.parameter && e.parameter.role) || '';
-  var negeriCode = (e.parameter && e.parameter.negeriCode) || '';
-  var daerahCode = (e.parameter && e.parameter.daerahCode) || '';
-  
-  return handleRequest(e, role, negeriCode, daerahCode);
+
+  var sessionData = validateSessionToken((e.parameter && e.parameter.authToken) || '');
+  if (!sessionData) return createJSONOutput(getPublicData());
+
+  return handleRequest(
+    e,
+    sessionData.role || '',
+    sessionData.negeriCode || '',
+    sessionData.daerahCode || '',
+    sessionData
+  );
 }
 
-function doPost(e) { return handleRequest(e, '', '', ''); }
+function doPost(e) { return handleRequest(e, '', '', '', null); }
 
 // ---------------- Integrate with existing handleRequest structure ----------------
-function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerahCode) {
+function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerahCode, sessionData) {
   var lock = LockService.getScriptLock(); lock.tryLock(10000);
   try {
     if (!e.postData) { 
-      var data = getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode); 
+      var data = getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode, sessionData && sessionData.schoolCode); 
       return createJSONOutput(data); 
     }
     var params = JSON.parse(e.postData.contents);
     var action = params.action;
+    sessionData = validateSessionToken(params.authToken || '');
 
     // CSRF validation for sensitive actions
     if (['login_user','register_user','reset_password','change_password','update_user_profile','submit_form','update_data','delete_data'].indexOf(action) !== -1) {
       var token = params.csrfToken;
       if (!validateCsrfToken(token)) return createJSONOutput({ status: 'error', message: 'Invalid or expired CSRF token' });
+    }
+
+    var publicActions = ['login_user','register_user','reset_password','login_admin','login_admin_regional','login_developer'];
+    var userActions = ['change_password','update_user_profile','submit_form','update_data','delete_data'];
+    var adminActions = [
+      'change_admin_password','change_admin_regional_password','migrate_year',
+      'add_school','delete_school','update_school_permission','toggle_school_edit_batch',
+      'add_badge_type','delete_badge_type','update_badge_deadline','toggle_registration'
+    ];
+    var schoolBadgeActions = ['lock_school_badge','unlock_school_badge','approve_school_badge'];
+    var developerActions = [
+      'setup_database','clear_sheet_data','repair_data_location_codes','repair_known_school_references',
+      'add_negeri','add_daerah','delete_negeri','delete_daerah','add_admin','delete_admin'
+    ];
+
+    if (publicActions.indexOf(action) === -1) {
+      var authError = null;
+      if (userActions.indexOf(action) !== -1) {
+        authError = requireSession(sessionData, ['user','admin','district','negeri','daerah','developer']);
+      } else if (adminActions.indexOf(action) !== -1) {
+        authError = requireSession(sessionData, ['admin','district','negeri','daerah','developer']);
+      } else if (schoolBadgeActions.indexOf(action) !== -1) {
+        authError = requireSession(sessionData, ['user','admin','district','negeri','daerah','developer']);
+      } else if (developerActions.indexOf(action) !== -1) {
+        authError = requireSession(sessionData, ['admin','developer']);
+      } else {
+        authError = requireSession(sessionData, ['admin','developer']);
+      }
+      if (authError) return authError;
+
+      var scopeError = validateUserScope(sessionData, params);
+      if (scopeError) return scopeError;
     }
 
     // Admin login
@@ -241,12 +358,44 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
       var inputPass = (params.password || '').toString();
       var rl = checkRateLimit('admin_' + username);
       if (!rl.ok) { var wait = Math.ceil((rl.lockedUntil - Date.now())/1000); return createJSONOutput({ status:'error', message: 'Too many attempts', waitSeconds: wait }); }
-      if (username === 'DAERAH' && validateAdminPassword('district', inputPass)) { resetAttempts('admin_' + username); return createJSONOutput({ status: 'success', role: 'district' }); }
-      if (username === 'ADMIN' && validateAdminPassword('admin', inputPass)) { resetAttempts('admin_' + username); return createJSONOutput({ status: 'success', role: 'admin' }); }
+      if (username === 'DAERAH' && validateAdminPassword('district', inputPass)) {
+        resetAttempts('admin_' + username);
+        var districtToken = issueSessionToken({ role: 'district', username: username });
+        return createJSONOutput({ status: 'success', role: 'district', authToken: districtToken.token, expiresAt: districtToken.expiresAt });
+      }
+      if (username === 'ADMIN' && validateAdminPassword('admin', inputPass)) {
+        resetAttempts('admin_' + username);
+        var adminToken = issueSessionToken({ role: 'admin', username: username });
+        return createJSONOutput({ status: 'success', role: 'admin', authToken: adminToken.token, expiresAt: adminToken.expiresAt });
+      }
       recordFailedAttempt('admin_' + username); return createJSONOutput({ status: 'error', message: 'Log masuk gagal. Semak Nama Pengguna & Kata Laluan.' });
     }
 
+    if (action === 'login_developer') {
+      var devUsername = (params.username || '').toString().trim().toUpperCase();
+      var devPass = (params.password || '').toString();
+      var devLimit = checkRateLimit('developer_' + devUsername);
+      if (!devLimit.ok) { var devWait = Math.ceil((devLimit.lockedUntil - Date.now())/1000); return createJSONOutput({ status:'error', message: 'Too many attempts', waitSeconds: devWait }); }
+      if (devUsername !== 'DEVELOPER') {
+        recordFailedAttempt('developer_' + devUsername);
+        return createJSONOutput({ status: 'error', message: 'Log masuk developer gagal.' });
+      }
+      if (!SCRIPT_PROP.getProperty('DEV_PASS_HASH') && !SCRIPT_PROP.getProperty('DEV_PASS')) {
+        return createJSONOutput({ status: 'error', message: 'Kata laluan developer belum dikonfigurasi di Script Properties.' });
+      }
+      if (!validateDeveloperPassword(devPass)) {
+        recordFailedAttempt('developer_' + devUsername);
+        return createJSONOutput({ status: 'error', message: 'Log masuk developer gagal.' });
+      }
+      resetAttempts('developer_' + devUsername);
+      var devToken = issueSessionToken({ role: 'developer', username: devUsername });
+      return createJSONOutput({ status: 'success', role: 'developer', authToken: devToken.token, expiresAt: devToken.expiresAt });
+    }
+
     if (action === 'change_admin_password') {
+      if (sessionData.role !== 'developer' && sessionData.role !== params.role) {
+        return createJSONOutput({ status: 'error', message: 'Anda hanya boleh menukar kata laluan role sendiri.' });
+      }
       var role = params.role; var newPass = params.newPassword || '';
       var salt = generateSalt(); var hash = hashPassword(newPass, salt);
       if (role === 'district') { SCRIPT_PROP.setProperty('DISTRICT_PASS_HASH', hash); SCRIPT_PROP.setProperty('DISTRICT_PASS_SALT', salt); }
@@ -270,9 +419,9 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     if (action === 'delete_school') return deleteSchool(params);
     if (action === 'update_school_permission') return updateSchoolPermission(params);
     if (action === 'toggle_school_edit_batch') return toggleSchoolEditBatch(params);
-    if (action === 'lock_school_badge') return updateSchoolBadgeStatus(params, 'lock');
-    if (action === 'unlock_school_badge') return updateSchoolBadgeStatus(params, 'unlock');
-    if (action === 'approve_school_badge') return updateSchoolBadgeStatus(params, 'approve');
+    if (action === 'lock_school_badge') return updateSchoolBadgeStatus(params, 'lock', sessionData);
+    if (action === 'unlock_school_badge') return updateSchoolBadgeStatus(params, 'unlock', sessionData);
+    if (action === 'approve_school_badge') return updateSchoolBadgeStatus(params, 'approve', sessionData);
     if (action === 'setup_database') { setupDatabase(); return createJSONOutput({ status: 'success', message: 'Struktur Database berjaya dijana.' }); }
     if (action === 'clear_sheet_data') { clearSheetData(params.target); return createJSONOutput({ status: 'success' }); }
     if (action === 'add_badge_type') return addBadgeType(params);
@@ -290,7 +439,7 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     if (action === 'add_admin') return addAdmin(params);
     if (action === 'delete_admin') return deleteAdmin(params);
     if (action === 'login_admin_regional') return loginAdminRegional(params);
-    if (action === 'change_admin_regional_password') return changeAdminRegionalPassword(params);
+    if (action === 'change_admin_regional_password') return changeAdminRegionalPassword(params, sessionData);
 
     return createJSONOutput({ status: 'error', message: 'Action tidak sah: ' + action });
   } catch (err) {
@@ -301,7 +450,14 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
 }
 
 // ---------------- Existing functions preserved (getAllData, submitForm, etc.) ----------------
-function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode) {
+function getPublicData() {
+  var data = getAllData('', '', '', '');
+  data.submissions = [];
+  data.userProfiles = [];
+  return data;
+}
+
+function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode, requestingSchoolCode) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
   // Get schools first to create lookup map
@@ -565,6 +721,17 @@ function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode) 
     negeriList = negeriList.filter(function(n) { 
       return n.code === daerahNegeriCode; 
     });
+  } else if (requestingRole === 'user' && requestingSchoolCode) {
+    var userSchoolCode = normalizeComparable(requestingSchoolCode);
+    schools = schools.filter(function(s) {
+      return normalizeComparable(s.schoolCode) === userSchoolCode;
+    });
+    submissions = submissions.filter(function(s) {
+      return normalizeComparable(s.schoolCode) === userSchoolCode;
+    });
+    userProfiles = userProfiles.filter(function(p) {
+      return normalizeComparable(p.schoolCode) === userSchoolCode;
+    });
   }
   
   return { status: 'success', submissions: submissions, schools: schools, badges: badges, userProfiles: userProfiles, negeriList: negeriList, daerahList: daerahList, isRegistrationOpen: isRegistrationOpen };
@@ -785,6 +952,7 @@ function repairDataLocationCodes(p) {
 }
 
 function repairKnownSchoolReferences(p) {
+  p = p || {};
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var dataSheet = ss.getSheetByName(SHEET_DATA);
   var schoolsSheet = ss.getSheetByName(SHEET_SCHOOLS);
@@ -862,6 +1030,16 @@ function repairKnownSchoolReferences(p) {
   });
 }
 
+function dryRunRepairKnownSchoolReferencesLive() {
+  var result = repairKnownSchoolReferences({ dryRun: 'true' });
+  Logger.log(result.getContent());
+}
+
+function runRepairKnownSchoolReferencesLive() {
+  var result = repairKnownSchoolReferences({ dryRun: 'false' });
+  Logger.log(result.getContent());
+}
+
 function addSchool(p) { 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); 
     // SCHOOLS: SchoolName | SchoolCode | NegeriCode | DaerahCode | AllowStudents | AllowAssistants | AllowExaminers | LockedBadges | ApprovedBadges
@@ -933,11 +1111,14 @@ function toggleSchoolEditBatch(p) {
   return createJSONOutput({ status: 'success' });
 }
 
-function updateSchoolBadgeStatus(p, type) {
+function updateSchoolBadgeStatus(p, type, sessionData) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS);
   var data = sheet.getDataRange().getValues();
   for(var i=1; i<data.length; i++) {
     if(data[i][0] == p.schoolName) {
+      if (sessionData && sessionData.role === 'user' && normalizeComparable(data[i][1]) !== normalizeComparable(sessionData.schoolCode)) {
+        return createJSONOutput({ status: 'error', message: 'Tindakan bukan untuk sekolah sesi ini.' });
+      }
       var locked = data[i][7] ? data[i][7].toString().split(',').filter(String) : [];
       var approved = data[i][8] ? data[i][8].toString().split(',').filter(String) : [];
       if (type === 'lock') {
@@ -969,7 +1150,23 @@ function loginUser(p) {
   var comp = hashPassword(p.password, user.salt || '');
   if (comp !== user.passwordHash) { recordFailedAttempt(p.schoolCode); return createJSONOutput({ status: 'error', message: 'Salah info.' }); }
   resetAttempts(p.schoolCode);
-  return createJSONOutput({ status: 'success', user: { schoolName: user.schoolName, schoolCode: user.schoolCode, isLoggedIn: true } });
+  var userToken = issueSessionToken({
+    role: 'user',
+    schoolName: user.schoolName,
+    schoolCode: user.schoolCode,
+    negeriCode: user.negeriCode || '',
+    daerahCode: user.daerahCode || ''
+  });
+  return createJSONOutput({
+    status: 'success',
+    user: {
+      schoolName: user.schoolName,
+      schoolCode: user.schoolCode,
+      isLoggedIn: true,
+      authToken: userToken.token,
+      expiresAt: userToken.expiresAt
+    }
+  });
 }
 
 function registerUser(p) { 
@@ -1320,6 +1517,12 @@ function loginAdminRegional(p) {
       sheet.getRange(i+1, 11).setValue(new Date());
       
       resetAttempts('admin_regional_' + username);
+      var regionalToken = issueSessionToken({
+        role: role,
+        username: username,
+        negeriCode: negeriCode,
+        daerahCode: daerahCode
+      });
       
       // Return with scope information for hierarchical access
       return createJSONOutput({
@@ -1330,6 +1533,8 @@ function loginAdminRegional(p) {
           fullName: fullName,
           negeriCode: negeriCode,
           daerahCode: daerahCode,
+          authToken: regionalToken.token,
+          expiresAt: regionalToken.expiresAt,
           scope: {
             canManageNegeri: false, // Only developer can
             canManageDaerah: false, // Only developer can
@@ -1341,15 +1546,15 @@ function loginAdminRegional(p) {
             daerahAccess: daerahCode ? [daerahCode] : (role === 'negeri' ? 'ALL_IN_NEGERI' : [])
           }
         }
-      });
-    }
+     });
+   }
   }
   
   recordFailedAttempt('admin_regional_' + username);
   return createJSONOutput({ status: 'error', message: 'Nama pengguna tidak dijumpai.' });
 }
 
-function changeAdminRegionalPassword(p) {
+function changeAdminRegionalPassword(p, sessionData) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ADMINS);
   if (!sheet) return createJSONOutput({ status: 'error', message: 'Sistem admin tidak tersedia.' });
   
@@ -1359,6 +1564,10 @@ function changeAdminRegionalPassword(p) {
   
   if (!newPassword) {
     return createJSONOutput({ status: 'error', message: 'Kata laluan baru diperlukan.' });
+  }
+
+  if (sessionData && sessionData.role !== 'admin' && sessionData.role !== 'developer' && normalizeComparable(sessionData.username) !== normalizeComparable(username)) {
+    return createJSONOutput({ status: 'error', message: 'Anda hanya boleh menukar kata laluan akaun sendiri.' });
   }
   
   // Find admin record by username

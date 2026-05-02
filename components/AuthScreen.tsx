@@ -13,10 +13,11 @@ interface AuthScreenProps {
   onLoginSuccess: (user: UserSession) => void;
   onAdminLogin: (username: string, pass: string) => Promise<{success: boolean, message?: string}>;
   onAdminRegionalLogin?: (username: string, pass: string, role: 'negeri' | 'daerah') => Promise<{success: boolean, message?: string, adminData?: any}>;
-  onDeveloperLogin?: (username: string, pass: string) => {success: boolean, message?: string};
+  onDeveloperLogin?: (username: string, pass: string) => Promise<{success: boolean, message?: string}>;
   schools: School[];
   negeriList?: Negeri[];
   daerahList?: Daerah[];
+  userAccessEnabled?: boolean;
   isLoading?: boolean;
 }
 
@@ -31,6 +32,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   schools = [], 
   negeriList = [], 
   daerahList = [], 
+  userAccessEnabled = true,
   isLoading = false 
 }) => {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -102,7 +104,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 setLoading(false); 
                 return; 
             }
-            const res = onDeveloperLogin(schoolCode, password);
+            const res = await onDeveloperLogin(schoolCode, password);
             if (!res.success) {
                 setError(res.message || 'Log masuk developer gagal.');
                 setLoading(false);
@@ -126,7 +128,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setLoading(false); 
                     return; 
                 }
-                const res = onDeveloperLogin(schoolCode, password);
+                const res = await onDeveloperLogin(schoolCode, password);
                 if (!res.success) {
                     setError(res.message || 'Log masuk developer gagal.');
                     setLoading(false);
@@ -164,8 +166,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             }
 
             // Check if user access is disabled
-            const userAccessParamValue = new URLSearchParams(window.location.search).get('userAccess');
-            const userAccessEnabled = userAccessParamValue ? userAccessParamValue === 'true' : localStorage.getItem('userAccess') !== 'false';
             if (!userAccessEnabled) {
                 setError('Akses pengguna sedang ditutup. Sila hubungi pentadbir sistem.');
                 setLoading(false);
@@ -194,9 +194,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             if (!secretKey) { setError('Sila cipta Kata Kunci Keselamatan.'); setLoading(false); return; }
 
             // Check if user access is disabled
-            const userAccessParamReg = new URLSearchParams(window.location.search).get('userAccess');
-            const userAccessEnabledReg = userAccessParamReg ? userAccessParamReg === 'true' : localStorage.getItem('userAccess') !== 'false';
-            if (!userAccessEnabledReg) {
+            if (!userAccessEnabled) {
                 setError('Pendaftaran sedang ditutup. Sila hubungi pentadbir sistem.');
                 setLoading(false);
                 return;

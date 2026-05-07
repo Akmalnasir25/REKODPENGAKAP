@@ -127,7 +127,7 @@ function _getDeveloperHashes() {
   var hash = SCRIPT_PROP.getProperty('DEV_PASS_HASH');
   var salt = SCRIPT_PROP.getProperty('DEV_PASS_SALT');
   var oldPass = SCRIPT_PROP.getProperty('DEV_PASS');
-  if (oldPass && !hash) {
+  if (oldPass) {
     salt = generateSalt();
     hash = hashPassword(oldPass, salt);
     SCRIPT_PROP.setProperty('DEV_PASS_HASH', hash);
@@ -180,7 +180,22 @@ function resetAttempts(id) { SCRIPT_PROP.deleteProperty(_rateKey(id)); }
 
 // ---------------- Sanitization ----------------
 function sanitizeString(s) { if (!s || typeof s !== 'string') return ''; return s.replace(/[\x00-\x1F\x7F]/g, '').trim(); }
+function sanitizeForSheet(s) {
+  // Prevent spreadsheet formula injection
+  if (!s || typeof s !== 'string') return '';
+  var cleaned = s.replace(/[\x00-\x1F\x7F]/g, '').trim();
+  if (/^[=+\-@\t\r]/.test(cleaned)) { cleaned = "'" + cleaned; }
+  return cleaned;
+}
 function isValidSchoolCode(code) { if (!code) return false; return /^[A-Z0-9\-\_]{2,20}$/.test(code); }
+function validatePasswordStrength(password) {
+  if (!password || password.length < 6) return { valid: false, message: 'Kata laluan mesti sekurang-kurangnya 6 aksara.' };
+  if (!/[A-Z]/.test(password)) return { valid: false, message: 'Kata laluan mesti mengandungi huruf besar.' };
+  if (!/[a-z]/.test(password)) return { valid: false, message: 'Kata laluan mesti mengandungi huruf kecil.' };
+  if (!/\d/.test(password)) return { valid: false, message: 'Kata laluan mesti mengandungi nombor.' };
+  if (!/[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?]/.test(password)) return { valid: false, message: 'Kata laluan mesti mengandungi karakter khas.' };
+  return { valid: true };
+}
 
 // ---------------- User storage helpers ----------------
 function _ensureUsersSheet() {
@@ -193,15 +208,21 @@ function _ensureUsersSheet() {
 function migrateUserPasswordsIfNeeded() {
   var sh = _ensureUsersSheet();
   var data = sh.getDataRange().getValues();
+  if (data.length < 1) return;
+  // Detect schema by header row
+  var headers = data[0].map(function(h) { return String(h).trim().toUpperCase(); });
+  var isEnhancedSchema = headers.indexOf('PASSWORDHASH') !== -1;
+  // Only migrate if using OLD schema (SchoolName, SchoolCode, Password, SecretKey)
+  if (isEnhancedSchema) return; // Already enhanced, no migration needed
+  // Old schema: col0=SchoolName, col1=SchoolCode, col2=Password(plain), col3=SecretKey
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    // If sheet has old format where password stored in col 3 and salt missing
-    if (row.length >= 4 && row[2] && (!row[3] || row.length === 4)) {
+    if (row[2] && typeof row[2] === 'string' && row[2].length < 64) {
+      // Looks like plaintext password (hash would be 64 hex chars)
       var plain = String(row[2]);
       var salt = generateSalt();
       var hash = hashPassword(plain, salt);
-      // write back to row: columns 3..5 -> [hash, salt, secretKey]
-      sh.getRange(i+1, 3, 1, 3).setValues([[hash, salt, row[3] || '']]);
+      sh.getRange(i+1, 3, 1, 2).setValues([[hash, salt]]);
     }
   }
 }
@@ -304,7 +325,11 @@ function doPost(e) { return handleRequest(e, '', '', '', null); }
 
 // ---------------- Integrate with existing handleRequest structure ----------------
 function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerahCode, sessionData) {
-  var lock = LockService.getScriptLock(); lock.tryLock(10000);
+  var lock = LockService.getScriptLock();
+  var lockAcquired = lock.tryLock(10000);
+  if (!lockAcquired) {
+    return createJSONOutput({ status: 'error', message: 'Server sibuk. Sila cuba lagi sebentar.' });
+  }
   try {
     if (!e.postData) { 
       var data = getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode, sessionData && sessionData.schoolCode); 
@@ -315,7 +340,17 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     sessionData = validateSessionToken(params.authToken || '');
 
     // CSRF validation for sensitive actions
-    if (['login_user','register_user','reset_password','change_password','update_user_profile','submit_form','update_data','delete_data'].indexOf(action) !== -1) {
+    var csrfProtectedActions = [
+      'login_user','register_user','reset_password','change_password','update_user_profile',
+      'submit_form','update_data','delete_data',
+      'change_admin_password','change_admin_regional_password','migrate_year',
+      'add_school','delete_school','update_school_permission','toggle_school_edit_batch',
+      'lock_school_badge','unlock_school_badge','approve_school_badge',
+      'add_badge_type','delete_badge_type','update_badge_deadline','toggle_registration',
+      'setup_database','clear_sheet_data','add_negeri','add_daerah','delete_negeri','delete_daerah',
+      'add_admin','delete_admin'
+    ];
+    if (csrfProtectedActions.indexOf(action) !== -1) {
       var token = params.csrfToken;
       if (!validateCsrfToken(token)) return createJSONOutput({ status: 'error', message: 'Invalid or expired CSRF token' });
     }
@@ -341,8 +376,8 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
         authError = requireSession(sessionData, ['admin','district','negeri','daerah','developer']);
       } else if (schoolBadgeActions.indexOf(action) !== -1) {
         authError = requireSession(sessionData, ['user','admin','district','negeri','daerah','developer']);
-      } else if (developerActions.indexOf(action) !== -1) {
-        authError = requireSession(sessionData, ['admin','developer']);
+    } else if (developerActions.indexOf(action) !== -1) {
+        authError = requireSession(sessionData, ['developer']);
       } else {
         authError = requireSession(sessionData, ['admin','developer']);
       }
@@ -397,6 +432,8 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
         return createJSONOutput({ status: 'error', message: 'Anda hanya boleh menukar kata laluan role sendiri.' });
       }
       var role = params.role; var newPass = params.newPassword || '';
+      var passCheck = validatePasswordStrength(newPass);
+      if (!passCheck.valid) return createJSONOutput({ status: 'error', message: passCheck.message });
       var salt = generateSalt(); var hash = hashPassword(newPass, salt);
       if (role === 'district') { SCRIPT_PROP.setProperty('DISTRICT_PASS_HASH', hash); SCRIPT_PROP.setProperty('DISTRICT_PASS_SALT', salt); }
       else { SCRIPT_PROP.setProperty('ADMIN_PASS_HASH', hash); SCRIPT_PROP.setProperty('ADMIN_PASS_SALT', salt); }
@@ -423,7 +460,13 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     if (action === 'unlock_school_badge') return updateSchoolBadgeStatus(params, 'unlock', sessionData);
     if (action === 'approve_school_badge') return updateSchoolBadgeStatus(params, 'approve', sessionData);
     if (action === 'setup_database') { setupDatabase(); return createJSONOutput({ status: 'success', message: 'Struktur Database berjaya dijana.' }); }
-    if (action === 'clear_sheet_data') { clearSheetData(params.target); return createJSONOutput({ status: 'success' }); }
+    if (action === 'clear_sheet_data') {
+      var allowedSheets = [SHEET_DATA, SHEET_SCHOOLS, SHEET_BADGES, SHEET_USERS, SHEET_USER_PROFILES, SHEET_NEGERI, SHEET_DAERAH, SHEET_ADMINS];
+      if (!params.target || allowedSheets.indexOf(params.target) === -1) {
+        return createJSONOutput({ status: 'error', message: 'Sheet target tidak dibenarkan: ' + (params.target || '(kosong)') });
+      }
+      clearSheetData(params.target); return createJSONOutput({ status: 'success' });
+    }
     if (action === 'add_badge_type') return addBadgeType(params);
     if (action === 'delete_badge_type') return deleteBadgeType(params);
     if (action === 'update_badge_deadline') return updateBadgeDeadline(params);
@@ -443,7 +486,8 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
 
     return createJSONOutput({ status: 'error', message: 'Action tidak sah: ' + action });
   } catch (err) {
-    return createJSONOutput({ status: 'error', message: err.toString() });
+    Logger.log('handleRequest error: ' + err.toString());
+    return createJSONOutput({ status: 'error', message: 'Ralat dalaman server. Sila cuba lagi.' });
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }
@@ -741,26 +785,77 @@ function submitForm(p) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(SHEET_DATA);
   if (!sheet) { setupDatabase(); sheet = ss.getSheetByName(SHEET_DATA); }
-  var timestamp = p.customDate ? new Date(p.customDate) : new Date();
   
-  // Lookup school location codes from SCHOOLS sheet
+  // Validate required fields
+  if (!p.schoolCode || !p.badgeType) {
+    return createJSONOutput({ status: 'error', message: 'Kod sekolah dan jenis lencana diperlukan.' });
+  }
+  
+  // Check badge exists and is open
+  var badgesSheet = ss.getSheetByName(SHEET_BADGES);
+  if (badgesSheet) {
+    var badgesData = badgesSheet.getDataRange().getValues();
+    var badgeFound = false;
+    for (var bi = 1; bi < badgesData.length; bi++) {
+      if (String(badgesData[bi][0]).trim() === String(p.badgeType).trim()) {
+        badgeFound = true;
+        if (badgesData[bi][1] === false || badgesData[bi][1] === 'false' || badgesData[bi][1] === 'FALSE') {
+          return createJSONOutput({ status: 'error', message: 'Pendaftaran untuk lencana "' + p.badgeType + '" telah ditutup.' });
+        }
+        break;
+      }
+    }
+    if (!badgeFound) {
+      return createJSONOutput({ status: 'error', message: 'Jenis lencana tidak sah: ' + p.badgeType });
+    }
+  }
+  
+  // Check school permissions
+  var schoolsSheet = ss.getSheetByName(SHEET_SCHOOLS);
   var negeriCode = '';
   var daerahCode = '';
-  var schoolsSheet = ss.getSheetByName(SHEET_SCHOOLS);
+  var schoolRow = null;
   if (schoolsSheet) {
     var schoolsData = schoolsSheet.getDataRange().getValues();
     for (var i = 1; i < schoolsData.length; i++) {
       if (String(schoolsData[i][1]).toUpperCase() === String(p.schoolCode).toUpperCase()) {
         negeriCode = schoolsData[i][2] || '';
         daerahCode = schoolsData[i][3] || '';
+        schoolRow = schoolsData[i];
         break;
       }
     }
   }
   
+  if (schoolRow) {
+    // Check locked badges
+    var lockedBadges = schoolRow[7] ? schoolRow[7].toString().split(',').map(function(s){return s.trim();}).filter(String) : [];
+    var currentYear = new Date().getFullYear();
+    var lockKey = p.badgeType + '_' + currentYear;
+    if (lockedBadges.indexOf(lockKey) !== -1) {
+      return createJSONOutput({ status: 'error', message: 'Lencana "' + p.badgeType + '" telah dikunci untuk tahun ' + currentYear + '.' });
+    }
+    
+    // Check school permissions
+    var hasStudents = p.participants && p.participants.length > 0;
+    var hasAssistants = p.assistants && p.assistants.length > 0;
+    var hasExaminers = p.examiners && p.examiners.length > 0;
+    if (hasStudents && schoolRow[4] === false) {
+      return createJSONOutput({ status: 'error', message: 'Sekolah tidak dibenarkan menghantar peserta.' });
+    }
+    if (hasAssistants && schoolRow[5] === false) {
+      return createJSONOutput({ status: 'error', message: 'Sekolah tidak dibenarkan menghantar penolong pemimpin.' });
+    }
+    if (hasExaminers && schoolRow[6] === false) {
+      return createJSONOutput({ status: 'error', message: 'Sekolah tidak dibenarkan menghantar penguji.' });
+    }
+  }
+  
+  var timestamp = p.customDate ? new Date(p.customDate) : new Date();
+  
   var rowsToAdd = [];
   function createRow(person, roleName) {
-      return [timestamp, p.schoolName, p.schoolCode, negeriCode, daerahCode, p.badgeType, person.name.toUpperCase(), person.gender, person.race, person.membershipId ? person.membershipId.toUpperCase() : "", person.icNumber, person.phoneNumber, roleName, person.remarks || ""];
+      return [timestamp, sanitizeForSheet(p.schoolName), sanitizeForSheet(p.schoolCode), negeriCode, daerahCode, sanitizeForSheet(p.badgeType), sanitizeForSheet(person.name.toUpperCase()), sanitizeForSheet(person.gender), sanitizeForSheet(person.race), person.membershipId ? sanitizeForSheet(person.membershipId.toUpperCase()) : "", sanitizeForSheet(person.icNumber), sanitizeForSheet(person.phoneNumber), roleName, sanitizeForSheet(person.remarks || "")];
   }
   if (p.participants) p.participants.forEach(function(person) { if (person.name) rowsToAdd.push(createRow(person, p.badgeType === "Anugerah Rambu" ? "PENERIMA RAMBU" : "PESERTA")); });
   if (p.assistants) p.assistants.forEach(function(person) { if (person.name) rowsToAdd.push(createRow(person, "PENOLONG PEMIMPIN")); });
@@ -1041,13 +1136,24 @@ function runRepairKnownSchoolReferencesLive() {
 }
 
 function addSchool(p) { 
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); 
-    // SCHOOLS: SchoolName | SchoolCode | NegeriCode | DaerahCode | AllowStudents | AllowAssistants | AllowExaminers | LockedBadges | ApprovedBadges
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS);
+    var schoolName = sanitizeForSheet(p.schoolName);
+    var schoolCode = sanitizeForSheet(p.schoolCode || '');
+    if (!schoolName) return createJSONOutput({ status: 'error', message: 'Nama sekolah diperlukan.' });
+    // Check duplicate school code
+    if (schoolCode) {
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        if (String(data[i][1]).toUpperCase().trim() === schoolCode.toUpperCase().trim()) {
+          return createJSONOutput({ status: 'error', message: 'Kod sekolah sudah wujud: ' + schoolCode });
+        }
+      }
+    }
     sheet.appendRow([
-        p.schoolName, 
-        p.schoolCode || '', 
-        p.negeriCode || '', 
-        p.daerahCode || '', 
+        schoolName, 
+        schoolCode, 
+        sanitizeForSheet(p.negeriCode || ''), 
+        sanitizeForSheet(p.daerahCode || ''), 
         true, // AllowStudents
         true, // AllowAssistants
         true, // AllowExaminers
@@ -1060,8 +1166,8 @@ function addSchool(p) {
 function deleteSchool(p) { 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_SCHOOLS); 
     var data = sheet.getDataRange().getValues(); 
-    for(var i=0; i<data.length; i++) { 
-        // Match by schoolCode (more unique) or schoolName
+    for(var i=1; i<data.length; i++) { 
+        // Match by schoolCode (more unique) or schoolName — skip header row
         if(data[i][1] == p.schoolCode || data[i][0] == p.schoolCode || data[i][0] == p.schoolName) { 
             sheet.deleteRow(i+1); 
             return createJSONOutput({ status: 'success' }); 
@@ -1295,9 +1401,22 @@ function updateUserProfile(p) {
   return createJSONOutput({ success: true, message: 'Profil berjaya dikemaskini.' });
 }
 
-function addBadgeType(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_BADGES); sheet.appendRow([p.badgeType, true, ""]); return createJSONOutput({ status: 'success' }); }
+function addBadgeType(p) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_BADGES);
+  var badgeName = sanitizeForSheet(p.badgeType);
+  if (!badgeName) return createJSONOutput({ status: 'error', message: 'Nama lencana tidak sah.' });
+  // Check duplicate
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toUpperCase().trim() === badgeName.toUpperCase().trim()) {
+      return createJSONOutput({ status: 'error', message: 'Lencana sudah wujud.' });
+    }
+  }
+  sheet.appendRow([badgeName, true, ""]);
+  return createJSONOutput({ status: 'success' });
+}
 
-function deleteBadgeType(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_BADGES); var data = sheet.getDataRange().getValues(); for(var i=0; i<data.length; i++) { if(data[i][0] == p.badgeType) { sheet.deleteRow(i+1); return createJSONOutput({ status: 'success' }); } } return createJSONOutput({ status: 'error' }); }
+function deleteBadgeType(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_BADGES); var data = sheet.getDataRange().getValues(); for(var i=1; i<data.length; i++) { if(data[i][0] == p.badgeType) { sheet.deleteRow(i+1); return createJSONOutput({ status: 'success' }); } } return createJSONOutput({ status: 'error' }); }
 
 function updateBadgeDeadline(p) { var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_BADGES); var data = sheet.getDataRange().getValues(); for(var i=1; i<data.length; i++) { if(data[i][0] == p.badgeType) { sheet.getRange(i+1, 3).setValue(p.deadline); return createJSONOutput({ status: 'success' }); } } return createJSONOutput({ status: 'error' }); }
 
@@ -1386,21 +1505,41 @@ function clearSheetData(target) { var ss = SpreadsheetApp.getActiveSpreadsheet()
 function addNegeri(p) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NEGERI);
   if (!sheet) return createJSONOutput({ status: 'error', message: 'Sheet NEGERI tidak wujud.' });
-  sheet.appendRow([p.negeriCode, p.negeriName, new Date()]);
+  var code = sanitizeForSheet(p.negeriCode);
+  var name = sanitizeForSheet(p.negeriName);
+  if (!code || !name) return createJSONOutput({ status: 'error', message: 'Kod dan nama negeri diperlukan.' });
+  // Check duplicate
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toUpperCase().trim() === code.toUpperCase().trim()) {
+      return createJSONOutput({ status: 'error', message: 'Kod negeri sudah wujud.' });
+    }
+  }
+  sheet.appendRow([code, name, new Date()]);
   return createJSONOutput({ status: 'success' });
 }
 
 function addDaerah(p) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DAERAH);
   if (!sheet) return createJSONOutput({ status: 'error', message: 'Sheet DAERAH tidak wujud.' });
-  sheet.appendRow([p.daerahCode, p.daerahName, p.negeriCode, new Date()]);
+  var code = sanitizeForSheet(p.daerahCode);
+  var name = sanitizeForSheet(p.daerahName);
+  if (!code || !name) return createJSONOutput({ status: 'error', message: 'Kod dan nama daerah diperlukan.' });
+  // Check duplicate
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toUpperCase().trim() === code.toUpperCase().trim()) {
+      return createJSONOutput({ status: 'error', message: 'Kod daerah sudah wujud.' });
+    }
+  }
+  sheet.appendRow([code, name, p.negeriCode, new Date()]);
   return createJSONOutput({ status: 'success' });
 }
 
 function deleteNegeri(p) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NEGERI);
   var data = sheet.getDataRange().getValues();
-  for(var i=0; i<data.length; i++) {
+  for(var i=1; i<data.length; i++) {
     if(data[i][0] == p.negeriCode) {
       sheet.deleteRow(i+1);
       return createJSONOutput({ status: 'success' });
@@ -1412,7 +1551,7 @@ function deleteNegeri(p) {
 function deleteDaerah(p) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_DAERAH);
   var data = sheet.getDataRange().getValues();
-  for(var i=0; i<data.length; i++) {
+  for(var i=1; i<data.length; i++) {
     if(data[i][0] == p.daerahCode) {
       sheet.deleteRow(i+1);
       return createJSONOutput({ status: 'success' });
@@ -1426,6 +1565,21 @@ function addAdmin(p) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ADMINS);
   if (!sheet) return createJSONOutput({ status: 'error', message: 'Sheet ADMINS tidak wujud.' });
   
+  // Validate role
+  if (p.role !== 'negeri' && p.role !== 'daerah') {
+    return createJSONOutput({ status: 'error', message: 'Role mesti "negeri" atau "daerah".' });
+  }
+  // Validate scope
+  if (p.role === 'negeri' && !p.negeriCode) {
+    return createJSONOutput({ status: 'error', message: 'NegeriCode diperlukan untuk role negeri.' });
+  }
+  if (p.role === 'daerah' && (!p.negeriCode || !p.daerahCode)) {
+    return createJSONOutput({ status: 'error', message: 'NegeriCode dan DaerahCode diperlukan untuk role daerah.' });
+  }
+  // Validate password strength
+  var passCheck = validatePasswordStrength(p.password);
+  if (!passCheck.valid) return createJSONOutput({ status: 'error', message: passCheck.message });
+  
   // Check if username exists
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -1438,15 +1592,15 @@ function addAdmin(p) {
   var hash = hashPassword(p.password, salt);
   
   sheet.appendRow([
-    p.username,
+    sanitizeForSheet(p.username),
     hash,
     salt,
-    p.role, // 'negeri' or 'daerah'
-    p.negeriCode || '',
-    p.daerahCode || '',
-    p.fullName || '',
-    p.phone || '',
-    p.email || '',
+    p.role,
+    sanitizeForSheet(p.negeriCode || ''),
+    sanitizeForSheet(p.daerahCode || ''),
+    sanitizeForSheet(p.fullName || ''),
+    sanitizeForSheet(p.phone || ''),
+    sanitizeForSheet(p.email || ''),
     new Date(),
     ''
   ]);

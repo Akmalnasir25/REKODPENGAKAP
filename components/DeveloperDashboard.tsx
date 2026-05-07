@@ -52,6 +52,16 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
   // Expansion states
   const [expandedNegeri, setExpandedNegeri] = useState<string | null>(null);
 
+  // Data filter states
+  const [dataFilterNegeri, setDataFilterNegeri] = useState('');
+  const [dataFilterDaerah, setDataFilterDaerah] = useState('');
+  const [dataFilterBadge, setDataFilterBadge] = useState('');
+  const [dataFilterSchool, setDataFilterSchool] = useState('');
+  const [dataFilterRole, setDataFilterRole] = useState('');
+  const [dataFilterYear, setDataFilterYear] = useState('');
+  const [dataFilterGender, setDataFilterGender] = useState('');
+  const [dataSearchText, setDataSearchText] = useState('');
+
   useEffect(() => {
     loadData();
   }, [scriptUrl]);
@@ -859,89 +869,236 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
             )}
 
             {/* DATA PESERTA TAB */}
-            {!loading && activeTab === 'data' && (
-              <div>
-                <div className="mb-6">
-                  <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-                    <Shield size={20} />
-                    Semua Data Penyertaan Lencana
-                  </h3>
-                  <p className="text-sm text-slate-600">
-                    Jumlah keseluruhan: {submissionsData.length} penyertaan
-                  </p>
+            {!loading && activeTab === 'data' && (() => {
+              // Compute unique values for filter dropdowns
+              const uniqueBadges = [...new Set(submissionsData.map(d => d.badge).filter(Boolean))].sort();
+              const uniqueSchools = [...new Set(submissionsData.map(d => d.school).filter(Boolean))].sort();
+              const uniqueRoles = [...new Set(submissionsData.map(d => d.role || 'PESERTA').filter(Boolean))].sort();
+              const uniqueYears = [...new Set(submissionsData.map(d => { try { return new Date(d.date).getFullYear().toString(); } catch { return ''; } }).filter(Boolean))].sort((a,b) => Number(b) - Number(a));
+              const uniqueGenders = [...new Set(submissionsData.map(d => d.gender).filter(Boolean))].sort();
+
+              // Apply filters
+              const filteredSubmissions = submissionsData.filter(d => {
+                if (dataFilterNegeri && d.negeriCode !== dataFilterNegeri) return false;
+                if (dataFilterDaerah && d.daerahCode !== dataFilterDaerah) return false;
+                if (dataFilterBadge && d.badge !== dataFilterBadge) return false;
+                if (dataFilterSchool && d.school !== dataFilterSchool) return false;
+                if (dataFilterRole && (d.role || 'PESERTA') !== dataFilterRole) return false;
+                if (dataFilterGender && d.gender !== dataFilterGender) return false;
+                if (dataFilterYear) {
+                  try { if (new Date(d.date).getFullYear().toString() !== dataFilterYear) return false; } catch { return false; }
+                }
+                if (dataSearchText) {
+                  const q = dataSearchText.toLowerCase();
+                  const searchable = [d.student, d.school, d.badge, d.id, d.icNumber, d.schoolCode, d.remarks].map(v => String(v || '').toLowerCase()).join(' ');
+                  if (!searchable.includes(q)) return false;
+                }
+                return true;
+              });
+
+              const activeFilterCount = [dataFilterNegeri, dataFilterDaerah, dataFilterBadge, dataFilterSchool, dataFilterRole, dataFilterYear, dataFilterGender, dataSearchText].filter(Boolean).length;
+
+              // Stats for filtered data
+              const statPeserta = filteredSubmissions.filter(d => !d.role || d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU').length;
+              const statPenolong = filteredSubmissions.filter(d => (d.role || '').toUpperCase().includes('PENOLONG') || d.role === 'PEMIMPIN').length;
+              const statPenguji = filteredSubmissions.filter(d => (d.role || '').toUpperCase() === 'PENGUJI').length;
+              const statSchools = new Set(filteredSubmissions.map(d => d.schoolCode || d.school).filter(Boolean)).size;
+
+              return (
+              <div className="space-y-5">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-lg flex items-center gap-2">
+                      <Shield size={20} />
+                      Data Penyertaan Lencana
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      Memaparkan {filteredSubmissions.length} daripada {submissionsData.length} rekod
+                      {activeFilterCount > 0 && <span className="ml-1 text-blue-600 font-medium">({activeFilterCount} filter aktif)</span>}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Submissions Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full bg-white border rounded-lg">
-                    <thead className="bg-slate-100">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="text-xs text-blue-600 font-semibold uppercase tracking-wider">Peserta</div>
+                    <div className="text-2xl font-bold text-blue-800 mt-1">{statPeserta}</div>
+                  </div>
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <div className="text-xs text-green-600 font-semibold uppercase tracking-wider">Pemimpin/Penolong</div>
+                    <div className="text-2xl font-bold text-green-800 mt-1">{statPenolong}</div>
+                  </div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                    <div className="text-xs text-purple-600 font-semibold uppercase tracking-wider">Penguji</div>
+                    <div className="text-2xl font-bold text-purple-800 mt-1">{statPenguji}</div>
+                  </div>
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                    <div className="text-xs text-orange-600 font-semibold uppercase tracking-wider">Sekolah</div>
+                    <div className="text-2xl font-bold text-orange-800 mt-1">{statSchools}</div>
+                  </div>
+                </div>
+
+                {/* Filter Panel */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                      Tapis Data
+                    </h4>
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={() => { setDataFilterNegeri(''); setDataFilterDaerah(''); setDataFilterBadge(''); setDataFilterSchool(''); setDataFilterRole(''); setDataFilterYear(''); setDataFilterGender(''); setDataSearchText(''); }}
+                        className="text-xs text-red-600 hover:text-red-700 font-medium hover:underline"
+                      >
+                        Kosongkan Semua Filter
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search */}
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    <input
+                      type="text"
+                      placeholder="Cari nama, IC, kod sekolah, catatan..."
+                      value={dataSearchText}
+                      onChange={e => setDataSearchText(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    />
+                    {dataSearchText && (
+                      <button onClick={() => setDataSearchText('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filter Dropdowns */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {/* Year */}
+                    <select value={dataFilterYear} onChange={e => setDataFilterYear(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Semua Tahun</option>
+                      {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+
+                    {/* Badge */}
+                    <select value={dataFilterBadge} onChange={e => setDataFilterBadge(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Semua Lencana</option>
+                      {uniqueBadges.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+
+                    {/* Negeri */}
+                    <select value={dataFilterNegeri} onChange={e => { setDataFilterNegeri(e.target.value); setDataFilterDaerah(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Semua Negeri</option>
+                      {negeriList.map(n => <option key={n.code} value={n.code}>{n.name}</option>)}
+                    </select>
+
+                    {/* Daerah */}
+                    <select value={dataFilterDaerah} onChange={e => setDataFilterDaerah(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" disabled={!dataFilterNegeri}>
+                      <option value="">Semua Daerah</option>
+                      {daerahList.filter(d => d.negeriCode === dataFilterNegeri).map(d => <option key={d.code} value={d.code}>{d.name}</option>)}
+                    </select>
+
+                    {/* School */}
+                    <select value={dataFilterSchool} onChange={e => setDataFilterSchool(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Semua Sekolah</option>
+                      {uniqueSchools.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+
+                    {/* Role */}
+                    <select value={dataFilterRole} onChange={e => setDataFilterRole(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Semua Peranan</option>
+                      {uniqueRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+
+                    {/* Gender */}
+                    <select value={dataFilterGender} onChange={e => setDataFilterGender(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Semua Jantina</option>
+                      {uniqueGenders.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Active filter tags */}
+                  {activeFilterCount > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {dataFilterYear && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">Tahun: {dataFilterYear} <button onClick={() => setDataFilterYear('')} className="hover:text-blue-900">&times;</button></span>}
+                      {dataFilterBadge && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Lencana: {dataFilterBadge} <button onClick={() => setDataFilterBadge('')} className="hover:text-amber-900">&times;</button></span>}
+                      {dataFilterNegeri && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Negeri: {negeriList.find(n=>n.code===dataFilterNegeri)?.name || dataFilterNegeri} <button onClick={() => { setDataFilterNegeri(''); setDataFilterDaerah(''); }} className="hover:text-green-900">&times;</button></span>}
+                      {dataFilterDaerah && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-medium">Daerah: {daerahList.find(d=>d.code===dataFilterDaerah)?.name || dataFilterDaerah} <button onClick={() => setDataFilterDaerah('')} className="hover:text-teal-900">&times;</button></span>}
+                      {dataFilterSchool && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">Sekolah: {dataFilterSchool.length > 20 ? dataFilterSchool.slice(0,20)+'...' : dataFilterSchool} <button onClick={() => setDataFilterSchool('')} className="hover:text-purple-900">&times;</button></span>}
+                      {dataFilterRole && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">Peranan: {dataFilterRole} <button onClick={() => setDataFilterRole('')} className="hover:text-indigo-900">&times;</button></span>}
+                      {dataFilterGender && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-pink-100 text-pink-700 rounded-full text-xs font-medium">Jantina: {dataFilterGender} <button onClick={() => setDataFilterGender('')} className="hover:text-pink-900">&times;</button></span>}
+                      {dataSearchText && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-200 text-slate-700 rounded-full text-xs font-medium">Carian: "{dataSearchText}" <button onClick={() => setDataSearchText('')} className="hover:text-slate-900">&times;</button></span>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Data Table */}
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full bg-white text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="px-4 py-3 text-left">Tarikh</th>
-                        <th className="px-4 py-3 text-left">Sekolah</th>
-                        <th className="px-4 py-3 text-left">Ketua Kumpulan</th>
-                        <th className="px-4 py-3 text-left">Jenis Lencana</th>
-                        <th className="px-4 py-3 text-center">Pelajar</th>
-                        <th className="px-4 py-3 text-center">Pembantu</th>
-                        <th className="px-4 py-3 text-center">Pemeriksa</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">#</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Tarikh</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Nama</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Sekolah</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Lencana</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Peranan</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Jantina</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">IC</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">ID</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {submissionsData.map((sub, idx) => (
-                        <tr key={idx} className="border-t hover:bg-slate-50">
-                          <td className="px-4 py-3 text-sm">{sub.submissionDate || '-'}</td>
-                          <td className="px-4 py-3">{sub.schoolName || '-'}</td>
-                          <td className="px-4 py-3">
-                            <div className="text-sm font-semibold">{sub.leaderName || '-'}</div>
-                            <div className="text-xs text-slate-500">{sub.leaderIcNumber || '-'}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
-                              {sub.badgeType || '-'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">{sub.participants?.length || 0}</td>
-                          <td className="px-4 py-3 text-center">{sub.assistants?.length || 0}</td>
-                          <td className="px-4 py-3 text-center">{sub.examiners?.length || 0}</td>
-                        </tr>
-                      ))}
-                      {submissionsData.length === 0 && (
+                      {filteredSubmissions.slice(0, 200).map((d, idx) => {
+                        const badgeColor = d.badge?.includes('Gangsa') ? 'bg-amber-100 text-amber-800' :
+                                           d.badge?.includes('Perak') ? 'bg-slate-100 text-slate-800' :
+                                           d.badge?.includes('Emas') ? 'bg-yellow-100 text-yellow-800' :
+                                           d.badge?.includes('Rambu') ? 'bg-purple-100 text-purple-800' :
+                                           'bg-blue-100 text-blue-800';
+                        const roleColor = (d.role || '').includes('PENOLONG') ? 'text-green-700' :
+                                          d.role === 'PENGUJI' ? 'text-purple-700' :
+                                          d.role === 'PEMIMPIN' ? 'text-amber-700' :
+                                          'text-slate-700';
+                        return (
+                          <tr key={d.rowIndex || idx} className="border-t border-slate-100 hover:bg-blue-50/30 transition-colors">
+                            <td className="px-4 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
+                            <td className="px-4 py-2.5 text-xs text-slate-500 whitespace-nowrap">{d.date ? new Date(d.date).toLocaleDateString('ms-MY') : '-'}</td>
+                            <td className="px-4 py-2.5 font-medium text-slate-800">{d.student || '-'}</td>
+                            <td className="px-4 py-2.5 text-xs">{d.school || '-'}</td>
+                            <td className="px-4 py-2.5">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${badgeColor}`}>{d.badge || '-'}</span>
+                            </td>
+                            <td className={`px-4 py-2.5 text-xs font-medium ${roleColor}`}>{d.role || 'PESERTA'}</td>
+                            <td className="px-4 py-2.5 text-xs">{d.gender || '-'}</td>
+                            <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{d.icNumber || '-'}</td>
+                            <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{d.id || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                      {filteredSubmissions.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                            Tiada data penyertaan dijumpai
+                          <td colSpan={9} className="px-4 py-12 text-center">
+                            <div className="flex flex-col items-center gap-2">
+                              <svg className="w-10 h-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              <p className="text-slate-500 font-medium">Tiada data dijumpai</p>
+                              <p className="text-slate-400 text-xs">Cuba ubah filter atau carian anda</p>
+                            </div>
                           </td>
                         </tr>
                       )}
                     </tbody>
                   </table>
-                </div>
-
-                {/* Summary Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="text-sm text-blue-600 font-semibold">Jumlah Penyertaan</div>
-                    <div className="text-2xl font-bold text-blue-800">{submissionsData.length}</div>
-                  </div>
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                    <div className="text-sm text-green-600 font-semibold">Jumlah Pelajar</div>
-                    <div className="text-2xl font-bold text-green-800">
-                      {submissionsData.reduce((sum, sub) => sum + (sub.participants?.length || 0), 0)}
+                  {filteredSubmissions.length > 200 && (
+                    <div className="px-4 py-3 bg-amber-50 border-t border-amber-200 text-center">
+                      <p className="text-xs text-amber-700 font-medium">Memaparkan 200 daripada {filteredSubmissions.length} rekod. Gunakan filter untuk mengecilkan senarai.</p>
                     </div>
-                  </div>
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <div className="text-sm text-purple-600 font-semibold">Jumlah Pembantu</div>
-                    <div className="text-2xl font-bold text-purple-800">
-                      {submissionsData.reduce((sum, sub) => sum + (sub.assistants?.length || 0), 0)}
-                    </div>
-                  </div>
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                    <div className="text-sm text-orange-600 font-semibold">Jumlah Pemeriksa</div>
-                    <div className="text-2xl font-bold text-orange-800">
-                      {submissionsData.reduce((sum, sub) => sum + (sub.examiners?.length || 0), 0)}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
-            )}
+              );
+            })()}
           </div>
         </div>
 

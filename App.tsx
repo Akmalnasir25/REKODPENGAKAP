@@ -11,6 +11,7 @@ import { MaintenancePage } from './components/MaintenancePage';
 import { DeveloperPanel } from './components/DeveloperPanel';
 import { DeveloperAdminDashboard } from './components/DeveloperAdminDashboard';
 import { DeveloperDashboard } from './components/DeveloperDashboard';
+import { ToastProvider } from './components/ui/Toast';
 import { fetchCloudData, deleteSubmission, loginAdmin, loginAdminRegional, loginDeveloper } from './services/api';
 import { fetchServerCsrf } from './services/security';
 import { DEFAULT_SERVER_URL, LOCAL_STORAGE_KEYS, LOGO_URL } from './constants';
@@ -48,7 +49,11 @@ const ADMIN_SESSION_KEY = 'ADMIN_SESSION_DATA';
 const DEVELOPER_SESSION_KEY = 'DEVELOPER_SESSION_DATA';
 
 export default function App() {
-  return <AppContent />;
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
+  );
 }
 
 function AppContent() {

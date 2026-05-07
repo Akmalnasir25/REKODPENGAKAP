@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 
 interface SearchFilterProps {
@@ -16,16 +16,24 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const callbackRef = useRef(onFilterChange);
+
+  useEffect(() => {
+    callbackRef.current = onFilterChange;
+  }, [onFilterChange]);
+
+  const safeData = Array.isArray(data) ? data : [];
+  const safeFields = Array.isArray(searchFields) ? searchFields : [];
 
   const filteredData = useMemo(() => {
-    let result = data;
+    let result = safeData;
 
     // Apply text search
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(item =>
-        searchFields.some(field => {
-          const value = String(item[field] || '').toLowerCase();
+        safeFields.some(field => {
+          const value = String(item?.[field] || '').toLowerCase();
           return value.includes(term);
         })
       );
@@ -35,23 +43,22 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({
     Object.entries(filters).forEach(([field, value]) => {
       if (value) {
         result = result.filter(item => 
-          String(item[field] || '') === value
+          String(item?.[field] || '') === value
         );
       }
     });
 
     return result;
-  }, [data, searchTerm, filters, searchFields]);
+  }, [safeData, searchTerm, filters, safeFields]);
 
   const handleClear = () => {
     setSearchTerm('');
     setFilters({});
-    onFilterChange(data);
   };
 
-  React.useEffect(() => {
-    onFilterChange(filteredData);
-  }, [filteredData, onFilterChange]);
+  useEffect(() => {
+    callbackRef.current(filteredData);
+  }, [filteredData]);
 
   return (
     <div className="space-y-3 mb-4">
@@ -67,8 +74,10 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({
         />
         {searchTerm && (
           <button
+            type="button"
             onClick={() => setSearchTerm('')}
             className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+            aria-label="Kosongkan carian"
           >
             <X className="w-4 h-4" />
           </button>
@@ -82,6 +91,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({
             Ditemui: {filteredData.length} rekod
           </span>
           <button
+            type="button"
             onClick={handleClear}
             className="text-blue-600 hover:text-blue-800 font-medium"
           >

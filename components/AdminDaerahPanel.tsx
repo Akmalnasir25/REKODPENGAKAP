@@ -132,13 +132,13 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
       const timestamp = new Date().toLocaleString();
 
       if (type === 'DATA') {
-          // Flatten data for better Excel view
-          exportData = data.map(d => ({
+          // Export only filtered data for this daerah
+          exportData = filteredData.map(d => ({
               ...d,
               _backupDate: timestamp
           }));
       } else if (type === 'SCHOOLS') {
-          exportData = schools.map(s => ({
+          exportData = filteredSchools.map(s => ({
               ...s,
               lockedBadges: s.lockedBadges ? s.lockedBadges.join(', ') : '',
               approvedBadges: s.approvedBadges ? s.approvedBadges.join(', ') : '',
@@ -186,8 +186,12 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
         alert("Kata laluan dan pengesahan kata laluan tidak sama.");
         return;
     }
-    if (newAdminPassword.length < 3) {
-        alert("Kata laluan terlalu pendek.");
+    if (newAdminPassword.length < 6) {
+        alert("Kata laluan mesti sekurang-kurangnya 6 aksara.");
+        return;
+    }
+    if (!/[A-Z]/.test(newAdminPassword) || !/[a-z]/.test(newAdminPassword) || !/\d/.test(newAdminPassword)) {
+        alert("Kata laluan mesti mengandungi huruf besar, huruf kecil, dan nombor.");
         return;
     }
 

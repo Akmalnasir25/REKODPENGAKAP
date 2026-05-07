@@ -41,36 +41,9 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('=== AdminNegeriPanel Debug ===');
-    console.log('negeriCode:', negeriCode);
-    console.log('negeriName:', negeriName);
-    console.log('Total data received:', data.length);
-    console.log('Total schools received:', schools.length);
-    console.log('Total daerah received:', daerahList.length);
-    
-    if (data.length > 0) {
-      console.log('Sample data[0]:', data[0]);
-      console.log('Data negeriCode values:', [...new Set(data.map(d => d.negeriCode))]);
-    }
-    
-    if (schools.length > 0) {
-      console.log('Sample schools[0]:', schools[0]);
-      console.log('Schools negeriCode values:', [...new Set(schools.map(s => s.negeriCode))]);
-    }
-  }, [negeriCode, negeriName, data, schools, daerahList]);
-
   // Filter data untuk negeri ini sahaja
   const filteredData = data.filter(d => d.negeriCode === negeriCode);
   const filteredSchools = schools.filter(s => s.negeriCode === negeriCode);
-  const filteredDaerah = daerahList.filter(d => d.negeriCode === negeriCode);
-  
-  console.log('Filtered results:', {
-    filteredData: filteredData.length,
-    filteredSchools: filteredSchools.length,
-    filteredDaerah: filteredDaerah.length
-  });
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,13 +132,13 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       const timestamp = new Date().toLocaleString();
 
       if (type === 'DATA') {
-          // Flatten data for better Excel view
-          exportData = data.map(d => ({
+          // Export only filtered data for this negeri
+          exportData = filteredData.map(d => ({
               ...d,
               _backupDate: timestamp
           }));
       } else if (type === 'SCHOOLS') {
-          exportData = schools.map(s => ({
+          exportData = filteredSchools.map(s => ({
               ...s,
               lockedBadges: s.lockedBadges ? s.lockedBadges.join(', ') : '',
               approvedBadges: s.approvedBadges ? s.approvedBadges.join(', ') : '',
@@ -213,8 +186,12 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
         alert("Kata laluan dan pengesahan kata laluan tidak sama.");
         return;
     }
-    if (newAdminPassword.length < 3) {
-        alert("Kata laluan terlalu pendek.");
+    if (newAdminPassword.length < 6) {
+        alert("Kata laluan mesti sekurang-kurangnya 6 aksara.");
+        return;
+    }
+    if (!/[A-Z]/.test(newAdminPassword) || !/[a-z]/.test(newAdminPassword) || !/\d/.test(newAdminPassword)) {
+        alert("Kata laluan mesti mengandungi huruf besar, huruf kecil, dan nombor.");
         return;
     }
 

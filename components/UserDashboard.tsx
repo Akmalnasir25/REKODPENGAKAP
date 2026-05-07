@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
 import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, Sparkles, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
-import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile } from '../services/api';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword } from '../services/api';
 import { fetchServerCsrf } from '../services/security';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
@@ -360,7 +360,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       if(selectedRambuCandidates.length === 0) { alert("Sila pilih peserta."); return; }
       if(!confirm(`Sahkan kehadiran ${selectedRambuCandidates.length} peserta?`)) return;
       setIsSubmittingRambu(true);
-      const candidatesToSubmit = rambuCandidates.filter(c => selectedRambuCandidates.includes(c.icNumber));
+      const candidatesToSubmit = rambuCandidates.filter(c => selectedRambuCandidates.includes(c.icNumber || ''));
+      if (candidatesToSubmit.length === 0) { alert("Tiada peserta yang sah dipilih."); setIsSubmittingRambu(false); return; }
       const ref = candidatesToSubmit[0];
       
       // Get profile data from userProfiles, not from submissions
@@ -377,7 +378,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           phone: profile?.phone || '', 
           badgeType: 'Anugerah Rambu' 
       };
-      const participants: Participant[] = candidatesToSubmit.map(c => ({ id: Date.now() + Math.random(), name: c.student, gender: c.gender, race: c.race || '', membershipId: c.id, icNumber: c.icNumber || '', phoneNumber: c.studentPhone || '', remarks: 'Layak Anugerah Rambu' }));
+      let idCounter = 0;
+      const participants: Participant[] = candidatesToSubmit.map(c => ({ id: Date.now() + (++idCounter), name: c.student, gender: c.gender, race: c.race || '', membershipId: c.id, icNumber: c.icNumber || '', phoneNumber: c.studentPhone || '', remarks: 'Layak Anugerah Rambu' }));
       try {
           const token = await fetchServerCsrf(scriptUrl);
           await submitRegistration(scriptUrl, leaderInfo, participants, [], [], undefined, token || undefined);
@@ -398,7 +400,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       if(!confirm(`Import ${selectedImportCandidates.length} data ke ${targetBadge}?`)) return;
       setIsSubmittingImport(true);
       
-      const candidatesToSubmit = importCandidates.filter(c => selectedImportCandidates.includes(c.icNumber));
+      const candidatesToSubmit = importCandidates.filter(c => selectedImportCandidates.includes(c.icNumber || ''));
+      if (candidatesToSubmit.length === 0) { alert("Tiada peserta yang sah dipilih."); setIsSubmittingImport(false); return; }
       const ref = candidatesToSubmit[0];
       
       // Get profile data from userProfiles, not from submissions
@@ -416,8 +419,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           badgeType: targetBadge 
       };
       
+      let importIdCounter = 0;
       const mappedCandidates = candidatesToSubmit.map(c => ({ 
-          id: Date.now() + Math.random(), 
+          id: Date.now() + (++importIdCounter), 
           name: c.student, 
           gender: c.gender, 
           race: c.race || '', 
@@ -452,7 +456,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const handleChangePassword = async () => {
       if(!oldPassword || !newPassword || !confirmPassword) { alert("Sila isi semua ruang."); return; }
       if(newPassword !== confirmPassword) { alert("Pengesahan kata laluan tidak sama."); return; }
-      if(newPassword.length < 6) { alert("Kata laluan mesti sekurang-kurangnya 6 aksara."); return; }
+      const passValidation = validatePassword(newPassword);
+      if (!passValidation.valid) { alert(passValidation.errors.join('\n')); return; }
 
       setIsChangingPassword(true);
       try {

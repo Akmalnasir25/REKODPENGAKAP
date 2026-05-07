@@ -37,7 +37,12 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState(profile);
 
-  const handleChange = (field: keyof UserProfile, value: any) => {
+  // Re-sync formData when profile prop changes
+  React.useEffect(() => {
+    setFormData(profile);
+  }, [profile]);
+
+  const handleChange = (field: keyof UserProfile, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -110,9 +115,10 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 <input
                   type="text"
                   value={formData.email}
-                  onChange={(e) => handleChange('email', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-100 cursor-not-allowed"
+                  disabled
                 />
+                <p className="text-xs text-gray-500 mt-1">Tidak boleh diubah</p>
               </div>
 
               {/* Phone */}

@@ -39,8 +39,9 @@ export const UserForm: React.FC<UserFormProps> = ({
   // Registration Data
   const [activeTab, setActiveTab] = useState<'participants' | 'assistants' | 'examiners'>('participants');
   
+  let participantIdCounter = 0;
   const createEmptyParticipant = (): Participant => ({ 
-      id: Date.now(), 
+      id: Date.now() + (++participantIdCounter), 
       name: '', 
       gender: 'Lelaki', 
       race: 'Melayu',
@@ -79,9 +80,11 @@ export const UserForm: React.FC<UserFormProps> = ({
   const lockedBadges = currentSchoolSettings?.lockedBadges || [];
   const currentYear = new Date().getFullYear();
 
-  // EFFECT 1: Load cached leader info on mount
+  // EFFECT 1: Load cached leader info on mount (scoped by school code)
   useEffect(() => {
-      const cached = localStorage.getItem(LOCAL_STORAGE_KEYS.LEADER_CACHE);
+      if (!userSession?.schoolCode) return;
+      const cacheKey = `${LOCAL_STORAGE_KEYS.LEADER_CACHE}_${userSession.schoolCode}`;
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
           try {
               const parsed = JSON.parse(cached);
@@ -97,10 +100,12 @@ export const UserForm: React.FC<UserFormProps> = ({
               console.error("Failed to parse cached leader info");
           }
       }
-  }, []);
+  }, [userSession?.schoolCode]);
 
-  // EFFECT 2: Auto-save leader info to cache when it changes
+  // EFFECT 2: Auto-save leader info to cache when it changes (scoped by school code)
   useEffect(() => {
+      if (!userSession?.schoolCode) return;
+      const cacheKey = `${LOCAL_STORAGE_KEYS.LEADER_CACHE}_${userSession.schoolCode}`;
       const cacheData = {
           principalName: leaderInfo.principalName,
           principalPhone: leaderInfo.principalPhone,
@@ -108,8 +113,8 @@ export const UserForm: React.FC<UserFormProps> = ({
           race: leaderInfo.race,
           phone: leaderInfo.phone
       };
-      localStorage.setItem(LOCAL_STORAGE_KEYS.LEADER_CACHE, JSON.stringify(cacheData));
-  }, [leaderInfo.principalName, leaderInfo.principalPhone, leaderInfo.leaderName, leaderInfo.race, leaderInfo.phone]);
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+  }, [leaderInfo.principalName, leaderInfo.principalPhone, leaderInfo.leaderName, leaderInfo.race, leaderInfo.phone, userSession?.schoolCode]);
 
   // EFFECT 3: Sync User Session
   useEffect(() => {
@@ -122,11 +127,18 @@ export const UserForm: React.FC<UserFormProps> = ({
       }
   }, [userSession]);
 
-  // EFFECT 4: Handle Tab Access
+  // EFFECT 4: Handle Tab Access (no loop - find first allowed tab)
   useEffect(() => {
-      if (activeTab === 'participants' && !allowStudents) setActiveTab('assistants');
-      if (activeTab === 'assistants' && !allowAssistants) setActiveTab('examiners');
-      if (activeTab === 'examiners' && !allowExaminers) setActiveTab('participants'); // Fallback loop
+      const tabPermissions: Record<string, boolean> = {
+          participants: allowStudents,
+          assistants: allowAssistants,
+          examiners: allowExaminers
+      };
+      if (!tabPermissions[activeTab]) {
+          const firstAllowed = Object.entries(tabPermissions).find(([_, allowed]) => allowed);
+          if (firstAllowed) setActiveTab(firstAllowed[0] as any);
+          // If none allowed, the "all permissions revoked" screen will show
+      }
   }, [allowStudents, allowAssistants, allowExaminers]);
 
 

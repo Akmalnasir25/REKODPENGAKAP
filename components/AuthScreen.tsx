@@ -402,6 +402,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     </>
                 )}
 
+                {/* REGISTER FORM - Negeri/Daerah/School selection */}
                 {authMode === 'register' && (
                     <>
                         <div>
@@ -504,6 +505,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     </div>
                 )}
 
+                {/* SHARED FIELDS - Only show for non-developer modes */}
+                {authMode !== 'developer' && (
+                <>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
                         {loginType === 'developer' ? 'Nama Pengguna Developer' : 
@@ -631,6 +635,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                             </button>
                         </div>
                     </div>
+                )}
+                </>
                 )}
 
                 <button 

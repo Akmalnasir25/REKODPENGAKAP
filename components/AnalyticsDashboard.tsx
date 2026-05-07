@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { BarChart3, Users, Award, TrendingUp, School } from 'lucide-react';
+import { SubmissionData, Badge } from '../types';
 
 interface AnalyticsDashboardProps {
-  allData: any[];
-  badges: any[];
+  allData: SubmissionData[];
+  badges: Badge[];
 }
 
 export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
@@ -11,7 +12,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   badges
 }) => {
   const stats = useMemo(() => {
-    const pesertaOnly = allData.filter(d => d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU');
+    const pesertaOnly = allData.filter(d => !d.role || d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU');
     
     // Total participants
     const totalPeserta = pesertaOnly.length;
@@ -32,8 +33,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       }
     });
 
-    // Badge recipients
-    const totalBadgeRecipients = pesertaOnly.filter(d => d.badge).length;
+    // Unique badge recipients (by IC number)
+    const uniqueICs = new Set(pesertaOnly.filter(d => d.icNumber).map(d => d.icNumber));
+    const totalBadgeRecipients = uniqueICs.size;
     const badgePercentage = totalPeserta > 0 ? Math.round((totalBadgeRecipients / totalPeserta) * 100) : 0;
 
     // Top schools

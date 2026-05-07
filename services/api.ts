@@ -19,14 +19,39 @@ const readStoredAuthToken = (): string | null => {
     return null;
 };
 
-const fetch: typeof globalThis.fetch = (input, init) => {
+// Actions that do NOT need CSRF (login actions get their own token flow)
+const CSRF_EXEMPT_ACTIONS = ['login_admin', 'login_admin_regional', 'login_developer'];
+
+const fetch: typeof globalThis.fetch = async (input, init) => {
     const authToken = readStoredAuthToken();
-    if (authToken && init && typeof init.body === 'string') {
+    if (init && typeof init.body === 'string') {
         try {
             const payload = JSON.parse(init.body);
+            let extras: Record<string, any> = {};
+
+            // Inject authToken
+            if (authToken) extras.authToken = authToken;
+
+            // Auto-fetch CSRF token for actions that need it (POST with action field)
+            if (payload.action && !payload.csrfToken && !CSRF_EXEMPT_ACTIONS.includes(payload.action)) {
+                const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+                try {
+                    const csrfResp = await globalThis.fetch(
+                        `${url}${url.includes('?') ? '&' : '?'}action=get_csrf&t=${Date.now()}`,
+                        { method: 'GET', credentials: 'omit', redirect: 'follow', mode: 'cors' }
+                    );
+                    const csrfJson = await csrfResp.json();
+                    if (csrfJson?.status === 'success' && csrfJson.csrfToken) {
+                        extras.csrfToken = csrfJson.csrfToken;
+                    }
+                } catch {
+                    // CSRF fetch failed — server will reject protected actions
+                }
+            }
+
             init = {
                 ...init,
-                body: JSON.stringify({ ...payload, authToken })
+                body: JSON.stringify({ ...payload, ...extras })
             };
         } catch {
             // Keep original body if it is not JSON.

@@ -186,8 +186,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         alert("Kata laluan dan pengesahan kata laluan tidak sama.");
         return;
     }
-    if (newAdminPassword.length < 3) {
-        alert("Kata laluan terlalu pendek.");
+    if (newAdminPassword.length < 6) {
+        alert("Kata laluan mesti sekurang-kurangnya 6 aksara.");
+        return;
+    }
+    if (!/[A-Z]/.test(newAdminPassword) || !/[a-z]/.test(newAdminPassword) || !/\d/.test(newAdminPassword)) {
+        alert("Kata laluan mesti mengandungi huruf besar, huruf kecil, dan nombor.");
         return;
     }
 

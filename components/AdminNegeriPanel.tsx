@@ -8,7 +8,7 @@ import { AdminHistory } from './AdminHistory';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword } from '../services/api';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, addAdmin } from '../services/api';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface AdminNegeriPanelProps {
@@ -40,10 +40,78 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
+  const [newDaerahCode, setNewDaerahCode] = useState('');
+  const [newDaerahName, setNewDaerahName] = useState('');
+  const [newDistrictAdminUsername, setNewDistrictAdminUsername] = useState('');
+  const [newDistrictAdminPassword, setNewDistrictAdminPassword] = useState('');
+  const [newDistrictAdminDaerah, setNewDistrictAdminDaerah] = useState('');
+  const [newDistrictAdminFullName, setNewDistrictAdminFullName] = useState('');
+  const [newDistrictAdminPhone, setNewDistrictAdminPhone] = useState('');
+  const [newDistrictAdminEmail, setNewDistrictAdminEmail] = useState('');
 
   // Filter data untuk negeri ini sahaja
   const filteredData = data.filter(d => d.negeriCode === negeriCode);
   const filteredSchools = schools.filter(s => s.negeriCode === negeriCode);
+  const filteredDaerah = daerahList.filter(d => d.negeriCode === negeriCode);
+
+  const handleAddDaerah = async () => {
+    if (!newDaerahCode.trim() || !newDaerahName.trim()) {
+      alert('Sila isi Kod Daerah dan Nama Daerah.');
+      return;
+    }
+    setSetupLoading(true);
+    try {
+      const result = await addDaerah(scriptUrl, newDaerahCode, newDaerahName, negeriCode);
+      if (result.status === 'success') {
+        alert('Daerah berjaya ditambah.');
+        setNewDaerahCode('');
+        setNewDaerahName('');
+        refreshData();
+      } else {
+        alert(result.message || 'Gagal tambah daerah.');
+      }
+    } catch (error) {
+      alert('Ralat sambungan server semasa tambah daerah.');
+    } finally {
+      setSetupLoading(false);
+    }
+  };
+
+  const handleAddDistrictAdmin = async () => {
+    if (!newDistrictAdminUsername.trim() || !newDistrictAdminPassword.trim() || !newDistrictAdminDaerah) {
+      alert('Sila isi Username, Password dan pilih Daerah.');
+      return;
+    }
+    setSetupLoading(true);
+    try {
+      const result = await addAdmin(scriptUrl, {
+        username: newDistrictAdminUsername.trim().toUpperCase(),
+        password: newDistrictAdminPassword,
+        role: 'daerah',
+        negeriCode,
+        daerahCode: newDistrictAdminDaerah,
+        fullName: newDistrictAdminFullName,
+        phone: newDistrictAdminPhone,
+        email: newDistrictAdminEmail
+      });
+      if (result.status === 'success') {
+        alert('Admin Daerah berjaya ditambah.');
+        setNewDistrictAdminUsername('');
+        setNewDistrictAdminPassword('');
+        setNewDistrictAdminDaerah('');
+        setNewDistrictAdminFullName('');
+        setNewDistrictAdminPhone('');
+        setNewDistrictAdminEmail('');
+        refreshData();
+      } else {
+        alert(result.message || 'Gagal tambah Admin Daerah.');
+      }
+    } catch (error) {
+      alert('Ralat sambungan server semasa tambah Admin Daerah.');
+    } finally {
+      setSetupLoading(false);
+    }
+  };
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,7 +288,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'daerah', label: 'Senarai Daerah', icon: MapPin, allowed: true },
     { id: 'schools', label: 'Urus Sekolah', icon: School, allowed: true },
     { id: 'admins', label: 'Urus Admin Daerah', icon: Users, allowed: true },
-    { id: 'badges', label: 'Urus Lencana', icon: Medal, allowed: true },
+    { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
   ];
 
@@ -355,6 +423,17 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                     <MapPin className="text-blue-600" />
                     Senarai Daerah di {negeriName}
                   </h2>
+                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2"><Plus size={16}/> Tambah Daerah Baru</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <input value={newDaerahCode} onChange={(e) => setNewDaerahCode(e.target.value.toUpperCase())} placeholder="Kod Daerah (cth: KU)" className="border rounded-lg px-3 py-2 text-sm" />
+                      <input value={newDaerahName} onChange={(e) => setNewDaerahName(e.target.value.toUpperCase())} placeholder="Nama Daerah" className="border rounded-lg px-3 py-2 text-sm" />
+                      <button onClick={handleAddDaerah} disabled={setupLoading} className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-bold hover:bg-blue-700 disabled:bg-gray-300 flex items-center justify-center gap-2">
+                        {setupLoading ? <LoadingSpinner size="sm" color="border-white" /> : <Plus size={16}/>} Tambah Daerah
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredDaerah.map((daerah, idx) => (
                       <div key={idx} className="border rounded-lg p-4 hover:shadow-md transition">
@@ -382,11 +461,57 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                     Cipta dan urus akaun Admin Daerah untuk daerah-daerah di bawah {negeriName}
                   </p>
                   
-                  {/* TODO: Add form to create admin daerah */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                    <p className="text-sm text-blue-800">
-                      🚧 Feature dalam pembangunan - Admin Negeri akan boleh create Admin Daerah di sini
-                    </p>
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 mb-6">
+                    <h3 className="font-bold text-purple-900 mb-4 flex items-center gap-2"><Plus size={16}/> Tambah Admin Daerah</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Daerah</label>
+                        <select value={newDistrictAdminDaerah} onChange={(e) => setNewDistrictAdminDaerah(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm bg-white">
+                          <option value="">-- Pilih Daerah --</option>
+                          {filteredDaerah.map((daerah) => <option key={daerah.code} value={daerah.code}>{daerah.name} ({daerah.code})</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
+                        <input value={newDistrictAdminUsername} onChange={(e) => setNewDistrictAdminUsername(e.target.value.toUpperCase())} placeholder="cth: ADMIN_PRK_KU" className="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                        <input type="password" value={newDistrictAdminPassword} onChange={(e) => setNewDistrictAdminPassword(e.target.value)} placeholder="Kata laluan" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Penuh</label>
+                        <input value={newDistrictAdminFullName} onChange={(e) => setNewDistrictAdminFullName(e.target.value.toUpperCase())} placeholder="Nama admin" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Telefon</label>
+                        <input value={newDistrictAdminPhone} onChange={(e) => setNewDistrictAdminPhone(e.target.value)} placeholder="No. telefon" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                        <input type="email" value={newDistrictAdminEmail} onChange={(e) => setNewDistrictAdminEmail(e.target.value)} placeholder="Email" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                    </div>
+                    <button onClick={handleAddDistrictAdmin} disabled={setupLoading || filteredDaerah.length === 0} className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:bg-gray-300 flex items-center gap-2">
+                      {setupLoading ? <LoadingSpinner size="sm" color="border-white" /> : <Plus size={16}/>} Tambah Admin Daerah
+                    </button>
+                    {filteredDaerah.length === 0 && <p className="text-xs text-amber-700 mt-2">Sila tambah daerah dahulu sebelum cipta Admin Daerah.</p>}
+                  </div>
+
+                  <div className="bg-white border rounded-lg overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b font-bold text-sm text-gray-700">Daerah tersedia untuk negeri ini</div>
+                    <div className="divide-y">
+                      {filteredDaerah.map((daerah) => (
+                        <div key={daerah.code} className="p-4 flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-gray-800">{daerah.name}</div>
+                            <div className="text-xs text-gray-500">Kod: {daerah.code}</div>
+                          </div>
+                          <div className="text-xs text-gray-500">{filteredSchools.filter(s => s.daerahCode === daerah.code).length} sekolah</div>
+                        </div>
+                      ))}
+                      {filteredDaerah.length === 0 && <div className="p-4 text-sm text-gray-500">Tiada daerah didaftarkan.</div>}
+                    </div>
                   </div>
                 </div>
               </div>

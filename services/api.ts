@@ -147,7 +147,7 @@ export const loginAdmin = async (url: string, username: string, password: string
 };
 
 // NEW: Regional Admin Login (Negeri/Daerah)
-export const loginAdminRegional = async (url: string, credentials: { username: string, password: string, role: 'negeri' | 'daerah' }, csrfToken?: string) => {
+export const loginAdminRegional = async (url: string, credentials: { username: string, password: string, role: 'negeri' | 'daerah', bypassCredentials?: boolean }, csrfToken?: string) => {
     const response = await fetch(url, {
         method: 'POST',
         credentials: 'omit',
@@ -159,6 +159,7 @@ export const loginAdminRegional = async (url: string, credentials: { username: s
             username: credentials.username.trim().toUpperCase(),
             password: credentials.password.trim(),
             role: credentials.role,
+            bypassCredentials: credentials.bypassCredentials === true,
             csrfToken: csrfToken
         })
     });

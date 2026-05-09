@@ -1,6 +1,6 @@
 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, UserPlus, LogIn, AlertCircle, Eye, EyeOff, Key, RefreshCw, HelpCircle, ArrowLeft, User, School as SchoolIcon, Code, Shield } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { loginUser, registerUser, resetPassword, validatePassword } from '../services/api';
@@ -53,6 +53,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   const [secretKey, setSecretKey] = useState('');
   const [loginType, setLoginType] = useState<'user' | 'admin_daerah' | 'admin_negeri' | 'developer'>('user');
+  const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const loginPassword = isPreviewMode && authMode === 'login' ? 'PREVIEW_BYPASS' : password;
+
+  useEffect(() => {
+      if (isPreviewMode && authMode === 'login') {
+          setPassword('');
+      }
+  }, [isPreviewMode, authMode, loginType]);
 
   const resetForm = () => {
       setSchoolName('');
@@ -123,12 +131,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setLoading(false);
                     return;
                 }
-                if (!schoolCode || !password) { 
+                if (!schoolCode || (!isPreviewMode && !password)) { 
                     setError('Sila isikan Nama Pengguna dan Kata Laluan.'); 
                     setLoading(false); 
                     return; 
                 }
-                const res = await onDeveloperLogin(schoolCode, password);
+                const res = await onDeveloperLogin(schoolCode, loginPassword);
                 if (!res.success) {
                     setError(res.message || 'Log masuk developer gagal.');
                     setLoading(false);
@@ -141,13 +149,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setLoading(false);
                     return;
                 }
-                if (!schoolCode || !password) {
+                if (!schoolCode || (!isPreviewMode && !password)) {
                     setError('Sila isikan Nama Pengguna dan Kata Laluan.');
                     setLoading(false);
                     return;
                 }
                 const role = loginType === 'admin_negeri' ? 'negeri' : 'daerah';
-                const res = await onAdminRegionalLogin(schoolCode, password, role);
+                const res = await onAdminRegionalLogin(schoolCode, loginPassword, role);
                 if (!res.success) {
                     recordLoginAttempt(false);
                     setError(res.message || 'Log masuk admin gagal.');
@@ -159,7 +167,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             }
 
             // USER LOGIN logic
-            if (!schoolCode || !password) { 
+            if (!schoolCode || (!isPreviewMode && !password)) { 
                 setError('Sila isikan Kod Sekolah dan Kata Laluan.'); 
                 setLoading(false); 
                 return; 
@@ -175,7 +183,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             // obtain server-issued CSRF token
             const serverToken = await fetchServerCsrf(scriptUrl);
             if (!serverToken) { setError('Gagal mendapatkan token CSRF daripada server. Sila cuba lagi.'); setLoading(false); return; }
-            const result = await loginUser(scriptUrl, { schoolCode, password, csrfToken: serverToken });
+            const result = await loginUser(scriptUrl, { schoolCode, password: loginPassword, csrfToken: serverToken });
             if (result.status === 'success' && result.user) {
                 recordLoginAttempt(true);
                 onLoginSuccess(result.user);
@@ -565,10 +573,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         <input 
                             type={showPassword ? "text" : "password"}
                             className="w-full pl-10 pr-10 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
-                            placeholder="••••••••"
+                            placeholder={isPreviewMode && authMode === 'login' ? 'Disabled untuk preview' : '••••••••'}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            required
+                            required={!isPreviewMode || authMode !== 'login'}
+                            disabled={isPreviewMode && authMode === 'login'}
                         />
                         <button 
                             type="button"

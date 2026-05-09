@@ -218,7 +218,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'dashboard', label: 'Rumusan Data', icon: LayoutDashboard, allowed: true },
     { id: 'analytics', label: 'Analitik', icon: BarChart3, allowed: true },
     { id: 'schools', label: 'Urus Sekolah', icon: School, allowed: true },
-    { id: 'badges', label: 'Urus Lencana', icon: Medal, allowed: true },
+    { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
   ];
 

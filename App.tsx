@@ -47,6 +47,7 @@ const getAccessState = async () => {
 
 const ADMIN_SESSION_KEY = 'ADMIN_SESSION_DATA';
 const DEVELOPER_SESSION_KEY = 'DEVELOPER_SESSION_DATA';
+const isLocalPreview = () => ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 export default function App() {
   return (
@@ -158,9 +159,17 @@ function AppContent() {
         let activeUrl = DEFAULT_SERVER_URL;
         
         // 1. Check URL Config
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlScriptParam = urlParams.get('scriptUrl');
         const localUrl = localStorage.getItem(LOCAL_STORAGE_KEYS.SCRIPT_URL);
-        const usingLocal = localUrl && localUrl.trim() !== "";
-        if (usingLocal) activeUrl = localUrl!;
+        const usingUrlParam = Boolean(urlScriptParam && urlScriptParam.trim() !== "");
+        const usingLocal = Boolean(localUrl && localUrl.trim() !== "");
+        if (usingUrlParam) {
+            activeUrl = urlScriptParam!.trim();
+            localStorage.setItem(LOCAL_STORAGE_KEYS.SCRIPT_URL, activeUrl);
+        } else if (usingLocal) {
+            activeUrl = localUrl!;
+        }
         setScriptUrl(activeUrl);
         
         // 2. Check User Session
@@ -278,12 +287,48 @@ function AppContent() {
   const handleAdminRegionalLogin = async (username: string, password: string, role: 'negeri' | 'daerah'): Promise<{success: boolean, message?: string, adminData?: any}> => {
     try {
         const currentAccessState = await getAccessState();
+        const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
         
         if (!currentAccessState.adminAccess) {
             return { success: false, message: 'Akses pentadbir sedang ditutup. Sila hubungi developer.' };
         }
 
         const csrfToken = generateCSRFToken();
+
+        if (isPreviewMode) {
+            const normalizedUsername = username.trim().toUpperCase() || (role === 'negeri' ? 'PREVIEW_ADMIN_NEGERI' : 'PREVIEW_ADMIN_DAERAH');
+            const previewNegeriCode = negeriList[0]?.code || 'PRK';
+            const previewDaerahCode = role === 'daerah' ? (daerahList.find(d => d.negeriCode === previewNegeriCode)?.code || daerahList[0]?.code || 'KU') : undefined;
+            const previewAdmin: AdminRegional = {
+                username: normalizedUsername,
+                role,
+                fullName: role === 'negeri' ? 'Preview Admin Negeri' : 'Preview Admin Daerah',
+                negeriCode: previewNegeriCode,
+                daerahCode: previewDaerahCode,
+                authToken: 'PREVIEW_BYPASS_TOKEN',
+                expiresAt: Date.now() + (24 * 60 * 60 * 1000),
+                scope: {
+                    canManageNegeri: role === 'negeri',
+                    canManageDaerah: true,
+                    canManageSchools: true,
+                    canManageBadges: true,
+                    canViewAllNegeri: role === 'negeri',
+                    canViewAllDaerah: true,
+                    negeriAccess: [previewNegeriCode],
+                    daerahAccess: role === 'negeri' ? 'ALL_IN_NEGERI' : [previewDaerahCode || 'KU']
+                }
+            };
+
+            setAdminSession(previewAdmin);
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(previewAdmin));
+            setView('admin');
+            setUserSession(null);
+            setAdminRole(null);
+            localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+            await handleFetchData(scriptUrl, role, previewNegeriCode, previewDaerahCode);
+            return { success: true, adminData: previewAdmin };
+        }
+
         const result = await loginAdminRegional(scriptUrl, { username, password, role }, csrfToken);
         
         if (result.status === 'success' && result.admin) {
@@ -310,6 +355,25 @@ function AppContent() {
 
   const handleDeveloperLogin = async (username: string, password: string): Promise<{success: boolean, message?: string}> => {
     try {
+      const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+      if (isPreviewMode) {
+        localStorage.setItem(DEVELOPER_SESSION_KEY, JSON.stringify({
+          role: 'developer',
+          username: username.trim().toUpperCase() || 'DEVELOPER',
+          authToken: 'PREVIEW_DEVELOPER_TOKEN',
+          expiresAt: Date.now() + (24 * 60 * 60 * 1000)
+        }));
+        setIsDeveloperMode(true);
+        setView('developer');
+        setUserSession(null);
+        setAdminRole(null);
+        setAdminSession(null);
+        localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        return { success: true };
+      }
+
       const result = await loginDeveloper(scriptUrl, username, password);
       if (result.status === 'success' && result.authToken) {
         localStorage.setItem(DEVELOPER_SESSION_KEY, JSON.stringify({

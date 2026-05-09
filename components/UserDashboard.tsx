@@ -44,6 +44,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Modals
   const [showRambuModal, setShowRambuModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   
@@ -54,8 +55,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Import State
   const [importSourceBadge, setImportSourceBadge] = useState('');
   const [importSourceYear, setImportSourceYear] = useState(selectedYear - 1); // Default to previous year
-  const [importCategory, setImportCategory] = useState<'PESERTA' | 'PENOLONG' | 'PENGUJI'>('PESERTA');
   const [selectedImportCandidates, setSelectedImportCandidates] = useState<string[]>([]);
+  const [importNewIds, setImportNewIds] = useState<Record<string, string>>({});
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
 
   // Password State
@@ -220,16 +221,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       return rambuBadge ? rambuBadge.isOpen : false;
   }, [badges]);
 
+  const progressionMap: Record<string, string> = {
+      'Keris Perak': 'Keris Gangsa',
+      'Keris Emas': 'Keris Perak',
+      'Maju': 'Usaha',
+      'Jaya': 'Maju'
+  };
+
+  const getImportTargetBadge = (sourceBadge: string) => {
+      const match = Object.entries(progressionMap).find(([, source]) => sourceBadge.toLowerCase().includes(source.toLowerCase()));
+      return match ? match[0] : '';
+  };
+
   // --- IMPORT / MIGRATION LOGIC (USER SIDE) ---
   const importCandidates = useMemo(() => {
       if (!importSourceBadge) return [];
       // Use state importSourceYear instead of calculating from selectedYear
       const sourceYear = importSourceYear;
       
-      let targetBadge = '';
-      if (importSourceBadge.includes('Keris Gangsa')) targetBadge = 'Keris Perak';
-      else if (importSourceBadge.includes('Keris Perak')) targetBadge = 'Keris Emas';
-      else return [];
+      const targetBadge = getImportTargetBadge(importSourceBadge);
+      if (!targetBadge) return [];
 
       const candidates = allData.filter(d => 
           ((d.schoolCode && d.schoolCode === user.schoolCode) || d.school === user.schoolName) &&
@@ -239,16 +250,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       const filteredByRole = candidates.filter(d => {
           const role = (d.role || 'PESERTA').toUpperCase();
-          if (importCategory === 'PESERTA') return role === 'PESERTA' || role === 'PENERIMA RAMBU';
-          else if (importCategory === 'PENOLONG') return role.includes('PENOLONG') || role === 'PEMIMPIN';
-          else if (importCategory === 'PENGUJI') return role === 'PENGUJI';
-          return false;
+          return role === 'PESERTA' || role === 'PENERIMA RAMBU';
       });
 
       // SAFE STRING COMPARISON for deduplication
       const existingInTarget = myData.filter(d => d.badge === targetBadge).map(d => String(d.icNumber));
       return filteredByRole.filter(c => !existingInTarget.includes(String(c.icNumber)));
-  }, [allData, user, selectedYear, importSourceBadge, myData, importCategory, importSourceYear]);
+  }, [allData, user, selectedYear, importSourceBadge, myData, importSourceYear]);
 
   // --- ARCHIVE DATA (PESERTA SAHAJA) ---
   const myArchiveData = useMemo(() => {
@@ -391,9 +399,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const handleSubmitImport = async () => {
       if(selectedImportCandidates.length === 0) { alert("Sila pilih nama."); return; }
       
-      let targetBadge = '';
-      if (importSourceBadge.includes('Keris Gangsa')) targetBadge = 'Keris Perak';
-      else if (importSourceBadge.includes('Keris Perak')) targetBadge = 'Keris Emas';
+      const targetBadge = getImportTargetBadge(importSourceBadge);
       
       const badgeConfig = badges.find(b => b.name === targetBadge);
       if (badgeConfig && !badgeConfig.isOpen) { alert(`Pendaftaran '${targetBadge}' ditutup.`); return; }
@@ -403,6 +409,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       const candidatesToSubmit = importCandidates.filter(c => selectedImportCandidates.includes(c.icNumber || ''));
       if (candidatesToSubmit.length === 0) { alert("Tiada peserta yang sah dipilih."); setIsSubmittingImport(false); return; }
+
+      const missingIc = candidatesToSubmit.find(c => !c.icNumber);
+      if (missingIc) { alert(`Peserta ${missingIc.student} tiada No. KP. Import naik disekat.`); setIsSubmittingImport(false); return; }
+
+      const missingNewId = candidatesToSubmit.find(c => !String(importNewIds[String(c.icNumber)] || '').trim());
+      if (missingNewId) { alert(`Sila isi ID keahlian baru untuk ${missingNewId.student}.`); setIsSubmittingImport(false); return; }
+
+      const newIds = candidatesToSubmit.map(c => String(importNewIds[String(c.icNumber)] || '').trim().toUpperCase());
+      const duplicateNewId = newIds.find((id, idx) => newIds.indexOf(id) !== idx);
+      if (duplicateNewId) { alert(`ID keahlian baru duplicate dalam import: ${duplicateNewId}`); setIsSubmittingImport(false); return; }
+
+      const existingId = newIds.find(id => allData.some(d => String(d.id || '').trim().toUpperCase() === id));
+      if (existingId) { alert(`ID keahlian baru sudah wujud dalam sistem: ${existingId}`); setIsSubmittingImport(false); return; }
+
       const ref = candidatesToSubmit[0];
       
       // Get profile data from userProfiles, not from submissions
@@ -426,16 +446,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           name: c.student, 
           gender: c.gender, 
           race: c.race || '', 
-          membershipId: '', // Clear Membership ID so user enters the new one
+          membershipId: String(importNewIds[String(c.icNumber)] || '').trim().toUpperCase(),
           icNumber: c.icNumber || '', 
           phoneNumber: c.studentPhone || '', 
-          remarks: `[IMPORT DARI ${importSourceYear}] ${importCategory}` 
+          remarks: `[IMPORT NAIK DARI ${importSourceBadge} ${importSourceYear}] ID baru diisi semasa import` 
       }));
       
-      let participants: Participant[] = [], assistants: Participant[] = [], examiners: Participant[] = [];
-      if (importCategory === 'PESERTA') participants = mappedCandidates; 
-      else if (importCategory === 'PENOLONG') assistants = mappedCandidates; 
-      else if (importCategory === 'PENGUJI') examiners = mappedCandidates;
+      const participants: Participant[] = mappedCandidates;
+      const assistants: Participant[] = [];
+      const examiners: Participant[] = [];
       
       // Force date to be Jan 1st of the SELECTED YEAR (Target Year)
       const targetDate = `${selectedYear}-01-01`;
@@ -443,9 +462,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       try { 
           const token = await fetchServerCsrf(scriptUrl);
           await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, targetDate, token || undefined); 
-          alert("Berjaya import! Sila kemaskini No. Keahlian."); 
+          alert("Berjaya import naik program dengan ID keahlian baru."); 
           setShowImportModal(false); 
-          setSelectedImportCandidates([]); 
+          setSelectedImportCandidates([]);
+          setImportNewIds({});
           onRefresh(); 
       } catch (e) { 
           alert("Gagal."); 
@@ -568,12 +588,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
               <SidebarItem 
                 icon={ArrowDownToLine} 
-                label="Import Data" 
+                label="Import Naik Program" 
                 onClick={() => { 
                     setShowImportModal(true); 
                     setIsMobileSidebarOpen(false); 
-                    setImportSourceYear(selectedYear - 1); // Reset to default previous year when opening
-                    setImportCategory('PESERTA'); // Always set to PESERTA only
+                    setImportSourceYear(selectedYear - 1);
+                    setSelectedImportCandidates([]);
+                    setImportNewIds({});
+                }} 
+              />
+
+              <SidebarItem 
+                icon={FileText} 
+                label="Import Pukal Excel" 
+                onClick={() => { 
+                    setShowBulkImportModal(true); 
+                    setIsMobileSidebarOpen(false); 
                 }} 
               />
 
@@ -1119,6 +1149,73 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       )}
 
       {showImportModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-[fadeIn_0.3s_ease-out] backdrop-blur-sm print:hidden">
+            <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl relative border-2 border-indigo-500 max-h-[90vh] overflow-y-auto">
+                <button onClick={() => setShowImportModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
+                <h3 className="font-bold text-lg mb-4 flex gap-2 items-center text-indigo-700 border-b pb-2"><ArrowDownToLine className="text-indigo-600" /> Import Naik Program ({selectedYear})</h3>
+                
+                <div className="bg-indigo-50 p-4 rounded-lg mb-4 text-sm border border-indigo-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Tahun Asal</div>
+                        <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importSourceYear} onChange={(e) => { setImportSourceYear(parseInt(e.target.value)); setSelectedImportCandidates([]); setImportNewIds({}); }}>
+                            {availableYears.filter(y => y < selectedYear).map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Lencana Asal</div>
+                        <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs" value={importSourceBadge} onChange={(e) => { setImportSourceBadge(e.target.value); setSelectedImportCandidates([]); setImportNewIds({}); }}>
+                            <option value="">-- Pilih --</option>
+                            <option value="Keris Gangsa">Keris Gangsa</option>
+                            <option value="Keris Perak">Keris Perak</option>
+                            <option value="Usaha">Usaha</option>
+                            <option value="Maju">Maju</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Lencana Target</div>
+                        <div className="bg-white border rounded px-3 py-2 text-gray-700 text-xs uppercase font-bold">{getImportTargetBadge(importSourceBadge) || '-'}</div>
+                    </div>
+                </div>
+
+                {importSourceBadge && (
+                    <div className="max-h-96 overflow-y-auto border rounded-lg mb-4">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-100 uppercase text-xs text-gray-600 sticky top-0">
+                                <tr>
+                                    <th className="px-4 py-2 text-center w-10"><input type="checkbox" onChange={(e) => { if (e.target.checked) setSelectedImportCandidates(importCandidates.map(c => String(c.icNumber))); else setSelectedImportCandidates([]); }} checked={importCandidates.length > 0 && selectedImportCandidates.length === importCandidates.length}/></th>
+                                    <th className="px-4 py-2">Nama</th>
+                                    <th className="px-4 py-2 text-center">No. KP</th>
+                                    <th className="px-4 py-2 text-center">ID Lama</th>
+                                    <th className="px-4 py-2 text-center min-w-[180px]">ID Keahlian Baru</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {importCandidates.map((c, i) => {
+                                    const icKey = String(c.icNumber || '');
+                                    const selected = selectedImportCandidates.includes(icKey);
+                                    return (
+                                    <tr key={i} className="hover:bg-indigo-50/50">
+                                        <td className="px-4 py-2 text-center"><input type="checkbox" checked={selected} onChange={(e) => { if(e.target.checked) setSelectedImportCandidates(prev => [...prev, icKey]); else setSelectedImportCandidates(prev => prev.filter(ic => ic !== icKey)); }} className="w-4 h-4 text-indigo-600 rounded"/></td>
+                                        <td className="px-4 py-2 font-bold text-gray-800 uppercase">{c.student}</td>
+                                        <td className="px-4 py-2 text-center font-mono">{c.icNumber || <span className="text-red-600 font-bold">TIADA KP</span>}</td>
+                                        <td className="px-4 py-2 text-center font-mono text-gray-500">{c.id || '-'}</td>
+                                        <td className="px-4 py-2"><input disabled={!selected} value={importNewIds[icKey] || ''} onChange={(e) => setImportNewIds(prev => ({ ...prev, [icKey]: e.target.value.toUpperCase() }))} placeholder="ID baru wajib" className="w-full p-2 border rounded text-xs font-mono disabled:bg-gray-100" /></td>
+                                    </tr>
+                                )})}
+                                {importCandidates.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-400 italic">Tiada calon.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                    <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-sm">Batal</button>
+                    <button onClick={handleSubmitImport} disabled={isSubmittingImport || selectedImportCandidates.length === 0} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 shadow flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed">{isSubmittingImport ? <LoadingSpinner size="sm" color="border-white"/> : <CheckCircle size={16}/>} Import Naik ({selectedImportCandidates.length})</button>
+                </div>
+            </div>
+          </div>
+      )}
+
+      {showBulkImportModal && (
           <BulkImportModal
             scriptUrl={scriptUrl}
             schoolName={user.schoolName}
@@ -1126,7 +1223,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             badges={badges}
             currentYear={selectedYear}
             existingData={allData}
-            onClose={() => setShowImportModal(false)}
+            onClose={() => setShowBulkImportModal(false)}
             onSuccess={onRefresh}
           />
       )}

@@ -251,6 +251,41 @@ export const submitRegistration = async (
   return await handleResponse(response);
 };
 
+export const bulkSubmitRegistration = async (
+    url: string,
+    payload: {
+        schoolName: string;
+        schoolCode: string;
+        badgeType: string;
+        year: number;
+        role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
+        records: Array<{
+            student: string;
+            icNumber: string;
+            membershipId: string;
+            gender: string;
+            race: string;
+            phoneNumber?: string;
+            remarks?: string;
+        }>;
+    },
+    csrfToken?: string
+) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'omit',
+    redirect: 'follow',
+    mode: 'cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'bulk_submit_registration',
+      ...payload,
+      csrfToken
+    })
+  });
+  return await handleResponse(response);
+};
+
 export const updateParticipantId = async (url: string, rowIndex: number, newId: string, schoolCode: string, csrfToken?: string) => {
     const response = await fetch(url, {
       method: 'POST',

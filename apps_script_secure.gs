@@ -342,7 +342,7 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     // CSRF validation for sensitive actions
     var csrfProtectedActions = [
       'login_user','register_user','reset_password','change_password','update_user_profile',
-      'submit_form','update_data','delete_data',
+      'submit_form','bulk_submit_registration','update_data','delete_data',
       'change_admin_password','change_admin_regional_password','migrate_year',
       'add_school','delete_school','update_school_permission','toggle_school_edit_batch',
       'lock_school_badge','unlock_school_badge','approve_school_badge',
@@ -356,7 +356,7 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     }
 
     var publicActions = ['login_user','register_user','reset_password','login_admin','login_admin_regional','login_developer'];
-    var userActions = ['change_password','update_user_profile','submit_form','update_data','delete_data'];
+    var userActions = ['change_password','update_user_profile','submit_form','bulk_submit_registration','update_data','delete_data'];
     var adminActions = [
       'change_admin_password','change_admin_regional_password','migrate_year',
       'add_school','delete_school','update_school_permission','toggle_school_edit_batch',
@@ -447,6 +447,7 @@ function handleRequest(e, requestingRole, requestingNegeriCode, requestingDaerah
     if (action === 'update_user_profile') return updateUserProfile(params);
 
     if (action === 'submit_form') return submitForm(params);
+    if (action === 'bulk_submit_registration') return bulkSubmitRegistration(params, sessionData);
     if (action === 'update_data') return updateParticipantId(params);
     if (action === 'delete_data') return deleteData(params);
     if (action === 'migrate_year') return migrateYear(params);
@@ -920,6 +921,124 @@ function submitForm(p) {
   }
   
   return createJSONOutput({ status: 'success', count: rowsToAdd.length });
+}
+
+function bulkSubmitRegistration(p, sessionData) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_DATA);
+  if (!sheet) { setupDatabase(); sheet = ss.getSheetByName(SHEET_DATA); }
+
+  if (!p.schoolCode || !p.schoolName || !p.badgeType || !p.year || !p.role) {
+    return createJSONOutput({ status: 'error', message: 'Maklumat import tidak lengkap.' });
+  }
+
+  if (!p.records || !Array.isArray(p.records) || p.records.length === 0) {
+    return createJSONOutput({ status: 'error', message: 'Tiada rekod untuk diimport.' });
+  }
+
+  if (p.records.length > 300) {
+    return createJSONOutput({ status: 'error', message: 'Import maksimum 300 rekod setiap kali.' });
+  }
+
+  if (sessionData && sessionData.role === 'user' && String(sessionData.schoolCode || '').toUpperCase() !== String(p.schoolCode || '').toUpperCase()) {
+    return createJSONOutput({ status: 'error', message: 'Anda hanya boleh import data sekolah sendiri.' });
+  }
+
+  var validRoles = ['PESERTA','PEMIMPIN','PENOLONG PEMIMPIN','PENGUJI','PENERIMA RAMBU'];
+  var role = String(p.role).toUpperCase();
+  if (validRoles.indexOf(role) === -1) {
+    return createJSONOutput({ status: 'error', message: 'Jenis rekod tidak sah.' });
+  }
+
+  var schoolsSheet = ss.getSheetByName(SHEET_SCHOOLS);
+  var negeriCode = '';
+  var daerahCode = '';
+  var schoolRow = null;
+  if (schoolsSheet) {
+    var schoolsData = schoolsSheet.getDataRange().getValues();
+    for (var i = 1; i < schoolsData.length; i++) {
+      if (String(schoolsData[i][1]).toUpperCase() === String(p.schoolCode).toUpperCase()) {
+        negeriCode = schoolsData[i][2] || '';
+        daerahCode = schoolsData[i][3] || '';
+        schoolRow = schoolsData[i];
+        break;
+      }
+    }
+  }
+
+  if (!schoolRow) return createJSONOutput({ status: 'error', message: 'Kod sekolah tidak dijumpai.' });
+
+  var lockedBadges = schoolRow[7] ? schoolRow[7].toString().split(',').map(function(s){return s.trim();}).filter(String) : [];
+  var lockKey = p.badgeType + '_' + p.year;
+  if (lockedBadges.indexOf(lockKey) !== -1) {
+    return createJSONOutput({ status: 'error', message: 'Program/lencana ini telah dikunci untuk tahun ' + p.year + '.' });
+  }
+
+  if ((role === 'PESERTA' || role === 'PENERIMA RAMBU') && schoolRow[4] === false) return createJSONOutput({ status: 'error', message: 'Sekolah tidak dibenarkan menghantar peserta.' });
+  if ((role === 'PEMIMPIN' || role === 'PENOLONG PEMIMPIN') && schoolRow[5] === false) return createJSONOutput({ status: 'error', message: 'Sekolah tidak dibenarkan menghantar pemimpin/penolong.' });
+  if (role === 'PENGUJI' && schoolRow[6] === false) return createJSONOutput({ status: 'error', message: 'Sekolah tidak dibenarkan menghantar penguji.' });
+
+  var existing = sheet.getDataRange().getValues();
+  var existingKeys = {};
+  for (var e = 1; e < existing.length; e++) {
+    var existingYear = new Date(existing[e][0]).getFullYear();
+    var existingIc = String(existing[e][10] || '').trim();
+    var existingBadge = String(existing[e][5] || '').trim();
+    var existingSchool = String(existing[e][2] || '').trim().toUpperCase();
+    if (existingIc) existingKeys[existingSchool + '_' + existingBadge + '_' + existingYear + '_' + existingIc] = true;
+  }
+
+  var seen = {};
+  var timestamp = new Date(Number(p.year), 0, 1);
+  var batchId = 'BULK-' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMddHHmmss');
+  var rowsToAdd = [];
+
+  for (var r = 0; r < p.records.length; r++) {
+    var rec = p.records[r] || {};
+    var name = sanitizeForSheet(String(rec.student || '').trim().toUpperCase());
+    var ic = sanitizeForSheet(String(rec.icNumber || '').trim());
+    var memberId = sanitizeForSheet(String(rec.membershipId || '').trim().toUpperCase());
+    var gender = sanitizeForSheet(String(rec.gender || '').trim());
+    var race = sanitizeForSheet(String(rec.race || '').trim().toUpperCase());
+
+    if (!name || !ic || !memberId || !gender || !race) {
+      return createJSONOutput({ status: 'error', message: 'Rekod row import #' + (r + 1) + ' tidak lengkap. Nama, KP, ID, jantina dan bangsa wajib.' });
+    }
+    if (name.indexOf('\n') !== -1 || name.indexOf('\r') !== -1) {
+      return createJSONOutput({ status: 'error', message: 'Rekod #' + (r + 1) + ' mengandungi nama bergabung/multiline.' });
+    }
+
+    var key = String(p.schoolCode).toUpperCase() + '_' + p.badgeType + '_' + p.year + '_' + ic;
+    if (seen[key]) return createJSONOutput({ status: 'error', message: 'No KP duplicate dalam import: ' + ic });
+    if (existingKeys[key]) return createJSONOutput({ status: 'error', message: 'No KP sudah wujud untuk program/tahun ini: ' + ic });
+    seen[key] = true;
+
+    var remarks = sanitizeForSheet(String(rec.remarks || '').trim());
+    remarks = remarks ? remarks + ' | ' + batchId : batchId;
+
+    rowsToAdd.push([
+      timestamp,
+      sanitizeForSheet(String(p.schoolName).trim().toUpperCase()),
+      sanitizeForSheet(String(p.schoolCode).trim().toUpperCase()),
+      negeriCode,
+      daerahCode,
+      sanitizeForSheet(String(p.badgeType).trim()),
+      name,
+      gender,
+      race,
+      memberId,
+      ic,
+      sanitizeForSheet(String(rec.phoneNumber || '').trim()),
+      role,
+      remarks
+    ]);
+  }
+
+  if (rowsToAdd.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rowsToAdd.length, rowsToAdd[0].length).setValues(rowsToAdd);
+  }
+
+  return createJSONOutput({ status: 'success', count: rowsToAdd.length, batchId: batchId });
 }
 
 function updateParticipantId(p) {

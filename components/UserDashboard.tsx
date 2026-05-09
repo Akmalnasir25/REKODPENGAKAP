@@ -11,6 +11,7 @@ import { ExportButton } from './ui/ExportButton';
 import { SortableTable } from './ui/SortableTable';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { UserProfilePage } from './UserProfilePage';
+import { BulkImportModal } from './BulkImportModal';
 
 
 interface UserDashboardProps {
@@ -1118,63 +1119,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       )}
 
       {showImportModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-[fadeIn_0.3s_ease-out] backdrop-blur-sm print:hidden">
-            <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl relative border-2 border-indigo-500">
-                <button onClick={() => setShowImportModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
-                <h3 className="font-bold text-lg mb-4 flex gap-2 items-center text-indigo-700 border-b pb-2"><ArrowDownToLine className="text-indigo-600" /> Import Data ({selectedYear})</h3>
-                
-                <div className="bg-indigo-50 p-4 rounded-lg mb-4 text-sm border border-indigo-100 grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Tahun Asal (Sumber)</div>
-                        <select 
-                            className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" 
-                            value={importSourceYear} 
-                            onChange={(e) => { setImportSourceYear(parseInt(e.target.value)); setSelectedImportCandidates([]); }}
-                        >
-                            {availableYears.filter(y => y < selectedYear).map(y => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Lencana Asal ({importSourceYear})</div>
-                        <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs" value={importSourceBadge} onChange={(e) => { setImportSourceBadge(e.target.value); setSelectedImportCandidates([]); }}><option value="">-- Pilih --</option><option value="Keris Gangsa">Keris Gangsa</option><option value="Keris Perak">Keris Perak</option></select>
-                    </div>
-                    <div>
-                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Kategori (Peserta Sahaja)</div>
-                        <div className="bg-gray-50 border rounded px-3 py-2 text-gray-700 text-xs uppercase">Peserta / Murid</div>
-                    </div>
-                </div>
-
-                {importSourceBadge && (
-                    <div className="max-h-60 overflow-y-auto border rounded-lg mb-4">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-100 uppercase text-xs text-gray-600 sticky top-0">
-                                <tr>
-                                    <th className="px-4 py-2 text-center w-10"><input type="checkbox" onChange={(e) => { if (e.target.checked) setSelectedImportCandidates(importCandidates.map(c => String(c.icNumber))); else setSelectedImportCandidates([]); }} checked={importCandidates.length > 0 && selectedImportCandidates.length === importCandidates.length}/></th>
-                                    <th className="px-4 py-2">Nama</th>
-                                    <th className="px-4 py-2 text-center">No. KP</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {importCandidates.map((c, i) => (
-                                    <tr key={i} className="hover:bg-indigo-50/50 cursor-pointer" onClick={() => { if(selectedImportCandidates.includes(String(c.icNumber))) setSelectedImportCandidates(prev => prev.filter(ic => ic !== String(c.icNumber))); else setSelectedImportCandidates(prev => [...prev, String(c.icNumber)]); }}>
-                                        <td className="px-4 py-2 text-center"><input type="checkbox" checked={selectedImportCandidates.includes(String(c.icNumber))} onChange={() => {}} className="w-4 h-4 text-indigo-600 rounded"/></td>
-                                        <td className="px-4 py-2 font-bold text-gray-800 uppercase">{c.student}</td>
-                                        <td className="px-4 py-2 text-center font-mono">{c.icNumber}</td>
-                                    </tr>
-                                ))}
-                                {importCandidates.length === 0 && <tr><td colSpan={3} className="text-center py-4 text-gray-400 italic">Tiada calon.</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-                <div className="flex justify-end gap-2 pt-2 border-t">
-                    <button onClick={() => setShowImportModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-sm">Batal</button>
-                    <button onClick={handleSubmitImport} disabled={isSubmittingImport || selectedImportCandidates.length === 0} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-indigo-700 shadow flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed">{isSubmittingImport ? <LoadingSpinner size="sm" color="border-white"/> : <CheckCircle size={16}/>} Import ({selectedImportCandidates.length})</button>
-                </div>
-            </div>
-          </div>
+          <BulkImportModal
+            scriptUrl={scriptUrl}
+            schoolName={user.schoolName}
+            schoolCode={user.schoolCode}
+            badges={badges}
+            currentYear={selectedYear}
+            existingData={allData}
+            onClose={() => setShowImportModal(false)}
+            onSuccess={onRefresh}
+          />
       )}
 
       {showPasswordModal && (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Mail, Phone, MapPin, Award, Save, X } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Award, Save, X, Key } from 'lucide-react';
 
 interface UserProfile {
   id: string;
@@ -26,12 +26,14 @@ interface UserProfilePageProps {
   profile: UserProfile;
   onSave: (updatedProfile: UserProfile) => Promise<void>;
   onClose: () => void;
+  onChangePassword?: () => void;
 }
 
 export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   profile,
   onSave,
-  onClose
+  onClose,
+  onChangePassword
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -435,12 +437,21 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors"
-              >
-                Edit Profil
-              </button>
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors"
+                >
+                  Edit Profil
+                </button>
+                <button
+                  onClick={onChangePassword}
+                  className="border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Key className="w-4 h-4" />
+                  Tukar Kata Laluan
+                </button>
+              </div>
             )}
             <button
               onClick={onClose}

@@ -545,13 +545,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }} 
               />
 
-              {/* Profile Button */}
-              <SidebarItem 
-                icon={User} 
-                label="Profil Saya" 
-                onClick={() => { setShowProfileModal(true); setIsMobileSidebarOpen(false); }} 
-              />
-              
               <SidebarItem 
                 icon={Archive} 
                 label="Arkib Pencapaian" 
@@ -583,14 +576,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 }} 
               />
 
-              <SidebarItem 
-                icon={Key} 
-                label="Tukar Kata Laluan" 
-                onClick={() => { setShowPasswordModal(true); setIsMobileSidebarOpen(false); }} 
-              />
           </div>
 
           <div className="p-4 border-t border-slate-800 bg-slate-900">
+              <SidebarItem 
+                icon={User} 
+                label="Profil Saya" 
+                onClick={() => { setShowProfileModal(true); setIsMobileSidebarOpen(false); }} 
+                className="text-blue-300 hover:bg-blue-900/20 hover:text-blue-200 border border-blue-900/30"
+              />
+
               <SidebarItem 
                 icon={LogOut} 
                 label="Log Keluar" 
@@ -1270,6 +1265,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             }
           }}
           onClose={() => setShowProfileModal(false)}
+          onChangePassword={() => {
+            setShowProfileModal(false);
+            setShowPasswordModal(true);
+          }}
         />
       )}
     </div>

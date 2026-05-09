@@ -267,7 +267,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                                 <div className="text-xs font-medium text-gray-700 truncate max-w-[200px]" title={student.school}>{student.school}</div>
                                 <div className="text-[9px] text-gray-400 font-mono">{student.schoolCode}</div>
                             </td>
-                            {availableYears.map(year => {
+                            {displayedYears.map(year => {
                                 const historyItem = student.history[year];
                                 return (
                                     <td key={year} className="px-2 py-2 border-r border-gray-100 text-center align-middle">

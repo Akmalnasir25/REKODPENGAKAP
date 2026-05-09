@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { SubmissionData, School } from '../types';
-import { History, LayoutList, ArrowRight, School as SchoolIcon, Eye, EyeOff, Search, Users } from 'lucide-react';
+import { History, Eye, EyeOff, Search, Filter } from 'lucide-react';
 
 interface AdminHistoryProps {
   data: SubmissionData[];
@@ -12,6 +12,8 @@ interface AdminHistoryProps {
 export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRefresh }) => {
   const [showDrafts, setShowDrafts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProgram, setSelectedProgram] = useState('ALL');
+  const [selectedYear, setSelectedYear] = useState('ALL');
   const currentYear = new Date().getFullYear();
 
   // 1. FILTER DATA
@@ -50,7 +52,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
 
     if (showDrafts) return cleanData;
 
-    return cleanData.filter(item => {
+    const approvedData = cleanData.filter(item => {
         // SAFETY FIX: Ensure 's' exists before accessing 's.name'
         const schoolConfig = schools.find(s => s && s.name === item.school);
         
@@ -64,7 +66,55 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
 
         return approvedList.includes(badgeYearKey) || approvedList.includes(item.badge);
     });
+
+    return approvedData;
   }, [data, schools, showDrafts]);
+
+  const programOptions = useMemo(() => {
+      const programs = new Set<string>();
+      sourceData.forEach(item => {
+          if (item.badge && item.badge.trim()) programs.add(item.badge.trim());
+      });
+      return Array.from(programs).sort((a, b) => a.localeCompare(b));
+  }, [sourceData]);
+
+  const availableYears = useMemo(() => {
+      const years = new Set<number>();
+      sourceData.forEach(d => {
+          if (d.school !== '__SYSTEM_YEAR_MARKER__') {
+              const year = new Date(d.date).getFullYear();
+              if (!Number.isNaN(year)) years.add(year);
+          }
+      });
+
+      if (years.size === 0) return [currentYear];
+
+      const firstRecordYear = Math.min(...Array.from(years));
+      const startYear = Math.max(firstRecordYear, currentYear - 2);
+      const displayYears: number[] = [];
+
+      for (let year = startYear; year <= currentYear; year++) {
+          displayYears.push(year);
+      }
+
+      return displayYears;
+  }, [sourceData, currentYear]);
+
+  const filteredSourceData = useMemo(() => {
+      return sourceData.filter(item => {
+          const itemYear = new Date(item.date).getFullYear();
+          const matchesProgram = selectedProgram === 'ALL' || item.badge === selectedProgram;
+          const matchesYear = selectedYear === 'ALL'
+              ? availableYears.includes(itemYear)
+              : String(itemYear) === selectedYear;
+          return matchesProgram && matchesYear;
+      });
+  }, [sourceData, selectedProgram, selectedYear, availableYears]);
+
+  const displayedYears = useMemo(() => {
+      if (selectedYear !== 'ALL') return [Number(selectedYear)];
+      return availableYears;
+  }, [availableYears, selectedYear]);
 
   // 2. GROUP BY STUDENT (COHORT TRACKING)
   const studentHistory = useMemo(() => {
@@ -77,7 +127,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
           history: Record<number, { id: string, badge: string }> 
       }>();
 
-      sourceData.forEach(item => {
+      filteredSourceData.forEach(item => {
           const icStr = item.icNumber ? String(item.icNumber) : '';
           const studentName = item.student ? String(item.student) : '';
 
@@ -123,18 +173,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
 
       // Sort by Name
       return finalData.sort((a,b) => a.name.localeCompare(b.name));
-  }, [sourceData, searchQuery]);
-
-  // Determine available years for columns (e.g., 2024, 2025, 2026)
-  const availableYears = useMemo(() => {
-      const years = new Set<number>();
-      data.forEach(d => {
-          if (d.school !== '__SYSTEM_YEAR_MARKER__') {
-              years.add(new Date(d.date).getFullYear());
-          }
-      });
-      return Array.from(years).sort((a, b) => a - b);
-  }, [data]);
+  }, [filteredSourceData, searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -149,7 +188,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                 </p>
             </div>
 
-            <div className="flex gap-4 items-center w-full md:w-auto">
+            <div className="flex flex-col lg:flex-row gap-3 items-stretch w-full md:w-auto">
                 <div className="relative flex-1 md:w-64">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input 
@@ -159,6 +198,35 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative min-w-[180px]">
+                        <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <select
+                            className="w-full pl-9 pr-8 p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none transition"
+                            value={selectedProgram}
+                            onChange={(e) => setSelectedProgram(e.target.value)}
+                            title="Filter mengikut program"
+                        >
+                            <option value="ALL">Semua Program</option>
+                            {programOptions.map(program => (
+                                <option key={program} value={program}>{program}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <select
+                        className="min-w-[130px] p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none transition"
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        title="Filter mengikut tahun"
+                    >
+                        <option value="ALL">Semua Tahun</option>
+                        {displayedYears.map(year => (
+                            <option key={year} value={String(year)}>{year}</option>
+                        ))}
+                    </select>
                 </div>
                 
                 <button
@@ -181,7 +249,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                     <tr>
                         <th className="px-4 py-3 bg-slate-100 border-b border-r border-slate-200 min-w-[250px] sticky left-0 z-20">Maklumat Peserta</th>
                         <th className="px-4 py-3 bg-slate-100 border-b border-r border-slate-200 min-w-[200px]">Sekolah</th>
-                        {availableYears.map(year => (
+                        {displayedYears.map(year => (
                             <th key={year} className="px-4 py-3 bg-slate-50 border-b border-r border-slate-200 text-center min-w-[120px]">
                                 {year}
                             </th>
@@ -224,7 +292,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                     ))}
                     {studentHistory.length === 0 && (
                         <tr>
-                            <td colSpan={availableYears.length + 2} className="px-4 py-12 text-center text-gray-400 italic">
+                            <td colSpan={displayedYears.length + 2} className="px-4 py-12 text-center text-gray-400 italic">
                                 Tiada rekod dijumpai.
                             </td>
                         </tr>

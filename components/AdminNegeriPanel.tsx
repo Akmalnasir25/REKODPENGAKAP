@@ -5,6 +5,7 @@ import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
 import { AdminMigration } from './AdminMigration'; 
 import { AdminHistory } from './AdminHistory';
+import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
@@ -30,7 +31,7 @@ interface AdminNegeriPanelProps {
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
   negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -290,6 +291,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'admins', label: 'Urus Admin Daerah', icon: Users, allowed: true },
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
+    { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
   ];
 
   const SidebarItem = ({ icon: Icon, label, onClick, isActive, className }: any) => (
@@ -537,6 +539,12 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
             {tab === 'history' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
                   <AdminHistory data={filteredData} schools={filteredSchools} onRefresh={refreshData} />
+              </div>
+            )}
+
+            {tab === 'audit' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                  <AdminDataAudit data={filteredData} schools={filteredSchools} />
               </div>
             )}
 

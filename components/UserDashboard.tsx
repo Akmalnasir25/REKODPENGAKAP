@@ -665,6 +665,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 overflow-hidden flex flex-col h-screen overflow-y-auto">
+        {/* Top Toolbar - sentiasa nampak */}
+        <div className="hidden md:flex items-center justify-end gap-2 px-6 py-2 bg-white border-b border-gray-200 print:hidden">
+          <PresenceIndicator userName={user.schoolName} userRole="user" currentView="dashboard" className="mr-auto" />
+          <NotificationBell />
+          <DarkModeButton />
+          <LanguageSwitcher className="bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200" />
+          <TutorialHelpButton />
+        </div>
+
         <div className="p-4 md:p-8 max-w-7xl mx-auto w-full print:p-0 print:w-full print:max-w-none">
             
             {/* PRINT VIEW (VISIBLE ONLY IN PRINT) */}

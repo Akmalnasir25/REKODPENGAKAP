@@ -4,116 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pengakap - Pengurusan Data</title>
+    <meta name="description" content="Sistem Pendaftaran & Pengurusan Data Pengakap Malaysia">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Pengakap">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png">
     <link rel="icon" type="image/png" href="https://www.dropbox.com/scl/fi/k89h4n5x9628z6ojzmsjc/Untitled-design-2.png?rlkey=8o1b8nxpowuj5mfachltdghqr&st=91curw10&raw=1">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class'
-        }
-    </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        
-        /* Screen reader only */
-        .sr-only {
-            position: absolute; width: 1px; height: 1px; padding: 0;
-            margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
-            white-space: nowrap; border-width: 0;
-        }
-        
-        /* Smooth scrolling */
-        html { scroll-behavior: smooth; }
-        
-        /* Better focus indicators */
-        *:focus-visible {
-            outline: 2px solid #3b82f6;
-            outline-offset: 2px;
-            border-radius: 4px;
-        }
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-        
-        /* Hide scrollbar for horizontal scroll */
-        .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-        }
-        
-        /* Page transition */
-        #root > div { animation: pageEnter 0.3s ease-out; }
-        @keyframes pageEnter {
-            from { opacity: 0; transform: translateY(8px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* Reduced motion */
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-            html { scroll-behavior: auto; }
-        }
-        
-        /* Selection color */
-        ::selection { background: #bfdbfe; color: #1e3a8a; }
-        
-        /* PRINT OPTIMIZATION */
-        @media print {
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            
-            html, body {
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                height: auto;
-                background: white;
-            }
-            
-            /* Force page breaks and remove overflow */
-            table {
-                page-break-inside: auto;
-                margin-bottom: 20mm;
-            }
-            
-            tr {
-                page-break-inside: avoid;
-            }
-            
-            /* Ensure content flows to next page */
-            div {
-                page-break-inside: avoid;
-            }
-            
-            /* Margin untuk printing - LANDSCAPE & COLOR */
-            @page {
-                margin: 10mm;
-                size: A4 landscape;
-            }
-            
-            /* Pastikan text visible dan COLOR */
-            body {
-                color: black;
-                background: white;
-                print-color-adjust: exact;
-                -webkit-print-color-adjust: exact;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/index.css">
 <script type="importmap">
 {
   "imports": {
@@ -125,7 +26,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="bg-gray-100 text-gray-800 antialiased">
     <div id="root"></div>

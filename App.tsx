@@ -18,6 +18,11 @@ import { DEFAULT_SERVER_URL, LOCAL_STORAGE_KEYS, LOGO_URL } from './constants';
 import { SubmissionData, UserSession, Badge, School, UserProfile, Negeri, Daerah, AdminRegional } from './types';
 import { WifiOff } from 'lucide-react';
 import { generateCSRFToken, isSessionExpired, clearSessionActivity, updateSessionActivity } from './services/security';
+import { getViewFromHash, pushViewToHash, replaceViewInHash, onHashNavigation } from './services/router';
+import { AppDataProvider, AuthProvider, ThemeProvider } from './context/AppContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { I18nProvider } from './i18n';
+import { logAudit } from './services/auditService';
 
 // Helper functions for access control (independent of localStorage)
 const getAccessState = async () => {
@@ -51,9 +56,19 @@ const isLocalPreview = () => ['4002', '4173'].includes(window.location.port) || 
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppDataProvider initialScriptUrl={DEFAULT_SERVER_URL}>
+            <NotificationProvider>
+              <ToastProvider>
+                <AppContent />
+              </ToastProvider>
+            </NotificationProvider>
+          </AppDataProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
 
@@ -88,6 +103,20 @@ function AppContent() {
 
   // View State
   const [view, setView] = useState<'auth' | 'user_dashboard' | 'user_form' | 'admin' | 'developer' | 'developer_admin' | 'developer_hierarchy'>('auth');
+
+  // URL Router Sync - push view changes to URL hash
+  const navigateTo = (newView: typeof view) => {
+    setView(newView);
+    pushViewToHash(newView);
+  };
+
+  // Listen for browser back/forward buttons
+  useEffect(() => {
+    const cleanup = onHashNavigation((hashView) => {
+      setView(hashView);
+    });
+    return cleanup;
+  }, []);
 
   // Load access state on mount and when URL changes
   useEffect(() => {
@@ -184,6 +213,7 @@ function AppContent() {
                     const userAccessEnabled = currentAccessState.userAccess;
                     if (userAccessEnabled) {
                         setUserSession(parsedSession);
+                        replaceViewInHash('user_dashboard');
                         setView('user_dashboard');
                         sessionRestored = true;
                     } else {
@@ -271,7 +301,7 @@ function AppContent() {
               authToken: result.authToken,
               expiresAt: result.expiresAt
             }));
-            setView('admin');
+            navigateTo('admin');
             setUserSession(null);
             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
             handleFetchData(scriptUrl);
@@ -321,7 +351,7 @@ function AppContent() {
 
             setAdminSession(previewAdmin);
             localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(previewAdmin));
-            setView('admin');
+            navigateTo('admin');
             setUserSession(null);
             setAdminRole(null);
             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
@@ -334,7 +364,7 @@ function AppContent() {
         if (result.status === 'success' && result.admin) {
             setAdminSession(result.admin);
             localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(result.admin));
-            setView('admin'); // Will be replaced with specific panel routing later
+            navigateTo('admin'); // Will be replaced with specific panel routing later
             setUserSession(null);
             setAdminRole(null); // Clear old admin role
             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
@@ -365,7 +395,7 @@ function AppContent() {
           expiresAt: Date.now() + (24 * 60 * 60 * 1000)
         }));
         setIsDeveloperMode(true);
-        setView('developer');
+        navigateTo('developer');
         setUserSession(null);
         setAdminRole(null);
         setAdminSession(null);
@@ -383,7 +413,7 @@ function AppContent() {
           expiresAt: result.expiresAt
         }));
         setIsDeveloperMode(true);
-        setView('developer');
+        navigateTo('developer');
         setUserSession(null);
         setAdminRole(null);
         setAdminSession(null);
@@ -400,11 +430,15 @@ function AppContent() {
   const handleUserLoginSuccess = (user: UserSession) => {
       setUserSession(user);
       localStorage.setItem(LOCAL_STORAGE_KEYS.SESSION, JSON.stringify(user)); // Persist Session
-      setView('user_dashboard');
-      handleFetchData(scriptUrl); 
+      navigateTo('user_dashboard');
+      handleFetchData(scriptUrl);
+      logAudit('LOGIN', user.schoolCode, 'user', `Log masuk: ${user.schoolName} (${user.schoolCode})`);
   };
 
   const handleLogout = () => {
+      const actor = userSession?.schoolCode || adminSession?.username || (isDeveloperMode ? 'DEVELOPER' : 'UNKNOWN');
+      const role = isDeveloperMode ? 'developer' : adminSession ? adminSession.role : adminRole || 'user';
+      logAudit('LOGOUT', actor, role as any, `Log keluar`);
       setUserSession(null);
       setAdminRole(null);
       setAdminSession(null);
@@ -413,7 +447,7 @@ function AppContent() {
       localStorage.removeItem(ADMIN_SESSION_KEY);
       localStorage.removeItem(DEVELOPER_SESSION_KEY);
       clearSessionActivity();
-      setView('auth');
+      navigateTo('auth');
   };
 
   // Session Timeout & Activity Monitoring
@@ -453,6 +487,9 @@ function AppContent() {
         const token = await fetchServerCsrf(scriptUrl);
         const result = await deleteSubmission(scriptUrl, item, token || undefined);
         if (result.status === 'success') {
+          const actor = userSession?.schoolCode || adminSession?.username || 'ADMIN';
+          const role = isDeveloperMode ? 'developer' : adminSession ? adminSession.role : adminRole || 'user';
+          logAudit('DELETE_RECORD', actor, role as any, `Padam rekod: ${item.student} (${item.badge}) dari ${item.school}`);
           alert("Rekod berjaya dipadam.");
           setTimeout(handleRefreshData, 1000);
         } else {
@@ -492,7 +529,7 @@ function AppContent() {
                     onLogout={handleLogout}
                     scriptUrl={scriptUrl}
                     setScriptUrl={setScriptUrl}
-                    onOpenHierarchy={() => setView('developer_hierarchy')}
+                    onOpenHierarchy={() => navigateTo('developer_hierarchy')}
                 />
               );
 
@@ -501,7 +538,7 @@ function AppContent() {
                 <DeveloperDashboard 
                     scriptUrl={scriptUrl}
                     onLogout={handleLogout}
-                    onBack={() => setView('developer_admin')}
+                    onBack={() => navigateTo('developer_admin')}
                 />
               );
 
@@ -511,7 +548,7 @@ function AppContent() {
                     onLogout={handleLogout}
                     scriptUrl={scriptUrl}
                     setScriptUrl={setScriptUrl}
-                    onOpenHierarchy={() => setView('developer_hierarchy')}
+                    onOpenHierarchy={() => navigateTo('developer_hierarchy')}
                 />
               );
 
@@ -525,7 +562,7 @@ function AppContent() {
                             negeriCode={adminSession.negeriCode!}
                             negeriName={negeriList.find(n => n.code === adminSession.negeriCode)?.name || adminSession.negeriCode!}
                             adminSession={adminSession}
-                            onBack={() => { setView('auth'); setAdminSession(null); }}
+                            onBack={() => { navigateTo('auth'); setAdminSession(null); }}
                             scriptUrl={scriptUrl}
                             setScriptUrl={setScriptUrl}
                             data={dashboardData}
@@ -544,7 +581,7 @@ function AppContent() {
                             daerahName={daerahList.find(d => d.code === adminSession.daerahCode)?.name || adminSession.daerahCode!}
                             negeriCode={adminSession.negeriCode!}
                             adminSession={adminSession}
-                            onBack={() => { setView('auth'); setAdminSession(null); }}
+                            onBack={() => { navigateTo('auth'); setAdminSession(null); }}
                             scriptUrl={scriptUrl}
                             setScriptUrl={setScriptUrl}
                             data={dashboardData}
@@ -573,7 +610,7 @@ function AppContent() {
               return (
                 <AdminPanel 
                     role={adminRole || 'admin'}
-                    onBack={() => { setView('auth'); setAdminRole(null); }}
+                    onBack={() => { navigateTo('auth'); setAdminRole(null); }}
                     scriptUrl={scriptUrl}
                     setScriptUrl={setScriptUrl}
                     data={dashboardData}
@@ -604,7 +641,7 @@ function AppContent() {
                       isRegistrationOpen={isRegistrationOpen}
                       scriptUrl={scriptUrl} 
                       onLogout={handleLogout}
-                      onNewRegistration={() => setView('user_form')}
+                      onNewRegistration={() => navigateTo('user_form')}
                       onDelete={handleDeleteData}
                       onRefresh={handleRefreshData}
                   />
@@ -629,7 +666,7 @@ function AppContent() {
                     isLoadingData={fetchingData}
                     refreshData={handleRefreshData}
                     userSession={userSession}
-                    onBackToDashboard={() => setView('user_dashboard')}
+                    onBackToDashboard={() => navigateTo('user_dashboard')}
                     existingData={dashboardData} 
                   />
               );

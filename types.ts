@@ -8,6 +8,7 @@ export interface Participant {
   membershipId: string;
   icNumber: string;
   phoneNumber: string; 
+  category?: 'Perdana' | 'Udara' | 'Laut' | 'PPKI' | 'PPKI Udara';
   remarks: string;
 }
 
@@ -42,6 +43,7 @@ export interface SubmissionData {
   principalName?: string;
   principalPhone?: string;
   leader?: string;
+  category?: string;
   remarks: string;
 }
 

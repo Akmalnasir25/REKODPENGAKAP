@@ -1,0 +1,26 @@
+{
+  "name": "Pengakap - Sistem Pengurusan Data",
+  "short_name": "Pengakap",
+  "description": "Sistem Pendaftaran & Pengurusan Data Pengakap Malaysia",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "categories": ["education", "productivity"],
+  "lang": "ms",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

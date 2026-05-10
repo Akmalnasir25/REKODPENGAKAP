@@ -529,6 +529,8 @@ function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode, 
        if (row[0] === "") continue;
        var schoolCode = row[2];
        var schoolInfo = schoolMap[schoolCode] || {};
+       var remarksValue = row[13] || '';
+       var categoryMatch = String(remarksValue).match(/\[Kategori:\s*([^\]]+)\]/i);
        submissions.push({
          rowIndex: i + 1,
          date: row[0],
@@ -544,7 +546,8 @@ function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode, 
          icNumber: row[10],
          studentPhone: row[11],
          role: row[12],
-         remarks: row[13]
+         category: categoryMatch ? categoryMatch[1] : '',
+         remarks: String(remarksValue).replace(/\[Kategori:\s*[^\]]+\]\s*/i, '')
        });
     }
   }
@@ -658,6 +661,7 @@ function getAllData(requestingRole, requestingNegeriCode, requestingDaerahCode, 
           icNumber: profile.leaderIC || '',
           studentPhone: profile.leaderPhone || '',
           role: 'PEMIMPIN',
+          category: '',
           remarks: 'AUTO-ADD DARI PROFIL'
         });
       }
@@ -856,7 +860,11 @@ function submitForm(p) {
   
   var rowsToAdd = [];
   function createRow(person, roleName) {
-      return [timestamp, sanitizeForSheet(p.schoolName), sanitizeForSheet(p.schoolCode), negeriCode, daerahCode, sanitizeForSheet(p.badgeType), sanitizeForSheet(person.name.toUpperCase()), sanitizeForSheet(person.gender), sanitizeForSheet(person.race), person.membershipId ? sanitizeForSheet(person.membershipId.toUpperCase()) : "", sanitizeForSheet(person.icNumber), sanitizeForSheet(person.phoneNumber), roleName, sanitizeForSheet(person.remarks || "")];
+      var personRemarks = sanitizeForSheet(person.remarks || "");
+      if ((roleName === "PESERTA" || roleName === "PENERIMA RAMBU") && person.category) {
+        personRemarks = "[Kategori: " + sanitizeForSheet(person.category) + "]" + (personRemarks ? " " + personRemarks : "");
+      }
+      return [timestamp, sanitizeForSheet(p.schoolName), sanitizeForSheet(p.schoolCode), negeriCode, daerahCode, sanitizeForSheet(p.badgeType), sanitizeForSheet(person.name.toUpperCase()), sanitizeForSheet(person.gender), sanitizeForSheet(person.race), person.membershipId ? sanitizeForSheet(person.membershipId.toUpperCase()) : "", sanitizeForSheet(person.icNumber), sanitizeForSheet(person.phoneNumber), roleName, personRemarks];
   }
   if (p.participants) p.participants.forEach(function(person) { if (person.name) rowsToAdd.push(createRow(person, p.badgeType === "Anugerah Rambu" ? "PENERIMA RAMBU" : "PESERTA")); });
   if (p.assistants) p.assistants.forEach(function(person) { if (person.name) rowsToAdd.push(createRow(person, "PENOLONG PEMIMPIN")); });

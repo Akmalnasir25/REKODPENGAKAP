@@ -4,6 +4,10 @@ import { SubmissionData, School, Badge } from '../types';
 import { BrainCircuit, RefreshCw, BarChart3, Database, Trash2, Sparkles, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { analyzeData } from '../services/geminiService';
+import { PDFExportButton } from './ui/PDFExportButton';
+import { BulkWhatsApp } from './ui/BulkWhatsApp';
+import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
+import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
@@ -450,6 +454,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                     <th className="border border-black px-2 py-1 text-center">NO. KP</th>
                     <th className="border border-black px-2 py-1 text-left">SEKOLAH</th>
                     <th className="border border-black px-2 py-1 text-center">PERANAN</th>
+                    <th className="border border-black px-2 py-1 text-center">KATEGORI</th>
                     <th className="border border-black px-2 py-1 text-center">NO. AHLI</th>
                 </tr>
             </thead>
@@ -461,6 +466,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                         <td className="border border-black px-2 py-1 text-center">{item.icNumber}</td>
                         <td className="border border-black px-2 py-1 uppercase">{item.school} <span className="text-[9px]">({item.schoolCode})</span></td>
                         <td className="border border-black px-2 py-1 text-center uppercase">{item.role || 'PESERTA'} {item.badge ? `(${item.badge})` : ''}</td>
+                        <td className="border border-black px-2 py-1 text-center">{item.category || '-'}</td>
                         <td className="border border-black px-2 py-1 text-center">{item.id || '-'}</td>
                     </tr>
                 ))}
@@ -641,7 +647,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                     <BarChart3 size={20} className="text-blue-600" /> Statistik Pendaftaran {showDrafts ? '(Semua)' : '(Disahkan Sahaja)'} {selectedYear}
                     {selectedBadgeFilter && <span className="text-sm font-normal text-blue-700 ml-2 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">({selectedBadgeFilter})</span>}
                 </h2>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                    <PDFExportButton 
+                        data={displayedData} 
+                        year={selectedYear} 
+                        badge={selectedBadgeFilter}
+                        title="SENARAI PENDAFTARAN PENGAKAP"
+                    />
+                    <BulkWhatsApp data={displayedData} />
+                    <SchoolQRGenerator data={data} year={selectedYear} />
+                    <QRAttendanceScanner verifierName="Admin" />
                     <button onClick={() => handlePrint('stats')} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition shadow">
                         <Printer size={16} /> Cetak Statistik
                     </button>
@@ -725,6 +740,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
             </div>
         )}
 
+        {/* ADVANCED ANALYTICS CHARTS */}
+        {activeTab !== 'archive' && (
+            <AdvancedAnalytics data={data} year={selectedYear} />
+        )}
+
         {/* DETAILED DATA TABLE */}
         {activeTab !== 'archive' && (
             <div className="bg-white p-6 rounded-xl shadow overflow-hidden">
@@ -783,6 +803,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                             {getRoleBadge(item.role)}
                                             <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded border">{item.badge}</span>
                                         </div>
+                                        {item.category && <div className="text-[10px] font-bold text-purple-700 mt-1">Kategori: {item.category}</div>}
                                         {item.id && <div className="text-[10px] font-mono font-bold text-blue-800 mt-1">ID: {item.id}</div>}
                                         {getOldId(item.remarks) && <div className="text-[9px] text-gray-400 line-through">ID Lama: {getOldId(item.remarks)}</div>}
                                     </td>

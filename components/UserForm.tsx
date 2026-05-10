@@ -48,6 +48,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       membershipId: '', 
       icNumber: '', 
       phoneNumber: '',
+      category: 'Perdana',
       remarks: '' 
   });
 
@@ -348,7 +349,8 @@ export const UserForm: React.FC<UserFormProps> = ({
       list: Participant[], 
       setList: React.Dispatch<React.SetStateAction<Participant[]>>,
       minItems = 0,
-      requireMembershipId = false // NEW PARAMETER
+      requireMembershipId = false,
+      showParticipantCategory = false
   ) => (
     <div key={person.id} className="bg-white p-4 md:p-6 rounded-xl border border-gray-200 relative hover:shadow-lg transition mb-4 shadow-sm group">
         <div className="absolute -left-2 -top-2 bg-blue-900 text-white w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold shadow-md z-10">{index+1}</div>
@@ -432,9 +434,25 @@ export const UserForm: React.FC<UserFormProps> = ({
                     onChange={e=>updatePerson(person.id,'membershipId',e.target.value, list, setList)}
                 />
             </div>
+            {showParticipantCategory && (
+                <div className="sm:col-span-6 lg:col-span-3">
+                    <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori Peserta</label>
+                    <select
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                        value={person.category || 'Perdana'}
+                        onChange={e=>updatePerson(person.id,'category' as keyof Participant,e.target.value, list, setList)}
+                    >
+                        <option>Perdana</option>
+                        <option>Udara</option>
+                        <option>Laut</option>
+                        <option>PPKI</option>
+                        <option>PPKI Udara</option>
+                    </select>
+                </div>
+            )}
             
             {/* REMARKS */}
-            <div className="sm:col-span-11 lg:col-span-5">
+            <div className={`${showParticipantCategory ? 'sm:col-span-5 lg:col-span-2' : 'sm:col-span-11 lg:col-span-5'}`}>
                 <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Catatan</label>
                 <input 
                     className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
@@ -629,7 +647,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="font-bold text-gray-700">Senarai Peserta</h3>
                             </div>
-                            {participants.map((p, i) => renderPersonInputs(p, i, participants, setParticipants, 1, true))}
+                            {participants.map((p, i) => renderPersonInputs(p, i, participants, setParticipants, 1, true, true))}
                             <button type="button" onClick={() => addPerson(participants, setParticipants)} className="mt-4 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
                                 <Plus size={20}/> Tambah Peserta
                             </button>

@@ -12,6 +12,14 @@ import { SortableTable } from './ui/SortableTable';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
+import { NotificationBell } from './ui/NotificationCenter';
+import { DarkModeButton } from './ui/DarkModeToggle';
+import { PDFExportButton } from './ui/PDFExportButton';
+import { OnboardingTutorial, TutorialHelpButton } from './ui/OnboardingTutorial';
+import { LanguageSwitcher } from '../i18n';
+import { useDeadlineChecker } from '../context/NotificationContext';
+import { logAudit } from '../services/auditService';
+import { PresenceIndicator } from './ui/PresenceIndicator';
 
 
 interface UserDashboardProps {
@@ -33,6 +41,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
+
+  // Check badge deadlines and notify
+  useDeadlineChecker(badges);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
   
@@ -519,15 +530,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
       
+      {/* Onboarding Tutorial (first-time users) */}
+      <OnboardingTutorial />
+
       {/* MOBILE HEADER (DARK) */}
       <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600">
           <div className="flex items-center gap-2">
               <User size={20} className="text-amber-500" />
-              <div className="text-sm font-bold truncate w-48">{user.schoolName}</div>
+              <div className="text-sm font-bold truncate w-36">{user.schoolName}</div>
           </div>
-          <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-2 hover:bg-slate-800 rounded">
-              <Menu size={24} />
-          </button>
+          <div className="flex items-center gap-1">
+              <NotificationBell />
+              <DarkModeButton className="text-white" />
+              <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-2 hover:bg-slate-800 rounded">
+                  <Menu size={24} />
+              </button>
+          </div>
       </div>
 
       {/* SIDEBAR NAVIGATION (DARK & LUXURY) */}
@@ -554,6 +572,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-xs leading-tight mb-1 uppercase tracking-wide">{user.schoolName}</h2>
                     <p className="text-[10px] text-amber-500 font-mono bg-slate-900/50 px-2 py-0.5 rounded inline-block border border-amber-500/20">{user.schoolCode}</p>
+                    <div className="mt-2">
+                      <PresenceIndicator userName={user.schoolName} userRole="user" currentView="dashboard" />
+                    </div>
                   </div>
               )}
           </div>
@@ -610,6 +631,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="p-4 border-t border-slate-800 bg-slate-900">
+              {/* Quick Tools */}
+              {isDesktopSidebarOpen && (
+                <div className="flex items-center justify-center gap-1 mb-3 pb-3 border-b border-slate-800">
+                  <NotificationBell />
+                  <DarkModeButton className="text-white" />
+                  <LanguageSwitcher className="bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700" />
+                  <TutorialHelpButton className="text-slate-400" />
+                </div>
+              )}
+
               <SidebarItem 
                 icon={User} 
                 label="Profil Saya" 
@@ -1007,14 +1038,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             <FileText size={16} className="text-blue-900" /> Senarai Peserta {selectedYear}
                             {selectedBadgeFilter && <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-[10px]">({selectedBadgeFilter})</span>}
                         </h2>
-                        <div className="relative w-full md:w-64">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input 
-                                type="text" 
-                                className="w-full pl-9 p-2 border rounded-lg text-sm bg-white focus:ring-1 focus:ring-blue-500 outline-none" 
-                                placeholder="Cari..." 
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                            <div className="relative flex-1 md:w-52">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input 
+                                    type="text" 
+                                    className="w-full pl-9 p-2 border rounded-lg text-sm bg-white focus:ring-1 focus:ring-blue-500 outline-none" 
+                                    placeholder="Cari..." 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                            <PDFExportButton 
+                                data={filteredData} 
+                                year={selectedYear} 
+                                badge={selectedBadgeFilter} 
+                                school={user.schoolName}
+                                title="SENARAI PENDAFTARAN PENGAKAP"
                             />
                         </div>
                     </div>
@@ -1028,6 +1068,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <th className="px-6 py-3">Kaum</th>
                                     <th className="px-6 py-3">No. Keahlian</th>
                                     <th className="px-6 py-3">Peranan</th>
+                                    <th className="px-6 py-3">Kategori</th>
                                     <th className="px-6 py-3 text-right">Tindakan</th>
                                 </tr>
                             </thead>
@@ -1067,12 +1108,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                             )}
                                         </td>
                                         <td className="px-6 py-3 text-xs font-semibold uppercase">{item.role || 'Peserta'}</td>
+                                        <td className="px-6 py-3 text-xs text-slate-600">{item.category || '-'}</td>
                                         <td className="px-6 py-3 text-right">
                                             <button onClick={() => onDelete(item)} disabled={!canModifyRecord(item) || isMigrated} className={`p-1.5 rounded ${canModifyRecord(item) && !isMigrated ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}><Trash2 size={16} /></button>
                                         </td>
                                     </tr>
                                 )})}
-                                {filteredData.length === 0 && <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
+                                {filteredData.length === 0 && <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
                             </tbody>
                         </table>
                     </div>

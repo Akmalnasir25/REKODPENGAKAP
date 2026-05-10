@@ -741,8 +741,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
         )}
 
         {/* ADVANCED ANALYTICS CHARTS */}
-        {activeTab !== 'archive' && (
-            <AdvancedAnalytics data={data} year={selectedYear} />
+        {activeTab !== 'archive' && displayedData.length > 0 && (
+            <AdvancedAnalytics data={displayedData} year={selectedYear} />
         )}
 
         {/* DETAILED DATA TABLE */}

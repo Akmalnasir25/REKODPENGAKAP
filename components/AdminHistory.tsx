@@ -9,6 +9,17 @@ interface AdminHistoryProps {
   onRefresh: () => void;
 }
 
+const safeParseDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  const date = new Date(value as string);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const safeGetYear = (value: unknown): number | null => {
+  const date = safeParseDate(value);
+  return date ? date.getFullYear() : null;
+};
+
 export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRefresh }) => {
   const [showDrafts, setShowDrafts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,7 +48,8 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
 
         // DEDUPLICATION:
         // Identify record uniqueness: IC + Badge + Year
-        const year = new Date(d.date).getFullYear();
+        const year = safeGetYear(d.date);
+        if (year === null) return false;
         const cleanName = d.student.trim().toUpperCase();
         const cleanIC = d.icNumber ? String(d.icNumber).trim() : '';
         const uniqueKey = cleanIC && cleanIC.length > 4
@@ -58,7 +70,8 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
         
         if (!schoolConfig || !schoolConfig.approvedBadges) return false;
 
-        const itemYear = new Date(item.date).getFullYear();
+        const itemYear = safeGetYear(item.date);
+        if (itemYear === null) return false;
         const badgeYearKey = `${item.badge}_${itemYear}`;
 
         // Ensure array
@@ -82,8 +95,8 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
       const years = new Set<number>();
       sourceData.forEach(d => {
           if (d.school !== '__SYSTEM_YEAR_MARKER__') {
-              const year = new Date(d.date).getFullYear();
-              if (!Number.isNaN(year)) years.add(year);
+              const year = safeGetYear(d.date);
+              if (year !== null && !Number.isNaN(year)) years.add(year);
           }
       });
 
@@ -102,7 +115,8 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
 
   const filteredSourceData = useMemo(() => {
       return sourceData.filter(item => {
-          const itemYear = new Date(item.date).getFullYear();
+          const itemYear = safeGetYear(item.date);
+          if (itemYear === null) return false;
           const matchesProgram = selectedProgram === 'ALL' || item.badge === selectedProgram;
           const matchesYear = selectedYear === 'ALL'
               ? availableYears.includes(itemYear)
@@ -149,7 +163,8 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
           }
           
           const entry = studentMap.get(key)!;
-          const y = new Date(item.date).getFullYear();
+          const y = safeGetYear(item.date);
+          if (y === null) return;
           
           // Add to history (Year -> Badge Info)
           entry.history[y] = { 

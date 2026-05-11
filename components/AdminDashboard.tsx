@@ -20,6 +20,17 @@ interface AdminDashboardProps {
 type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'examiners' | 'principals' | 'archive';
 type PrintMode = 'none' | 'stats' | 'list' | 'archive';
 
+const safeParseDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  const date = new Date(value as string);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const safeGetYear = (value: unknown): number | null => {
+  const date = safeParseDate(value);
+  return date ? date.getFullYear() : null;
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, onRefresh, onDelete }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -60,7 +71,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
             
             // If school found and has approved badges
             if (schoolConfig && schoolConfig.approvedBadges) {
-                const itemYear = new Date(item.date).getFullYear();
+                const itemYear = safeGetYear(item.date);
+                if (itemYear === null) return false;
                 const badgeYearKey = `${item.badge}_${itemYear}`;
                 const approvedList = Array.isArray(schoolConfig.approvedBadges) ? schoolConfig.approvedBadges : [];
                 
@@ -76,7 +88,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
         // 4. DEDUPLICATION LOGIC (The Fix)
         // We create a unique key for this person for this specific badge and year.
         // If we see this key again, we skip it.
-        const year = new Date(item.date).getFullYear();
+        const year = safeGetYear(item.date);
+        if (year === null) return false;
         const cleanName = String(item.student).trim().toUpperCase();
         const cleanIC = item.icNumber ? String(item.icNumber).trim() : '';
         const badge = item.badge;
@@ -116,14 +129,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
 
   const availableYears = useMemo(() => {
     // Use raw data for years to avoid empty dropdowns if nothing submitted yet
-    const years = new Set<number>(data.map(d => new Date(d.date).getFullYear()));
+    const years = new Set<number>();
+    data.forEach(d => {
+      const y = safeGetYear(d.date);
+      if (y !== null) years.add(y);
+    });
     years.add(currentYear);
     return Array.from(years).sort((a: number, b: number) => b - a);
   }, [data, currentYear]);
 
   // Filter by year using the SUBMITTED data
   const yearData = useMemo(() => {
-      return submittedData.filter(d => new Date(d.date).getFullYear() === selectedYear);
+      return submittedData.filter(d => safeGetYear(d.date) === selectedYear);
   }, [submittedData, selectedYear]);
 
   // Available badges for filter dropdown
@@ -140,7 +157,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
       const groupedByYear: Record<number, { rambu: SubmissionData[], emas: SubmissionData[] }> = {};
 
       allApproved.forEach(item => {
-          const y = new Date(item.date).getFullYear();
+          const y = safeGetYear(item.date);
+          if (y === null) return;
           const badge = item.badge || '';
           const role = item.role || '';
 

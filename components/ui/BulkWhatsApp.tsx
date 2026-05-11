@@ -10,9 +10,9 @@ interface BulkWhatsAppProps {
 /**
  * Format phone number for WhatsApp (Malaysian format)
  */
-const formatWhatsAppNumber = (phone: string): string | null => {
+const formatWhatsAppNumber = (phone: string | number): string | null => {
   if (!phone) return null;
-  let cleaned = phone.replace(/[^0-9+]/g, '');
+  let cleaned = String(phone).replace(/[^0-9+]/g, '');
   
   // Malaysian number formats
   if (cleaned.startsWith('0')) {
@@ -31,7 +31,7 @@ const formatWhatsAppNumber = (phone: string): string | null => {
 /**
  * Generate WhatsApp click-to-chat URL
  */
-const getWhatsAppUrl = (phone: string, message: string): string => {
+const getWhatsAppUrl = (phone: string | number, message: string): string => {
   const formatted = formatWhatsAppNumber(phone);
   if (!formatted) return '';
   return `https://wa.me/${formatted}?text=${encodeURIComponent(message)}`;
@@ -92,7 +92,7 @@ export const BulkWhatsApp: React.FC<BulkWhatsAppProps> = ({ data, className = ''
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSendSingle = (phone: string) => {
+  const handleSendSingle = (phone: string | number) => {
     const url = getWhatsAppUrl(phone, getMessage());
     if (url) window.open(url, '_blank');
   };

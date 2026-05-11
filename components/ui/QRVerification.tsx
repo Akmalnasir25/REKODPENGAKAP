@@ -144,7 +144,7 @@ export const SchoolQRGenerator: React.FC<SchoolQRGeneratorProps> = ({ data, year
   const handleDownloadSingle = (item: typeof qrImages[0]) => {
     const a = document.createElement('a');
     a.href = item.dataUrl;
-    a.download = `QR_${item.group.schoolCode}_${item.group.badge.replace(/\s/g, '_')}.png`;
+    a.download = `QR_${item.group.schoolCode}_${String(item.group.badge).replace(/\s/g, '_')}.png`;
     a.click();
   };
 

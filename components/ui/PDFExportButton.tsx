@@ -37,7 +37,8 @@ export const PDFExportButton: React.FC<PDFExportButtonProps> = ({
         ? generateParticipantReport(data, options)
         : generateSummaryReport(data, options);
 
-      const filename = `Laporan_${type === 'list' ? 'Senarai' : 'Ringkasan'}_${year}${badge ? '_' + badge.replace(/\s/g, '_') : ''}.pdf`;
+      const safeBadge = badge ? String(badge).replace(/\s/g, '_') : '';
+      const filename = `Laporan_${type === 'list' ? 'Senarai' : 'Ringkasan'}_${year}${safeBadge ? '_' + safeBadge : ''}.pdf`;
 
       if (action === 'download') {
         downloadPDF(doc, filename);

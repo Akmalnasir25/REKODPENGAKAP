@@ -26,6 +26,12 @@ interface SchoolGroup {
   participants: SubmissionData[];
 }
 
+const safeGetYear = (value: unknown): number | null => {
+  if (!value) return null;
+  const date = new Date(value as string);
+  return isNaN(date.getTime()) ? null : date.getFullYear();
+};
+
 /**
  * Generate QR payload for a school group
  */
@@ -93,7 +99,7 @@ export const SchoolQRGenerator: React.FC<SchoolQRGeneratorProps> = ({ data, year
 
   // Group data by school + badge
   const schoolGroups = useMemo((): SchoolGroup[] => {
-    const yearData = data.filter(d => new Date(d.date).getFullYear() === year);
+    const yearData = data.filter(d => safeGetYear(d.date) === year);
     const map: Record<string, SchoolGroup> = {};
 
     yearData.forEach(d => {

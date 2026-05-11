@@ -10,8 +10,24 @@ interface AdvancedAnalyticsProps {
 
 const COLORS = ['#1e3a8a', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
+const safeParseDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  const date = new Date(value as string);
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const safeGetYear = (value: unknown): number | null => {
+  const date = safeParseDate(value);
+  return date ? date.getFullYear() : null;
+};
+
+const safeGetMonth = (value: unknown): number | null => {
+  const date = safeParseDate(value);
+  return date ? date.getMonth() : null;
+};
+
 export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year = new Date().getFullYear() }) => {
-  const yearData = useMemo(() => data.filter(d => new Date(d.date).getFullYear() === year), [data, year]);
+  const yearData = useMemo(() => data.filter(d => safeGetYear(d.date) === year), [data, year]);
 
   // Badge distribution
   const badgeData = useMemo(() => {
@@ -65,8 +81,10 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
   const monthlyTrend = useMemo(() => {
     const months: Record<number, number> = {};
     yearData.forEach(d => {
-      const month = new Date(d.date).getMonth();
-      months[month] = (months[month] || 0) + 1;
+      const month = safeGetMonth(d.date);
+      if (month !== null) {
+        months[month] = (months[month] || 0) + 1;
+      }
     });
     const monthNames = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'];
     return monthNames.map((name, i) => ({ name, value: months[i] || 0 }));

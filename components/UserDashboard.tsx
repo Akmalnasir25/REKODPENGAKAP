@@ -13,10 +13,8 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
-import { DarkModeButton } from './ui/DarkModeToggle';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { OnboardingTutorial, TutorialHelpButton } from './ui/OnboardingTutorial';
-import { LanguageSwitcher } from '../i18n';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
 import { PresenceIndicator } from './ui/PresenceIndicator';
@@ -541,7 +539,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
           <div className="flex items-center gap-1">
               <NotificationBell />
-              <DarkModeButton className="text-white" />
               <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-2 hover:bg-slate-800 rounded">
                   <Menu size={24} />
               </button>
@@ -635,8 +632,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               {isDesktopSidebarOpen && (
                 <div className="flex items-center justify-center gap-1 mb-3 pb-3 border-b border-slate-800">
                   <NotificationBell />
-                  <DarkModeButton className="text-white" />
-                  <LanguageSwitcher className="bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700" />
                   <TutorialHelpButton className="text-slate-400" />
                 </div>
               )}
@@ -668,10 +663,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         {/* Top Toolbar - sentiasa nampak */}
         <div className="hidden md:flex items-center justify-end gap-2 px-6 py-2 bg-white border-b border-gray-200 print:hidden">
           <PresenceIndicator userName={user.schoolName} userRole="user" currentView="dashboard" className="mr-auto" />
-          <NotificationBell />
-          <DarkModeButton />
-          <LanguageSwitcher className="bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200" />
           <TutorialHelpButton />
+          <NotificationBell />
         </div>
 
         <div className="p-4 md:p-8 max-w-7xl mx-auto w-full print:p-0 print:w-full print:max-w-none">

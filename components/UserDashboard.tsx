@@ -10,7 +10,7 @@ const getSubmissionYear = (value?: string | null) => {
   const year = parsed.getFullYear();
   return Number.isFinite(year) ? year : null;
 };
-import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword } from '../services/supabaseApi';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
 import { ExportButton } from './ui/ExportButton';
@@ -84,7 +84,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [savingId, setSavingId] = useState(false);
   const [isLocking, setIsLocking] = useState(false);
   const [isSubmittingRambu, setIsSubmittingRambu] = useState(false);
-  const [selectedRambuCandidates, setSelectedRambuCandidates] = useState<string[]>([]); 
+  const [selectedRambuCandidates, setSelectedRambuCandidates] = useState<string[]>([]);
+
+  // Bulk delete state
+  const [selectedForDelete, setSelectedForDelete] = useState<Set<number>>(new Set());
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+
+  // Edit participant state
+  const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, string>>({});
+  const [savingEdit, setSavingEdit] = useState(false); 
 
   const currentSchoolSettings = schools.find(s => s.name === user.schoolName);
   
@@ -379,7 +388,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       if (!item.rowIndex) return;
       const cleanNewId = tempIdValue.trim().toUpperCase();
       if (cleanNewId) {
-          // SAFE STRING: d.id might be numeric or undefined
           const isDuplicate = allData.some(d => new Date(d.date).getFullYear() === selectedYear && String(d.id || '').trim().toUpperCase() === cleanNewId && d.rowIndex !== item.rowIndex);
           if (isDuplicate) { alert(`ID '${cleanNewId}' telah digunakan.`); return; }
       }
@@ -388,6 +396,66 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           const res = await updateParticipantId(scriptUrl, item.rowIndex, cleanNewId, user.schoolCode);
           if (res.status === 'success') { setEditingId(null); onRefresh(); } else alert("Gagal kemaskini: " + res.message);
       } catch (e) { alert("Ralat server."); } finally { setSavingId(false); }
+  };
+
+  // Bulk delete handlers
+  const toggleSelectForDelete = (index: number) => {
+    setSelectedForDelete(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedForDelete.size === filteredData.length) {
+      setSelectedForDelete(new Set());
+    } else {
+      setSelectedForDelete(new Set(filteredData.map((_, i) => i)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedForDelete.size === 0) return;
+    if (!confirm(`Padam ${selectedForDelete.size} rekod yang dipilih?`)) return;
+    setIsDeletingBulk(true);
+    try {
+      const items = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean).map(d => ({ icNumber: d.icNumber, id: d.id, student: d.student }));
+      const res = await bulkDeleteSubmissions(items);
+      if (res.status === 'success') {
+        alert(res.message || 'Rekod berjaya dipadam.');
+        setSelectedForDelete(new Set());
+        onRefresh();
+      } else {
+        alert('Gagal: ' + (res.message || 'Ralat tidak diketahui.'));
+      }
+    } catch (e) { alert('Ralat server.'); } finally { setIsDeletingBulk(false); }
+  };
+
+  // Edit participant handlers
+  const handleEditRow = (item: SubmissionData, index: number) => {
+    setEditingRow(index);
+    setEditFormData({
+      name: item.student || '',
+      gender: item.gender || '',
+      race: item.race || '',
+      membershipId: item.id || '',
+      icNumber: item.icNumber || '',
+      phoneNumber: item.studentPhone || '',
+      role: item.role || 'PESERTA',
+      category: item.category || '',
+      remarks: item.remarks || '',
+    });
+  };
+
+  const handleSaveEdit = async (item: SubmissionData) => {
+    setSavingEdit(true);
+    try {
+      const identifier = { icNumber: item.icNumber, membershipId: item.id, name: item.student };
+      const res = await updateParticipantFields(identifier, editFormData);
+      if (res.status === 'success') { setEditingRow(null); onRefresh(); }
+      else alert('Gagal: ' + (res.message || 'Ralat.'));
+    } catch (e) { alert('Ralat server.'); } finally { setSavingEdit(false); }
   };
 
   const handleFinalSubmit = async () => {
@@ -1071,31 +1139,91 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </div>
                     
                     <div className="overflow-x-auto">
+                        {/* Bulk delete toolbar */}
+                        {selectedForDelete.size > 0 && (
+                          <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between">
+                            <span className="text-xs font-bold text-red-700">{selectedForDelete.size} rekod dipilih</span>
+                            <button onClick={handleBulkDelete} disabled={isDeletingBulk} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-700 disabled:opacity-50">
+                              {isDeletingBulk ? <LoadingSpinner size="sm" color="border-white" /> : <Trash2 size={12} />} Padam Dipilih
+                            </button>
+                          </div>
+                        )}
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold">
                                 <tr>
-                                    <th className="px-6 py-3">Nama</th>
-                                    <th className="px-6 py-3">KP / Lencana</th>
-                                    <th className="px-6 py-3">Kaum</th>
-                                    <th className="px-6 py-3">No. Keahlian</th>
-                                    <th className="px-6 py-3">Peranan</th>
-                                    <th className="px-6 py-3">Kategori</th>
-                                    <th className="px-6 py-3 text-right">Tindakan</th>
+                                    <th className="px-3 py-3 w-8">
+                                      <input type="checkbox" checked={filteredData.length > 0 && selectedForDelete.size === filteredData.length} onChange={toggleSelectAll} className="rounded" />
+                                    </th>
+                                    <th className="px-4 py-3">Nama</th>
+                                    <th className="px-4 py-3">KP / Lencana</th>
+                                    <th className="px-4 py-3">Kaum</th>
+                                    <th className="px-4 py-3">No. Keahlian</th>
+                                    <th className="px-4 py-3">Peranan</th>
+                                    <th className="px-4 py-3">Kategori</th>
+                                    <th className="px-4 py-3 text-right">Tindakan</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {filteredData.map((item, i) => {
                                     const isLocked = !canModifyRecord(item);
                                     const isMigrated = item.remarks && typeof item.remarks === 'string' && item.remarks.includes('MIGRASI');
-                                    const isRambu = item.badge === 'Anugerah Rambu';
+                                    const isEditing = editingRow === i;
+                                    
+                                    if (isEditing) {
+                                      return (
+                                        <tr key={i} className="bg-blue-50">
+                                          <td className="px-3 py-2"></td>
+                                          <td className="px-4 py-2"><input className="w-full p-1 border rounded text-xs uppercase" value={editFormData.name} onChange={e => setEditFormData(p => ({...p, name: e.target.value}))} /></td>
+                                          <td className="px-4 py-2"><input className="w-full p-1 border rounded text-xs font-mono" value={editFormData.icNumber} onChange={e => setEditFormData(p => ({...p, icNumber: e.target.value}))} /></td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.race} onChange={e => setEditFormData(p => ({...p, race: e.target.value}))}>
+                                              <option value="">-</option>
+                                              <option value="MELAYU">Melayu</option>
+                                              <option value="CINA">Cina</option>
+                                              <option value="INDIA">India</option>
+                                              <option value="LAIN-LAIN">Lain-lain</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2"><input className="w-full p-1 border rounded text-xs uppercase font-mono" value={editFormData.membershipId} onChange={e => setEditFormData(p => ({...p, membershipId: e.target.value}))} /></td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.role} onChange={e => setEditFormData(p => ({...p, role: e.target.value}))}>
+                                              <option value="PESERTA">Peserta</option>
+                                              <option value="PEMIMPIN">Pemimpin</option>
+                                              <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                                              <option value="PENGUJI">Penguji</option>
+                                              <option value="PENERIMA RAMBU">Penerima Rambu</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.category} onChange={e => setEditFormData(p => ({...p, category: e.target.value}))}>
+                                              <option value="">-</option>
+                                              <option value="Perdana">Perdana</option>
+                                              <option value="Udara">Udara</option>
+                                              <option value="Laut">Laut</option>
+                                              <option value="PPKI">PPKI</option>
+                                              <option value="PPKI Udara">PPKI Udara</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                              <button onClick={() => handleSaveEdit(item)} disabled={savingEdit} className="bg-green-600 text-white p-1.5 rounded text-xs"><Save size={12}/></button>
+                                              <button onClick={() => setEditingRow(null)} className="bg-gray-300 text-gray-700 p-1.5 rounded text-xs"><X size={12}/></button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    }
                                     
                                     return (
-                                    <tr key={i} className={`hover:bg-slate-50 transition ${isLocked ? 'bg-slate-50/50' : ''}`}>
-                                        <td className="px-6 py-3">
+                                    <tr key={i} className={`hover:bg-slate-50 transition ${isLocked ? 'bg-slate-50/50' : ''} ${selectedForDelete.has(i) ? 'bg-red-50' : ''}`}>
+                                        <td className="px-3 py-3">
+                                          <input type="checkbox" checked={selectedForDelete.has(i)} onChange={() => toggleSelectForDelete(i)} disabled={isLocked} className="rounded" />
+                                        </td>
+                                        <td className="px-4 py-3">
                                             <div className="font-bold text-slate-900 uppercase text-xs sm:text-sm">{item.student}</div>
                                             <div className="text-[10px] text-slate-500">{item.gender}</div>
                                         </td>
-                                        <td className="px-6 py-3">
+                                        <td className="px-4 py-3">
                                             <div className="font-mono text-xs text-slate-700">{item.icNumber || '-'}</div>
                                             <div className="flex items-center gap-1 mt-1">
                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.badge.includes('Emas') ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-200 text-gray-700'}`}>{item.badge}</span>
@@ -1103,8 +1231,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                                 {isMigrated && <span className="text-[9px] bg-blue-50 text-blue-600 px-1 border border-blue-100 rounded">MIGRASI</span>}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-3 text-xs text-slate-600">{item.race || '-'}</td>
-                                        <td className="px-6 py-3">
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.race || '-'}</td>
+                                        <td className="px-4 py-3">
                                             {editingId === item.rowIndex ? (
                                                 <div className="flex items-center gap-1">
                                                     <input autoFocus className="w-24 p-1 border rounded uppercase text-xs" value={tempIdValue} onChange={(e) => setTempIdValue(e.target.value)} placeholder="ID"/>
@@ -1114,18 +1242,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                             ) : (
                                                 <div className="flex items-center gap-2 group">
                                                     <span className={`font-mono font-bold text-xs ${item.id ? 'text-slate-800' : 'text-red-400 italic'}`}>{item.id || 'TIADA ID'}</span>
-                                                    {canModifyRecord(item) && <button onClick={() => handleEditClick(item)} className="opacity-0 group-hover:opacity-100 text-blue-600"><Edit2 size={12}/></button>}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-3 text-xs font-semibold uppercase">{item.role || 'Peserta'}</td>
-                                        <td className="px-6 py-3 text-xs text-slate-600">{item.category || '-'}</td>
-                                        <td className="px-6 py-3 text-right">
-                                            <button onClick={() => onDelete(item)} disabled={!canModifyRecord(item) || isMigrated} className={`p-1.5 rounded ${canModifyRecord(item) && !isMigrated ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}><Trash2 size={16} /></button>
+                                        <td className="px-4 py-3 text-xs font-semibold uppercase">{item.role || 'Peserta'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.category || '-'}</td>
+                                        <td className="px-4 py-3 text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                              {canModifyRecord(item) && !isMigrated && (
+                                                <button onClick={() => handleEditRow(item, i)} className="p-1.5 rounded text-blue-600 hover:bg-blue-50" title="Edit"><Edit2 size={14} /></button>
+                                              )}
+                                              <button onClick={() => onDelete(item)} disabled={!canModifyRecord(item) || isMigrated} className={`p-1.5 rounded ${canModifyRecord(item) && !isMigrated ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}><Trash2 size={14} /></button>
+                                            </div>
                                         </td>
                                     </tr>
                                 )})}
-                                {filteredData.length === 0 && <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
+                                {filteredData.length === 0 && <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
                             </tbody>
                         </table>
                     </div>

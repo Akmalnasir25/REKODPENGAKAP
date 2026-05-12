@@ -667,3 +667,53 @@ export const getAttendanceVerifications = async (year?: number, daerahCode?: str
     return [];
   }
 };
+
+export const bulkDeleteSubmissions = async (items: Array<{ icNumber?: string; id?: string; student: string }>): Promise<ApiResponse> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
+
+    let deleted = 0;
+    for (const item of items) {
+      let query = supabase.from('submission_people').update({ is_deleted: true });
+      if (item.icNumber) query = query.eq('ic_number', item.icNumber);
+      else if (item.id) query = query.eq('membership_id', normalize(item.id));
+      else query = query.eq('name', normalize(item.student));
+      const { error } = await query;
+      if (!error) deleted++;
+    }
+    return { status: 'success', message: `${deleted} rekod berjaya dipadam.` };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal padam rekod.' };
+  }
+};
+
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; remarks?: string }): Promise<ApiResponse> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
+
+    const updateData: Record<string, any> = {};
+    if (updates.name !== undefined) updateData.name = normalize(updates.name);
+    if (updates.gender !== undefined) updateData.gender = updates.gender || null;
+    if (updates.race !== undefined) updateData.race = updates.race || null;
+    if (updates.membershipId !== undefined) updateData.membership_id = normalize(updates.membershipId);
+    if (updates.icNumber !== undefined) updateData.ic_number = updates.icNumber || null;
+    if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber || null;
+    if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
+    if (updates.category !== undefined) updateData.category = updates.category || null;
+    if (updates.remarks !== undefined) updateData.remarks = updates.remarks || null;
+
+    let query = supabase.from('submission_people').update(updateData);
+    if (identifier.icNumber) query = query.eq('ic_number', identifier.icNumber);
+    else if (identifier.membershipId) query = query.eq('membership_id', normalize(identifier.membershipId));
+    else if (identifier.name) query = query.eq('name', normalize(identifier.name));
+    else return { status: 'error', message: 'Tiada identifier untuk kemaskini.' };
+
+    const { error } = await query;
+    if (error) throw error;
+    return { status: 'success', message: 'Rekod berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini rekod.' };
+  }
+};

@@ -288,6 +288,42 @@ export const resetPassword = async (email: string): Promise<AuthResult> => {
 };
 
 // ============================================================
+// REGISTER ADMIN (developer/admin/negeri_admin only)
+// ============================================================
+
+export const registerAdmin = async (input: {
+  email: string;
+  password: string;
+  fullName?: string;
+  role: 'admin' | 'negeri_admin' | 'daerah_admin' | 'developer';
+  negeriCode?: string;
+  daerahCode?: string;
+}): Promise<AuthResult> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      return { status: 'error', message: 'Sila log masuk sebagai admin terlebih dahulu.' };
+    }
+
+    const response = await fetch(`${EDGE_FUNCTION_URL}/register-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    const result = await response.json();
+    return result;
+  } catch (error: any) {
+    return { status: 'error', message: 'Gagal menghubungi server. Sila cuba lagi.' };
+  }
+};
+
+// ============================================================
 // RESET SCHOOL CLAIM (admin only)
 // ============================================================
 

@@ -10,6 +10,7 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, addAdmin } from '../services/api';
+import { registerAdmin } from '../services/supabaseAuth';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface AdminNegeriPanelProps {
@@ -79,24 +80,22 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   };
 
   const handleAddDistrictAdmin = async () => {
-    if (!newDistrictAdminUsername.trim() || !newDistrictAdminPassword.trim() || !newDistrictAdminDaerah) {
-      alert('Sila isi Username, Password dan pilih Daerah.');
+    if (!newDistrictAdminEmail.trim() || !newDistrictAdminPassword.trim() || !newDistrictAdminDaerah) {
+      alert('Sila isi Email, Password dan pilih Daerah.');
       return;
     }
     setSetupLoading(true);
     try {
-      const result = await addAdmin(scriptUrl, {
-        username: newDistrictAdminUsername.trim().toUpperCase(),
+      const result = await registerAdmin({
+        email: newDistrictAdminEmail.trim().toLowerCase(),
         password: newDistrictAdminPassword,
-        role: 'daerah',
+        role: 'daerah_admin',
         negeriCode,
         daerahCode: newDistrictAdminDaerah,
-        fullName: newDistrictAdminFullName,
-        phone: newDistrictAdminPhone,
-        email: newDistrictAdminEmail
+        fullName: newDistrictAdminFullName || newDistrictAdminEmail.trim().toLowerCase(),
       });
       if (result.status === 'success') {
-        alert('Admin Daerah berjaya ditambah.');
+        alert('Admin Daerah berjaya didaftarkan di Supabase.');
         setNewDistrictAdminUsername('');
         setNewDistrictAdminPassword('');
         setNewDistrictAdminDaerah('');
@@ -474,8 +473,8 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Username</label>
-                        <input value={newDistrictAdminUsername} onChange={(e) => setNewDistrictAdminUsername(e.target.value.toUpperCase())} placeholder="cth: ADMIN_PRK_KU" className="w-full border rounded-lg px-3 py-2 text-sm font-mono" />
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email Admin *</label>
+                        <input type="email" value={newDistrictAdminEmail} onChange={(e) => setNewDistrictAdminEmail(e.target.value)} placeholder="admin@example.com" className="w-full border rounded-lg px-3 py-2 text-sm" />
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
@@ -490,8 +489,11 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                         <input value={newDistrictAdminPhone} onChange={(e) => setNewDistrictAdminPhone(e.target.value)} placeholder="No. telefon" className="w-full border rounded-lg px-3 py-2 text-sm" />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
-                        <input type="email" value={newDistrictAdminEmail} onChange={(e) => setNewDistrictAdminEmail(e.target.value)} placeholder="Email" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Penuh (optional)</label>
+                        <input value={newDistrictAdminFullName} onChange={(e) => setNewDistrictAdminFullName(e.target.value)} placeholder="Ahmad bin Ali" className="w-full border rounded-lg px-3 py-2 text-sm" />
+                      </div>
+                      <div className="col-span-2 bg-purple-100 border border-purple-200 rounded-lg p-2 text-xs text-purple-800">
+                        Akaun admin daerah akan dicipta dalam Supabase Auth. Data sistem masih dibaca daripada GAS mengikut daerah yang dipilih.
                       </div>
                     </div>
                     <button onClick={handleAddDistrictAdmin} disabled={setupLoading || filteredDaerah.length === 0} className="mt-4 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:bg-gray-300 flex items-center gap-2">

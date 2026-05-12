@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, Users, Plus, Trash2, RefreshCw, ChevronDown, ChevronUp, Shield, Eye, EyeOff, School } from 'lucide-react';
 import { fetchCloudData, addNegeri, deleteNegeri, addDaerah, deleteDaerah, addAdmin, deleteAdmin, addSchool, deleteSchool } from '../services/api';
+import { registerAdmin } from '../services/supabaseAuth';
 import { Negeri, Daerah, AdminRegional, School as SchoolType } from '../types';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
@@ -178,8 +179,8 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
 
   // Admin Management
   const handleAddAdmin = async () => {
-    if (!newAdminUsername || !newAdminPassword || !newAdminRole) {
-      showMessage('Sila isi Username, Password dan Role', 'error');
+    if (!newAdminEmail || !newAdminPassword || !newAdminRole) {
+      showMessage('Sila isi Email, Password dan Role', 'error');
       return;
     }
     if (newAdminRole === 'negeri' && !newAdminNegeri) {
@@ -193,18 +194,17 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
 
     setLoading(true);
     try {
-      const result = await addAdmin(scriptUrl, {
-        username: newAdminUsername,
+      const result = await registerAdmin({
+        email: newAdminEmail,
         password: newAdminPassword,
-        role: newAdminRole,
+        fullName: newAdminFullName || newAdminEmail,
+        role: newAdminRole === 'negeri' ? 'negeri_admin' : 'daerah_admin',
         negeriCode: newAdminNegeri,
         daerahCode: newAdminRole === 'daerah' ? newAdminDaerah : undefined,
-        fullName: newAdminFullName,
-        phone: newAdminPhone,
-        email: newAdminEmail
       });
+
       if (result.status === 'success') {
-        showMessage('Admin berjaya ditambah!', 'success');
+        showMessage('Admin berjaya didaftarkan di Supabase!', 'success');
         // Reset form
         setNewAdminUsername('');
         setNewAdminPassword('');
@@ -581,13 +581,13 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold mb-1">Username *</label>
+                      <label className="block text-sm font-semibold mb-1">Email Admin *</label>
                       <input
-                        type="text"
-                        value={newAdminUsername}
-                        onChange={(e) => setNewAdminUsername(e.target.value.toUpperCase())}
+                        type="email"
+                        value={newAdminEmail}
+                        onChange={(e) => setNewAdminEmail(e.target.value)}
                         className="w-full px-3 py-2 border rounded-lg"
-                        placeholder="ADMIN_PERAK"
+                        placeholder="admin@example.com"
                       />
                     </div>
                     <div>
@@ -677,15 +677,8 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                         placeholder="0123456789"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-1">Email</label>
-                      <input
-                        type="email"
-                        value={newAdminEmail}
-                        onChange={(e) => setNewAdminEmail(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg"
-                        placeholder="admin@example.com"
-                      />
+                    <div className="md:col-span-2 bg-purple-100 border border-purple-200 rounded-lg p-3 text-sm text-purple-800">
+                      Akaun admin akan dicipta dalam Supabase Auth. Data sistem masih dibaca daripada GAS mengikut role dan negeri/daerah yang dipilih.
                     </div>
                   </div>
                   <button

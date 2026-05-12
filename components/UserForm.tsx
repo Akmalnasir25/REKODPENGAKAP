@@ -316,10 +316,14 @@ export const UserForm: React.FC<UserFormProps> = ({
 
     setSubmitting(true);
     try {
-        await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
-        setSubmitted(true);
-        window.scrollTo(0, 0);
-        setTimeout(refreshData, 1500);
+        const result = await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
+        if (result.status === 'error') {
+            alert("Ralat: " + (result.message || 'Gagal menghantar pendaftaran.'));
+        } else {
+            setSubmitted(true);
+            window.scrollTo(0, 0);
+            setTimeout(refreshData, 1500);
+        }
     } catch (err: any) {
         alert("Ralat: " + err.message);
     } finally {

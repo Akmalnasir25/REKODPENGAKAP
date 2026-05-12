@@ -256,7 +256,8 @@ export const submitRegistration = async (
       ...assistants.map(p => ({ ...p, role: 'PENOLONG PEMIMPIN' })),
       ...examiners.map(p => ({ ...p, role: 'PENGUJI' })),
     ];
-    return await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual') as ApiResponse;
+    const result = await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual');
+    return result as ApiResponse;
   } catch (error: any) {
     console.error('submitRegistration Supabase error:', error);
     return { status: 'error', message: error.message || 'Gagal menyimpan pendaftaran.' };

@@ -3,6 +3,13 @@ import React, { useMemo, useState } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
 import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, Sparkles, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
+
+const normalizeText = (value?: string | null) => String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+const getSubmissionYear = (value?: string | null) => {
+  const parsed = new Date(String(value || ''));
+  const year = parsed.getFullYear();
+  return Number.isFinite(year) ? year : null;
+};
 import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword } from '../services/api';
 import { fetchServerCsrf } from '../services/security';
 import { LoadingSpinner } from './ui/LoadingSpinner';
@@ -123,8 +130,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const availableYears = useMemo(() => {
     const years = new Set<number>();
     allData.forEach(d => {
-      const y = new Date(d.date).getFullYear();
-      if (Number.isFinite(y)) years.add(y);
+      const y = getSubmissionYear(d.date);
+      if (y !== null) years.add(y);
     });
 
     // Ensure current and active registration years are always selectable,
@@ -136,12 +143,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   }, [allData, currentYear]);
   
   const myData = useMemo(() => {
-    return allData.filter(d => 
-        ((d.schoolCode && d.schoolCode === user.schoolCode) || 
-        d.school === user.schoolName) &&
-        new Date(d.date).getFullYear() === selectedYear
-    );
-  }, [allData, user, selectedYear]);
+    const userSchoolCode = normalizeText(user.schoolCode);
+    const userSchoolName = normalizeText(user.schoolName);
+    const settingsSchoolCode = normalizeText(currentSchoolSettings?.schoolCode);
+    const settingsSchoolName = normalizeText(currentSchoolSettings?.name);
+    const validCodes = [userSchoolCode, settingsSchoolCode].filter(Boolean);
+    const validNames = [userSchoolName, settingsSchoolName].filter(Boolean);
+
+    return allData.filter(d => {
+      const rowSchoolCode = normalizeText((d as any).schoolCode || (d as any).school_code || (d as any).kodSekolah);
+      const rowSchoolName = normalizeText(d.school || (d as any).schoolName || (d as any).namaSekolah);
+      const rowYear = getSubmissionYear(d.date || (d as any).year || (d as any).tahun);
+
+      const matchesSchool =
+        (rowSchoolCode && validCodes.includes(rowSchoolCode)) ||
+        (rowSchoolName && validNames.includes(rowSchoolName));
+
+      return matchesSchool && rowYear === selectedYear;
+    });
+  }, [allData, user, selectedYear, currentSchoolSettings]);
 
   // Compute stats breakdown
   const myStats = useMemo(() => {

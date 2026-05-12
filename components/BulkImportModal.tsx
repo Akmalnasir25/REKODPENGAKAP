@@ -15,6 +15,8 @@ type ParsedRecord = {
   gender: string;
   race: string;
   phoneNumber: string;
+  role: BulkRole;
+  category: string;
   remarks: string;
   errors: string[];
   warnings: string[];
@@ -31,7 +33,7 @@ interface BulkImportModalProps {
   onSuccess: () => void;
 }
 
-const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Bangsa', 'No Telefon', 'Catatan'];
+const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Bangsa', 'No Telefon', 'Peranan', 'Kategori', 'Catatan'];
 const normalize = (value: any) => String(value || '').trim();
 const compact = (value: any) => normalize(value).replace(/\s+/g, ' ');
 const normalizeIc = (value: any) => normalize(value).replace(/\s+/g, '');
@@ -39,6 +41,16 @@ const normalizeGender = (value: any) => {
   const raw = normalize(value).toUpperCase();
   if (['L', 'LELAKI', 'MALE'].includes(raw)) return 'Lelaki';
   if (['P', 'PEREMPUAN', 'FEMALE'].includes(raw)) return 'Perempuan';
+  return normalize(value);
+};
+const normalizeRole = (value: any, fallback: BulkRole): BulkRole | string => {
+  const raw = normalize(value).toUpperCase();
+  if (!raw) return fallback;
+  if (['PESERTA', 'MURID', 'AHLI'].includes(raw)) return 'PESERTA';
+  if (['PEMIMPIN', 'LEADER'].includes(raw)) return 'PEMIMPIN';
+  if (['PENOLONG PEMIMPIN', 'PENOLONG', 'ASSISTANT', 'ASSISTANT LEADER'].includes(raw)) return 'PENOLONG PEMIMPIN';
+  if (['PENGUJI', 'EXAMINER'].includes(raw)) return 'PENGUJI';
+  if (['PENERIMA RAMBU', 'RAMBU'].includes(raw)) return 'PENERIMA RAMBU';
   return normalize(value);
 };
 const isValidIc = (value: string) => /^\d{6}-?\d{2}-?\d{4}$/.test(value);
@@ -74,9 +86,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const downloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       requiredHeaders,
-      ['ALI BIN ABU', '120101-08-1234', 'AT1234-26', 'Lelaki', 'Melayu', '0123456789', '']
+      ['ALI BIN ABU', '120101-08-1234', 'AT1234-26', 'Lelaki', 'Melayu', '0123456789', 'PESERTA', 'Perdana', '']
     ]);
-    ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 15 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 15 }, { wch: 20 }, { wch: 14 }, { wch: 30 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'IMPORT');
     XLSX.writeFile(wb, `Template_Import_Pukal_${schoolCode}.xlsx`);
@@ -98,6 +110,8 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const gender = normalizeGender(row['Jantina']);
       const race = compact(row['Bangsa']).toUpperCase();
       const phoneNumber = compact(row['No Telefon']);
+      const role = normalizeRole(row['Peranan'], selectedRole);
+      const category = compact(row['Kategori']) || 'Perdana';
       const remarks = compact(row['Catatan']);
       const errors: string[] = [];
       const warnings: string[] = [];
@@ -111,6 +125,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       if (!gender) errors.push('Jantina wajib diisi.');
       else if (!['Lelaki', 'Perempuan'].includes(gender)) errors.push('Jantina mesti Lelaki atau Perempuan.');
       if (!race) errors.push('Bangsa wajib diisi.');
+      if (!['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'].includes(category)) errors.push('Kategori mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
+      const validRoles: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI', 'PENERIMA RAMBU'];
+      if (!validRoles.includes(role as BulkRole)) errors.push('Peranan tidak sah.');
 
       const icKey = `${icNumber}_${selectedBadge}_${selectedYear}`;
       const idKey = membershipId;
@@ -130,7 +147,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const existsId = existingData.some(d => String(d.id || '').toUpperCase() === membershipId && membershipId);
       if (existsId) warnings.push('No Keahlian / ID sudah wujud dalam data sistem. Sila semak.');
 
-      return { rowNumber: index + 2, student, icNumber, membershipId, gender, race, phoneNumber, remarks, errors, warnings };
+      return { rowNumber: index + 2, student, icNumber, membershipId, gender, race, phoneNumber, role: role as BulkRole, category, remarks, errors, warnings };
     });
 
     setRecords(parsed);
@@ -154,6 +171,8 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           gender: r.gender,
           race: r.race,
           phoneNumber: r.phoneNumber,
+          role: r.role,
+          category: r.category,
           remarks: r.remarks
         }))
       });
@@ -217,9 +236,9 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
               <div className="overflow-x-auto border rounded-lg max-h-[360px]">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 sticky top-0"><tr><th className="p-2">Row</th><th className="p-2">Nama</th><th className="p-2">KP</th><th className="p-2">ID</th><th className="p-2">Jantina</th><th className="p-2">Bangsa</th><th className="p-2">Status</th></tr></thead>
+                  <thead className="bg-slate-100 sticky top-0"><tr><th className="p-2">Row</th><th className="p-2">Nama</th><th className="p-2">KP</th><th className="p-2">ID</th><th className="p-2">Jantina</th><th className="p-2">Bangsa</th><th className="p-2">Peranan</th><th className="p-2">Kategori</th><th className="p-2">Status</th></tr></thead>
                   <tbody>
-                    {records.map(r => <tr key={r.rowNumber} className="border-t"><td className="p-2">{r.rowNumber}</td><td className="p-2 font-bold">{r.student}</td><td className="p-2 font-mono">{r.icNumber}</td><td className="p-2 font-mono">{r.membershipId}</td><td className="p-2">{r.gender}</td><td className="p-2">{r.race}</td><td className="p-2">{r.errors.length ? <span className="text-red-700 font-bold">{r.errors.join(' ')}</span> : r.warnings.length ? <span className="text-amber-700 font-bold">{r.warnings.join(' ')}</span> : <span className="text-green-700 font-bold">OK</span>}</td></tr>)}
+                    {records.map(r => <tr key={r.rowNumber} className="border-t"><td className="p-2">{r.rowNumber}</td><td className="p-2 font-bold">{r.student}</td><td className="p-2 font-mono">{r.icNumber}</td><td className="p-2 font-mono">{r.membershipId}</td><td className="p-2">{r.gender}</td><td className="p-2">{r.race}</td><td className="p-2">{r.role}</td><td className="p-2">{r.category}</td><td className="p-2">{r.errors.length ? <span className="text-red-700 font-bold">{r.errors.join(' ')}</span> : r.warnings.length ? <span className="text-amber-700 font-bold">{r.warnings.join(' ')}</span> : <span className="text-green-700 font-bold">OK</span>}</td></tr>)}
                   </tbody>
                 </table>
               </div>

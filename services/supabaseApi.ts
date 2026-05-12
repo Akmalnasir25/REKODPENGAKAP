@@ -269,7 +269,7 @@ export const bulkSubmitRegistration = async (
     badgeType: string;
     year: number;
     role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
-    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; remarks?: string; }>;
+    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; remarks?: string; }>;
   },
   _csrfToken?: string
 ): Promise<ApiResponse> => {
@@ -292,8 +292,9 @@ export const bulkSubmitRegistration = async (
       gender: r.gender,
       race: r.race,
       phoneNumber: r.phoneNumber || '',
+      category: r.category || 'Perdana',
       remarks: r.remarks || '',
-      role: payload.role,
+      role: r.role || payload.role,
     }));
     return await createSubmissionWithPeople(leaderInfo, people, `${payload.year}-01-01`, 'bulk_import') as ApiResponse;
   } catch (error: any) {

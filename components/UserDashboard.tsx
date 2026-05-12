@@ -354,6 +354,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   }, [allData, user, historyBadgeFilter]);
 
   // Determine if specific record modification is allowed based on granular permissions
+  const approvedBadges = currentSchoolSettings?.approvedBadges || [];
   const canModifyRecord = (item: SubmissionData) => {
       if (!isRegistrationOpen) return false;
       
@@ -362,6 +363,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       const lockKey = getLockKey(item.badge, itemYear);
       if (lockedBadges.includes(lockKey)) return false;
+      
+      // If badge+year is approved, user cannot modify
+      if (approvedBadges.includes(lockKey)) return false;
       
       // Removed Role/Permission checks here to allow editing/deleting existing (imported) records
       // even if the "Add New" permission is revoked.

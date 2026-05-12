@@ -698,6 +698,83 @@ export const bulkDeleteSubmissions = async (items: Array<{ icNumber?: string; id
   }
 };
 
+export const reopenSchoolBadge = async (_url: string, schoolCodeOrName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
+  try {
+    const parts = badgeNameWithYear.split('_');
+    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
+    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+
+    let school = await getSchoolByCodeOrName(schoolCodeOrName);
+    if (!school) school = await getSchoolByCodeOrName(undefined, schoolCodeOrName);
+    if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
+
+    const badge = await getBadgeByName(badgeName);
+    if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
+
+    const { error } = await supabase.from('school_badge_status').upsert(
+      { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
+      { onConflict: 'school_id,badge_id,year' }
+    );
+    if (error) throw error;
+    return { status: 'success' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal reopen badge.' };
+  }
+};
+
+export const getSubmittedSchools = async (daerahCode?: string, year?: number): Promise<any[]> => {
+  try {
+    const targetYear = year || currentYear();
+    const { data, error } = await supabase
+      .from('school_badge_status')
+      .select('*, school:school_id(id, name, school_code, daerah:daerah_id(code)), badge:badge_id(name)')
+      .eq('status', 'submitted')
+      .eq('year', targetYear)
+      .order('submitted_at', { ascending: false });
+    if (error) throw error;
+    let results = data || [];
+    if (daerahCode) {
+      results = results.filter((r: any) => r.school?.daerah?.code === daerahCode);
+    }
+    return results;
+  } catch (error: any) {
+    console.error('getSubmittedSchools error:', error);
+    return [];
+  }
+};
+
+export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, lock: boolean, _csrfToken?: string): Promise<ApiResponse> => {
+  try {
+    const badge = await getBadgeByName(badgeName);
+    if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
+
+    const { data: activeSchools, error: schoolsErr } = await supabase.from('schools').select('id').eq('is_active', true);
+    if (schoolsErr) throw schoolsErr;
+
+    if (lock) {
+      const rows = (activeSchools || []).map((s: any) => ({
+        school_id: s.id,
+        badge_id: badge.id,
+        year: currentYear(),
+        status: 'locked',
+      }));
+      const { error } = await supabase.from('school_badge_status').upsert(rows, { onConflict: 'school_id,badge_id,year' });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from('school_badge_status')
+        .delete()
+        .eq('badge_id', badge.id)
+        .eq('year', currentYear())
+        .eq('status', 'locked');
+      if (error) throw error;
+    }
+    return { status: 'success', message: `Badge '${badgeName}' berjaya ${lock ? 'dikunci' : 'dibuka'} untuk semua sekolah.` };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal batch lock/unlock badge.' };
+  }
+};
+
 export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();

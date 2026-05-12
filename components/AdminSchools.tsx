@@ -3,12 +3,13 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge } from '../services/supabaseApi';
+import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, batchLockBadgeAllSchools } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
-import { School } from '../types';
+import { School, Badge } from '../types';
 
 interface AdminSchoolsProps {
   schools: School[];
+  badges?: Badge[];
   scriptUrl: string;
   negeriCode?: string;
   daerahCode?: string;
@@ -16,11 +17,12 @@ interface AdminSchoolsProps {
   enableResetClaim?: boolean;
 }
 
-export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], scriptUrl, negeriCode, daerahCode, onRefresh, enableResetClaim = false }) => {
+export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges = [], scriptUrl, negeriCode, daerahCode, onRefresh, enableResetClaim = false }) => {
   const [newSchoolName, setNewSchoolName] = useState('');
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<{name: string, type: string} | null>(null);
   const [batchToggling, setBatchToggling] = useState<string | null>(null);
+  const [badgeLocking, setBadgeLocking] = useState<string | null>(null);
   const [unlockingBadge, setUnlockingBadge] = useState<string | null>(null); 
   const [approvingBadge, setApprovingBadge] = useState<string | null>(null); 
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
@@ -177,6 +179,26 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], script
       }
   };
 
+  const handleBadgeLock = async (badgeName: string, lock: boolean) => {
+    const actionText = lock ? 'MENGUNCI' : 'MEMBUKA';
+    if (!confirm(`TINDAKAN PUKAL:\n\nAdakah anda pasti mahu ${actionText} program '${badgeName}' untuk SEMUA sekolah?`)) return;
+    
+    setBadgeLocking(badgeName);
+    try {
+      const res = await batchLockBadgeAllSchools(scriptUrl, badgeName, lock);
+      if (res.status === 'success') {
+        alert(res.message || `Berjaya ${lock ? 'dikunci' : 'dibuka'}.`);
+        onRefresh();
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan.');
+    } finally {
+      setBadgeLocking(null);
+    }
+  };
+
   const handleApproveBadge = async (schoolName: string, badgeName: string) => {
     const displayBadge = badgeName.includes('_') ? `${badgeName.split('_')[0]} (${badgeName.split('_')[1]})` : badgeName;
     if(!confirm(`Terima pendaftaran '${displayBadge}' untuk ${schoolName}?\n\nData ini akan dimasukkan ke dalam statistik rasmi.`)) return;
@@ -324,6 +346,44 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], script
               />
           </div>
       </div>
+
+      {/* PER-BADGE BATCH LOCK PANEL */}
+      {badges.length > 0 && (
+        <div className="mb-6 bg-amber-50 p-4 rounded-xl border border-amber-200">
+          <div className="flex items-center gap-2 mb-3">
+            <Lock size={18} className="text-amber-600"/>
+            <span className="text-sm font-bold text-amber-800 uppercase">Kawalan Pukal Mengikut Program</span>
+          </div>
+          <p className="text-xs text-amber-600 mb-3">Kunci/buka program untuk SEMUA sekolah sekaligus. Jika dikunci, sekolah tidak boleh menghantar pendaftaran bagi program tersebut.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {badges.map(badge => {
+              const isLocked = schools.length > 0 && schools.every(s => s.lockedBadges?.includes(badge.name));
+              const isLoading = badgeLocking === badge.name;
+              return (
+                <div key={badge.name} className={`flex items-center justify-between p-3 rounded-lg border transition ${isLocked ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200'}`}>
+                  <div className="flex items-center gap-2">
+                    <Medal size={14} className={isLocked ? 'text-red-500' : 'text-amber-600'} />
+                    <span className="text-xs font-bold text-slate-700">{badge.name}</span>
+                  </div>
+                  <button
+                    onClick={() => handleBadgeLock(badge.name, !isLocked)}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold transition border ${
+                      isLocked 
+                        ? 'bg-red-100 text-red-700 border-red-300 hover:bg-green-100 hover:text-green-700 hover:border-green-300' 
+                        : 'bg-green-100 text-green-700 border-green-300 hover:bg-red-100 hover:text-red-700 hover:border-red-300'
+                    }`}
+                    title={isLocked ? 'Klik untuk buka semula' : 'Klik untuk kunci'}
+                  >
+                    {isLoading ? <LoadingSpinner size="sm" /> : (isLocked ? <Lock size={12} /> : <ToggleRight size={12} />)}
+                    {isLocked ? 'DIKUNCI' : 'DIBUKA'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="max-h-[600px] overflow-y-auto border rounded-lg bg-gray-50 p-2">
         {schools.map((s, i) => {

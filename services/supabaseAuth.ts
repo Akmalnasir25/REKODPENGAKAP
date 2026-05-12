@@ -50,7 +50,6 @@ export const registerSchoolUser = async (input: RegisterSchoolInput): Promise<Au
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || ''}`,
       },
       body: JSON.stringify(input),
     });

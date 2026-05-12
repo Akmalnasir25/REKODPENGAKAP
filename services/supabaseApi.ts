@@ -181,6 +181,14 @@ const createSubmissionWithPeople = async (
   const school = await getSchoolByCodeOrName(leaderInfo.schoolCode, leaderInfo.schoolName);
   if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai dalam Supabase.' };
 
+  // Check if user's profile school_id matches the school being submitted to
+  const { data: profile } = await supabase.from('profiles').select('school_id').eq('id', session.user.id).maybeSingle();
+  if (profile && profile.school_id !== school.id) {
+    console.warn('Profile school_id mismatch:', { profileSchoolId: profile.school_id, submittingToSchoolId: school.id });
+    // Auto-fix: update profile school_id to match
+    await supabase.from('profiles').update({ school_id: school.id }).eq('id', session.user.id);
+  }
+
   const badge = await getBadgeByName(leaderInfo.badgeType);
   const submittedAt = toDateOnly(customDate);
   const year = new Date(submittedAt).getFullYear();
@@ -230,13 +238,15 @@ const createSubmissionWithPeople = async (
     updated_by: user?.id || null,
   }, { onConflict: 'school_id' });
 
+  // Create status row only if it does not already exist.
+  // Do not update existing row here because school_user is not allowed to update school_badge_status by RLS.
   await supabase.from('school_badge_status').upsert({
     school_id: school.id,
     badge_id: badge.id,
     year,
     status: 'submitted',
     submitted_at: submittedAt,
-  }, { onConflict: 'school_id,badge_id,year' });
+  }, { onConflict: 'school_id,badge_id,year', ignoreDuplicates: true });
 
   return { status: 'success', message: 'Pendaftaran berjaya disimpan ke Supabase.' };
 };

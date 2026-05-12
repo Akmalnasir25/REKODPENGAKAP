@@ -1,9 +1,10 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Lock, UserPlus, LogIn, AlertCircle, Eye, EyeOff, Key, RefreshCw, HelpCircle, ArrowLeft, User, School as SchoolIcon, Code, Shield } from 'lucide-react';
+import { Lock, UserPlus, LogIn, AlertCircle, Eye, EyeOff, Key, RefreshCw, HelpCircle, ArrowLeft, User, School as SchoolIcon, Code, Shield, Mail } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { loginUser, registerUser, resetPassword, validatePassword } from '../services/api';
+import { validatePassword } from '../services/api';
+import { loginUser as loginUserSupabase, registerSchoolUser, resetPassword as resetPasswordSupabase, fetchSchoolsForRegistration } from '../services/supabaseAuth';
 import { UserSession, School, Negeri, Daerah } from '../types';
 import { APP_VERSION, LOGO_URL } from '../constants';
 import { checkLoginAttempts, recordLoginAttempt, fetchServerCsrf } from '../services/security';
@@ -42,6 +43,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   // Form State
   const [schoolName, setSchoolName] = useState('');
   const [schoolCode, setSchoolCode] = useState(''); // Also used as Admin Username
+  const [email, setEmail] = useState('');
+  const [supabaseSchools, setSupabaseSchools] = useState<Array<{ id: string; name: string; school_code: string; is_claimed: boolean }>>([]);
   const [selectedNegeri, setSelectedNegeri] = useState('');
   const [selectedDaerah, setSelectedDaerah] = useState('');
   
@@ -62,9 +65,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       }
   }, [isPreviewMode, authMode, loginType]);
 
+  useEffect(() => {
+      if (authMode !== 'register') return;
+      fetchSchoolsForRegistration()
+          .then((data) => setSupabaseSchools(data as Array<{ id: string; name: string; school_code: string; is_claimed: boolean }>))
+          .catch(() => setSupabaseSchools([]));
+  }, [authMode]);
+
   const resetForm = () => {
       setSchoolName('');
       setSchoolCode('');
+      setEmail('');
       setSelectedNegeri('');
       setSelectedDaerah('');
       setPassword('');
@@ -82,7 +93,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     e.preventDefault();
     setError('');
     
-    if (!scriptUrl && loginType === 'user') {
+    if (!scriptUrl && loginType !== 'user') {
         setError('URL Database belum ditetapkan. Sila hubungi Admin.');
         return;
     }
@@ -166,9 +177,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 return;
             }
 
-            // USER LOGIN logic
-            if (!schoolCode || (!isPreviewMode && !password)) { 
-                setError('Sila isikan Kod Sekolah dan Kata Laluan.'); 
+            // USER LOGIN via Supabase
+            if (!email || !password) { 
+                setError('Sila isikan Email dan Kata Laluan.'); 
                 setLoading(false); 
                 return; 
             }
@@ -180,26 +191,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 return;
             }
 
-            // obtain server-issued CSRF token
-            const serverToken = await fetchServerCsrf(scriptUrl);
-            if (!serverToken) { setError('Gagal mendapatkan token CSRF daripada server. Sila cuba lagi.'); setLoading(false); return; }
-            const result = await loginUser(scriptUrl, { schoolCode, password: loginPassword, csrfToken: serverToken });
+            const result = await loginUserSupabase({ email, password });
             if (result.status === 'success' && result.user) {
+                if (!result.user.schoolName || !result.user.schoolCode) {
+                    recordLoginAttempt(false);
+                    setError('Akaun berjaya log masuk tetapi profil sekolah belum lengkap. Sila hubungi admin.');
+                    return;
+                }
                 recordLoginAttempt(true);
-                onLoginSuccess(result.user);
+                onLoginSuccess({
+                    schoolName: result.user.schoolName,
+                    schoolCode: result.user.schoolCode,
+                    isLoggedIn: true,
+                });
             } else {
                 recordLoginAttempt(false);
-                let errorMessage = result.message || 'Log masuk gagal.';
-                if (errorMessage === 'Salah info.' || errorMessage === 'Salah info') {
-                    errorMessage = 'Kod sekolah dan kata laluan tidak sepadan.';
-                }
-                setError(errorMessage);
+                setError(result.message || 'Log masuk gagal.');
             }
         } else if (authMode === 'register') {
-            // REGISTER logic
+            // REGISTER via Supabase
             if (!schoolName) { setError('Sila pilih nama sekolah.'); setLoading(false); return; }
             if (!schoolCode) { setError('Sila masukkan Kod Sekolah.'); setLoading(false); return; }
-            if (!secretKey) { setError('Sila cipta Kata Kunci Keselamatan.'); setLoading(false); return; }
+            if (!email) { setError('Sila masukkan Email.'); setLoading(false); return; }
 
             // Check if user access is disabled
             if (!userAccessEnabled) {
@@ -222,50 +235,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 return;
             }
 
-            // obtain server-issued CSRF token
-            const regToken = await fetchServerCsrf(scriptUrl);
-            if (!regToken) { setError('Gagal dapatkan token CSRF. Sila cuba lagi.'); setLoading(false); return; }
-
-            const result = await registerUser(scriptUrl, { 
-                schoolName, 
+            const result = await registerSchoolUser({ 
+                schoolId: schoolName, 
                 schoolCode, 
-                password, 
-                secretKey 
-            }, regToken);
+                email,
+                password,
+            });
 
             if (result.status === 'success') {
-                alert('Pendaftaran berjaya! Sila log masuk.');
+                alert('Pendaftaran berjaya! Sila log masuk menggunakan email dan kata laluan.');
                 switchMode('login');
             } else {
                 setError(result.message || 'Pendaftaran gagal.');
             }
         } else if (authMode === 'forgot_password') {
-            // RESET PASSWORD logic
-            if (!schoolCode) { setError('Sila masukkan Kod Sekolah.'); setLoading(false); return; }
-            if (!secretKey) { setError('Sila masukkan Kata Kunci Keselamatan anda.'); setLoading(false); return; }
-            if (!password) { setError('Sila masukkan kata laluan baharu.'); setLoading(false); return; }
-            
-            if (password !== confirmPassword) {
-                setError('Kata laluan baharu dan pengesahan tidak sama.');
-                setLoading(false);
-                return;
-            }
+            // RESET PASSWORD via Supabase email
+            if (!email) { setError('Sila masukkan Email.'); setLoading(false); return; }
 
-            // obtain CSRF token for reset
-            const resetToken = await fetchServerCsrf(scriptUrl);
-            if (!resetToken) { setError('Gagal dapatkan token CSRF. Sila cuba lagi.'); setLoading(false); return; }
-
-            const result = await resetPassword(scriptUrl, {
-                schoolCode,
-                secretKey,
-                newPassword: password
-            }, resetToken);
+            const result = await resetPasswordSupabase(email);
 
             if (result.status === 'success') {
-                alert('Kata laluan berjaya ditukar! Sila log masuk dengan kata laluan baharu.');
+                alert('Link reset kata laluan telah dihantar ke email anda.');
                 switchMode('login');
             } else {
-                setError(result.message || 'Gagal menukar kata laluan.');
+                setError(result.message || 'Gagal menghantar email reset.');
             }
         }
     } catch (err) {
@@ -425,7 +418,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                                         setSelectedDaerah(''); // Reset daerah when negeri changes
                                         setSchoolName(''); // Reset school when negeri changes
                                     }}
-                                    required
                                 >
                                     <option value="">-- Pilih Negeri --</option>
                                     {negeriList.map((n, i) => <option key={i} value={n.code}>{n.name}</option>)}
@@ -438,14 +430,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                             <div className="relative">
                                 <SchoolIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <select 
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
                                     value={selectedDaerah}
                                     onChange={(e) => {
                                         setSelectedDaerah(e.target.value);
-                                        setSchoolName(''); // Reset school when daerah changes
                                     }}
-                                    disabled={!selectedNegeri}
-                                    required
                                 >
                                     <option value="">-- Pilih Daerah --</option>
                                     {daerahList
@@ -460,25 +449,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                             <div className="relative">
                                 <SchoolIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <select 
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
                                     value={schoolName}
                                     onChange={(e) => setSchoolName(e.target.value)}
-                                    disabled={!selectedDaerah}
                                     required
                                 >
                                     <option value="">-- Pilih Sekolah --</option>
-                                    {schools
-                                        .filter(s => {
-                                            // Filter schools: must match both negeriCode AND daerahCode
-                                            if (!selectedNegeri || !selectedDaerah) return false;
-                                            return s.negeriCode === selectedNegeri && s.daerahCode === selectedDaerah;
-                                        })
-                                        .map((s, i) => <option key={i} value={s.name}>{s.name}</option>)}
+                                    {supabaseSchools
+                                        .map((s) => <option key={s.id} value={s.id} disabled={s.is_claimed}>{s.name}{s.is_claimed ? ' (Sudah didaftarkan)' : ''}</option>)}
                                 </select>
                             </div>
-                            {selectedDaerah && schools.filter(s => s.negeriCode === selectedNegeri && s.daerahCode === selectedDaerah).length === 0 && (
+                            {supabaseSchools.length === 0 && (
                                 <p className="text-amber-600 text-xs mt-1">
-                                    ⚠️ Tiada sekolah bagi daerah ini. Sila hubungi Admin Daerah untuk tambah sekolah.
+                                    Tiada senarai sekolah daripada Supabase. Sila semak data schools atau RLS policy.
                                 </p>
                             )}
                         </div>
@@ -521,27 +504,50 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         {loginType === 'developer' ? 'Nama Pengguna Developer' : 
                          loginType === 'admin_negeri' ? 'Nama Pengguna Admin Negeri' :
                          loginType === 'admin_daerah' ? 'Nama Pengguna Admin Daerah' :
-                         'Kod Sekolah'}
+                         authMode === 'register' ? 'Kod Sekolah' : 'Email'}
                     </label>
                     <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input 
-                            type="text" 
-                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white font-mono placeholder:font-sans uppercase"
+                            type={loginType === 'user' && authMode !== 'register' ? 'email' : 'text'} 
+                            className={`w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white placeholder:font-sans ${loginType === 'user' && authMode !== 'forgot_password' ? 'font-normal' : 'font-mono uppercase'}`}
                             placeholder={
                                 loginType === 'developer' ? 'DEVELOPER' :
                                 loginType === 'admin_negeri' ? 'ADMIN_PRK' :
                                 loginType === 'admin_daerah' ? 'ADMIN_PRK_KU' :
-                                "KOD SEKOLAH (CTH: ABA1234)"
+                                authMode === 'register' ? 'KOD SEKOLAH (CTH: ABA1234)' : 'email@sekolah.edu.my'
                             }
-                            value={schoolCode}
-                            onChange={(e) => setSchoolCode(e.target.value.toUpperCase())}
+                            value={loginType === 'user' && authMode !== 'register' ? email : schoolCode}
+                            onChange={(e) => {
+                                if (loginType === 'user' && authMode !== 'register') {
+                                    setEmail(e.target.value);
+                                } else {
+                                    setSchoolCode(e.target.value.toUpperCase());
+                                }
+                            }}
                             required
                         />
                     </div>
                 </div>
 
-                {authMode === 'register' || authMode === 'forgot_password' ? (
+                {authMode === 'register' && loginType === 'user' && (
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+                        <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input
+                                type="email"
+                                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
+                                placeholder="email@sekolah.edu.my"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {false && authMode === 'register' ? (
                      <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                             Kata Kunci Keselamatan 

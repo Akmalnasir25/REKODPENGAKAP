@@ -626,3 +626,41 @@ export const loginAdminRegional = async (_url: string, _username: string, _passw
 export const loginDeveloper = async (_url: string, _username: string, _password: string): Promise<ApiResponse> => {
   return { status: 'error', message: 'Guna loginAdminSupabase dari supabaseAuth.ts dengan role developer.' };
 };
+
+export const recordAttendanceVerification = async (record: { schoolCode: string; badge: string; year: number; participantCount: number }): Promise<ApiResponse> => {
+  try {
+    const school = await getSchoolByCodeOrName(record.schoolCode);
+    if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
+    const badge = await getBadgeByName(record.badge);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('attendance_verifications').insert({
+      school_id: school.id,
+      badge_id: badge.id,
+      year: record.year,
+      verified_by: user?.id || null,
+      participant_count: record.participantCount,
+      source: 'qr_school_scan',
+    });
+    if (error) throw error;
+    return { status: 'success', message: 'Kehadiran berjaya direkodkan.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal rekod kehadiran.' };
+  }
+};
+
+export const getAttendanceVerifications = async (year?: number, daerahCode?: string): Promise<any[]> => {
+  try {
+    let query = supabase.from('attendance_verifications').select('*, school:school_id(name, school_code, daerah:daerah_id(code)), badge:badge_id(name)').order('verified_at', { ascending: false });
+    if (year) query = query.eq('year', year);
+    const { data, error } = await query;
+    if (error) throw error;
+    let results = data || [];
+    if (daerahCode) {
+      results = results.filter((r: any) => r.school?.daerah?.code === daerahCode);
+    }
+    return results;
+  } catch (error: any) {
+    console.error('getAttendanceVerifications error:', error);
+    return [];
+  }
+};

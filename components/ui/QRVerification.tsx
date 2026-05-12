@@ -62,6 +62,7 @@ interface AttendanceRecord {
   schoolCode: string;
   schoolName: string;
   badge: string;
+  year: number;
   verifiedAt: number;
   verifiedBy: string;
   totalParticipants: number;
@@ -304,6 +305,7 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
       schoolCode: scannedData.schoolCode,
       schoolName: scannedData.schoolName,
       badge: scannedData.badge,
+      year: scannedData.year,
       verifiedAt: Date.now(),
       verifiedBy: verifierName,
       totalParticipants: scannedData.totalParticipants,

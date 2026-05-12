@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3 } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -9,7 +9,8 @@ import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword } from '../services/supabaseApi';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification } from '../services/supabaseApi';
+import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface AdminDaerahPanelProps {
@@ -31,7 +32,7 @@ interface AdminDaerahPanelProps {
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
   daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'history' | 'audit'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'history' | 'audit' | 'attendance'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -220,6 +221,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'analytics', label: 'Analitik', icon: BarChart3, allowed: true },
     { id: 'schools', label: 'Urus Sekolah', icon: School, allowed: true },
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
+    { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
   ];
@@ -387,6 +389,72 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
             {tab === 'analytics' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
                   <AnalyticsDashboard allData={filteredData} badges={badges} />
+              </div>
+            )}
+
+            {tab === 'attendance' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-white rounded-xl shadow p-6">
+                  <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                    <ScanLine size={20} className="text-green-600" /> Pengesahan Kehadiran QR
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6">
+                    Imbas QR code sekolah untuk mengesahkan kehadiran peserta. Selepas scan, jumlah peserta berdaftar akan dipaparkan.
+                  </p>
+                  <QRAttendanceScanner 
+                    verifierName={adminSession.fullName || adminSession.username}
+                    onVerified={async (record) => {
+                      await recordAttendanceVerification({
+                        schoolCode: record.schoolCode,
+                        badge: record.badge,
+                        year: record.year,
+                        participantCount: record.totalParticipants,
+                      });
+                    }}
+                  />
+
+                  {/* Summary of today's attendance from filtered data */}
+                  <div className="mt-8 border-t pt-6">
+                    <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <CheckCircle size={16} className="text-green-500" /> Ringkasan Kehadiran Hari Ini
+                    </h3>
+                    {(() => {
+                      const todayStr = new Date().toDateString();
+                      const stored = JSON.parse(localStorage.getItem('ATTENDANCE_RECORDS') || '[]');
+                      const todayRecords = stored.filter((r: any) => new Date(r.verifiedAt).toDateString() === todayStr);
+                      if (todayRecords.length === 0) return <p className="text-xs text-slate-400 italic">Belum ada kehadiran disahkan hari ini.</p>;
+                      const totalSchools = todayRecords.length;
+                      const totalParticipants = todayRecords.reduce((sum: number, r: any) => sum + (r.totalParticipants || 0), 0);
+                      return (
+                        <div>
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="bg-green-50 rounded-lg p-4 text-center">
+                              <p className="text-2xl font-bold text-green-700">{totalSchools}</p>
+                              <p className="text-xs text-green-600 font-medium">Sekolah Hadir</p>
+                            </div>
+                            <div className="bg-blue-50 rounded-lg p-4 text-center">
+                              <p className="text-2xl font-bold text-blue-700">{totalParticipants}</p>
+                              <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
+                            </div>
+                          </div>
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {todayRecords.map((r: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2">
+                                <div>
+                                  <p className="text-xs font-bold text-slate-800">{r.schoolName}</p>
+                                  <p className="text-[10px] text-slate-500">{r.badge} | {r.totalParticipants} peserta</p>
+                                </div>
+                                <span className="text-[10px] text-green-600 font-mono">
+                                  {new Date(r.verifiedAt).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
               </div>
             )}
         </div>

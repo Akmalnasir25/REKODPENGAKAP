@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "pendaftaranppmkiu"
-  }
+  },
+  "targets": {
+    "pendaftaranppmkiu": {
+      "hosting": {
+        "ppmdaftar": [
+          "ppmdaftar"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

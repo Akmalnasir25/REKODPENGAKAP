@@ -84,8 +84,9 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
       return { status: 'error', message: 'Gagal log masuk.' };
     }
 
-    // Fetch profile
-    const profile = await getProfile(data.user.id);
+    // Fetch profile + school info
+    const profile = await getProfileWithSchool(data.user.id);
+    const school = profile?.school as any;
 
     return {
       status: 'success',
@@ -93,8 +94,8 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
       user: {
         id: data.user.id,
         email: data.user.email || '',
-        schoolName: data.user.user_metadata?.school_name,
-        schoolCode: data.user.user_metadata?.school_code,
+        schoolName: school?.name || data.user.user_metadata?.school_name || '',
+        schoolCode: school?.school_code || data.user.user_metadata?.school_code || '',
         role: profile?.role || 'school_user',
       },
     };

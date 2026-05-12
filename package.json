@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "deploy": "vite build && firebase deploy --only hosting:ppmdaftar",
     "migrate:gas": "tsx scripts/migrate-gas-to-supabase.ts"
   },
   "dependencies": {

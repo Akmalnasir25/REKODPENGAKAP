@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline } from '../services/api';
+import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline } from '../services/supabaseApi';
 import { Badge } from '../types';
 
 interface AdminBadgesProps {

@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, AlertTriangle, CheckCircle, RefreshCw, Copy, Calendar, Plus, FileSpreadsheet, Upload, Save, FileUp, X, Columns, Settings2 } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { migrateYear, submitRegistration } from '../services/api';
-import { fetchServerCsrf } from '../services/security';
+import { migrateYear, submitRegistration } from '../services/supabaseApi';
 import { LeaderInfo, Participant } from '../types';
 
 interface AdminMigrationProps {
@@ -288,8 +287,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
           try {
               setImportLog(prev => [...prev, `⏳ Menghantar ${actualSchoolName}...`]);
-              const token = await fetchServerCsrf(scriptUrl);
-              await submitRegistration(scriptUrl, leaderInfo, students, assistants, examiners, customDate, token || undefined);
+              await submitRegistration(scriptUrl, leaderInfo, students, assistants, examiners, customDate);
               setImportLog(prev => [...prev, `✅ ${actualSchoolName}: OK.`]);
           } catch (e) {
               setImportLog(prev => [...prev, `❌ ${actualSchoolName}: Gagal.`]);
@@ -333,8 +331,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
           const dummyDate = `${newSessionYear}-01-01`;
           const dummyLeader: LeaderInfo = { schoolName: "__SYSTEM_YEAR_MARKER__", schoolCode: "SYS", groupNumber: "00", principalName: "SYS", principalPhone: "0", leaderName: "SYS", race: "Lain", phone: "0", badgeType: "INIT" };
           const dummyPart: Participant = { id: Date.now(), name: "MARKER", gender: "L", race: "L", membershipId: "0", icNumber: "0", phoneNumber: "0", remarks: "SYS" };
-          const token = await fetchServerCsrf(scriptUrl);
-          await submitRegistration(scriptUrl, dummyLeader, [dummyPart], [], [], dummyDate, token || undefined);
+          await submitRegistration(scriptUrl, dummyLeader, [dummyPart], [], [], dummyDate);
           alert(`Sesi Tahun ${newSessionYear} berjaya dibuka!`);
           onRefresh();
       } catch (e) { alert("Gagal."); } finally { setOpeningSession(false); }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, Users, Plus, Trash2, RefreshCw, ChevronDown, ChevronUp, Shield, Eye, EyeOff, School } from 'lucide-react';
-import { fetchCloudData, addNegeri, deleteNegeri, addDaerah, deleteDaerah, addAdmin, deleteAdmin, addSchool, deleteSchool } from '../services/api';
+import { fetchCloudData, addNegeri, deleteNegeri, addDaerah, deleteDaerah, addAdmin, deleteAdmin, addSchool, deleteSchool } from '../services/supabaseApi';
 import { registerAdmin } from '../services/supabaseAuth';
 import { Negeri, Daerah, AdminRegional, School as SchoolType } from '../types';
 import { LoadingSpinner } from './ui/LoadingSpinner';

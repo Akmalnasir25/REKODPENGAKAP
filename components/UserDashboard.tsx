@@ -10,8 +10,7 @@ const getSubmissionYear = (value?: string | null) => {
   const year = parsed.getFullYear();
   return Number.isFinite(year) ? year : null;
 };
-import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword } from '../services/api';
-import { fetchServerCsrf } from '../services/security';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
 import { ExportButton } from './ui/ExportButton';
@@ -387,8 +386,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       }
       setSavingId(true);
       try {
-          const token = await fetchServerCsrf(scriptUrl);
-          const res = await updateParticipantId(scriptUrl, item.rowIndex, cleanNewId, user.schoolCode, token || undefined);
+          const res = await updateParticipantId(scriptUrl, item.rowIndex, cleanNewId, user.schoolCode);
           if (res.status === 'success') { setEditingId(null); onRefresh(); } else alert("Gagal kemaskini: " + res.message);
       } catch (e) { alert("Ralat server."); } finally { setSavingId(false); }
   };
@@ -428,8 +426,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       let idCounter = 0;
       const participants: Participant[] = candidatesToSubmit.map(c => ({ id: Date.now() + (++idCounter), name: c.student, gender: c.gender, race: c.race || '', membershipId: c.id, icNumber: c.icNumber || '', phoneNumber: c.studentPhone || '', remarks: 'Layak Anugerah Rambu' }));
       try {
-          const token = await fetchServerCsrf(scriptUrl);
-          await submitRegistration(scriptUrl, leaderInfo, participants, [], [], undefined, token || undefined);
+          await submitRegistration(scriptUrl, leaderInfo, participants, [], [], undefined);
           alert("Berjaya!"); setShowRambuModal(false); setSelectedRambuCandidates([]); onRefresh();
       } catch (e) { alert("Gagal."); } finally { setIsSubmittingRambu(false); }
   };
@@ -498,8 +495,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const targetDate = `${selectedYear}-01-01`;
 
       try { 
-          const token = await fetchServerCsrf(scriptUrl);
-          await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, targetDate, token || undefined); 
+          await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, targetDate); 
           alert("Berjaya import naik program dengan ID keahlian baru."); 
           setShowImportModal(false); 
           setSelectedImportCandidates([]);
@@ -520,8 +516,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       setIsChangingPassword(true);
       try {
-          const token = await fetchServerCsrf(scriptUrl);
-          const res = await changePassword(scriptUrl, { schoolCode: user.schoolCode, oldPassword, newPassword }, token || undefined);
+          const res = await changePassword(scriptUrl, { schoolCode: user.schoolCode, oldPassword, newPassword });
           if(res.status === 'success') {
               alert("Kata laluan berjaya ditukar! Sila log masuk semula.");
               onLogout();
@@ -1356,7 +1351,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           }}
           onSave={async (profile) => {
             try {
-              const token = await fetchServerCsrf(scriptUrl);
               const result = await updateUserProfile(
                 scriptUrl,
                 user.schoolCode,

@@ -9,7 +9,7 @@ import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword } from '../services/api';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface AdminPanelProps {

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge } from '../services/api';
+import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
 import { School } from '../types';
 

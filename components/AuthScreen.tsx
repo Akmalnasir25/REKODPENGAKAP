@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, UserPlus, LogIn, AlertCircle, Eye, EyeOff, Key, RefreshCw, HelpCircle, ArrowLeft, User, School as SchoolIcon, Code, Shield, Mail } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { validatePassword } from '../services/api';
+import { validatePassword } from '../services/supabaseApi';
 import { loginUser as loginUserSupabase, registerSchoolUser, resetPassword as resetPasswordSupabase, fetchSchoolsForRegistration } from '../services/supabaseAuth';
 import { UserSession, School, Negeri, Daerah } from '../types';
 import { APP_VERSION, LOGO_URL } from '../constants';
@@ -118,12 +118,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 setLoading(false);
                 return;
             }
-            if (!schoolCode || !password) { 
-                setError('Sila isikan Nama Pengguna dan Kata Laluan.'); 
+            if (!email || !password) { 
+                setError('Sila isikan Email dan Kata Laluan.'); 
                 setLoading(false); 
                 return; 
             }
-            const res = await onDeveloperLogin(schoolCode, password);
+            const res = await onDeveloperLogin(email, password);
             if (!res.success) {
                 setError(res.message || 'Log masuk developer gagal.');
                 setLoading(false);
@@ -142,12 +142,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setLoading(false);
                     return;
                 }
-                if (!schoolCode || (!isPreviewMode && !password)) { 
-                    setError('Sila isikan Nama Pengguna dan Kata Laluan.'); 
+                if (!email || (!isPreviewMode && !password)) { 
+                    setError('Sila isikan Email dan Kata Laluan.'); 
                     setLoading(false); 
                     return; 
                 }
-                const res = await onDeveloperLogin(schoolCode, loginPassword);
+                const res = await onDeveloperLogin(email, loginPassword);
                 if (!res.success) {
                     setError(res.message || 'Log masuk developer gagal.');
                     setLoading(false);
@@ -160,13 +160,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setLoading(false);
                     return;
                 }
-                if (!schoolCode || (!isPreviewMode && !password)) {
-                    setError('Sila isikan Nama Pengguna dan Kata Laluan.');
+                if (!email || (!isPreviewMode && !password)) {
+                    setError('Sila isikan Email dan Kata Laluan.');
                     setLoading(false);
                     return;
                 }
                 const role = loginType === 'admin_negeri' ? 'negeri' : 'daerah';
-                const res = await onAdminRegionalLogin(schoolCode, loginPassword, role);
+                const res = await onAdminRegionalLogin(email, loginPassword, role);
                 if (!res.success) {
                     recordLoginAttempt(false);
                     setError(res.message || 'Log masuk admin gagal.');
@@ -350,16 +350,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     <>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                                Nama Pengguna Developer
+                                Email Developer
                             </label>
                             <div className="relative">
-                                <Code className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <input 
-                                    type="text" 
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-slate-50 focus:bg-white font-mono uppercase"
-                                    placeholder="DEVELOPER"
-                                    value={schoolCode}
-                                    onChange={(e) => setSchoolCode(e.target.value.toUpperCase())}
+                                    type="email" 
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition bg-slate-50 focus:bg-white"
+                                    placeholder="developer@email.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     required
                                 />
                             </div>
@@ -501,28 +501,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 <>
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                        {loginType === 'developer' ? 'Nama Pengguna Developer' : 
-                         loginType === 'admin_negeri' ? 'Nama Pengguna Admin Negeri' :
-                         loginType === 'admin_daerah' ? 'Nama Pengguna Admin Daerah' :
+                        {loginType === 'developer' ? 'Email Developer' : 
+                         loginType === 'admin_negeri' ? 'Email Admin Negeri' :
+                         loginType === 'admin_daerah' ? 'Email Admin Daerah' :
                          authMode === 'register' ? 'Kod Sekolah' : 'Email'}
                     </label>
                     <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input 
-                            type={loginType === 'user' && authMode !== 'register' ? 'email' : 'text'} 
-                            className={`w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white placeholder:font-sans ${loginType === 'user' && authMode !== 'forgot_password' ? 'font-normal' : 'font-mono uppercase'}`}
+                            type={authMode === 'register' ? 'text' : 'email'} 
+                            className={`w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white placeholder:font-sans ${authMode === 'register' ? 'font-mono uppercase' : 'font-normal'}`}
                             placeholder={
-                                loginType === 'developer' ? 'DEVELOPER' :
-                                loginType === 'admin_negeri' ? 'ADMIN_PRK' :
-                                loginType === 'admin_daerah' ? 'ADMIN_PRK_KU' :
+                                loginType === 'developer' ? 'developer@email.com' :
+                                loginType === 'admin_negeri' ? 'admin.negeri@email.com' :
+                                loginType === 'admin_daerah' ? 'admin.daerah@email.com' :
                                 authMode === 'register' ? 'KOD SEKOLAH (CTH: ABA1234)' : 'email@sekolah.edu.my'
                             }
-                            value={loginType === 'user' && authMode !== 'register' ? email : schoolCode}
+                            value={authMode === 'register' ? schoolCode : email}
                             onChange={(e) => {
-                                if (loginType === 'user' && authMode !== 'register') {
-                                    setEmail(e.target.value);
-                                } else {
+                                if (authMode === 'register') {
                                     setSchoolCode(e.target.value.toUpperCase());
+                                } else {
+                                    setEmail(e.target.value);
                                 }
                             }}
                             required

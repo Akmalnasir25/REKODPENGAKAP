@@ -2,8 +2,7 @@ import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { AlertTriangle, CheckCircle, Download, FileSpreadsheet, Upload, X } from 'lucide-react';
 import { Badge } from '../types';
-import { bulkSubmitRegistration } from '../services/api';
-import { fetchServerCsrf } from '../services/security';
+import { bulkSubmitRegistration } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';

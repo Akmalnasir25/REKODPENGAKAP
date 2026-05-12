@@ -12,8 +12,7 @@ import { DeveloperPanel } from './components/DeveloperPanel';
 import { DeveloperAdminDashboard } from './components/DeveloperAdminDashboard';
 import { DeveloperDashboard } from './components/DeveloperDashboard';
 import { ToastProvider } from './components/ui/Toast';
-import { fetchCloudData, deleteSubmission, loginAdmin, loginAdminRegional, loginDeveloper } from './services/api';
-import { fetchServerCsrf } from './services/security';
+import { fetchCloudData, deleteSubmission } from './services/supabaseApi';
 import { DEFAULT_SERVER_URL, LOCAL_STORAGE_KEYS, LOGO_URL } from './constants';
 import { SubmissionData, UserSession, Badge, School, UserProfile, Negeri, Daerah, AdminRegional } from './types';
 import { WifiOff } from 'lucide-react';
@@ -390,13 +389,15 @@ function AppContent() {
         return { success: true };
       }
 
-      const result = await loginDeveloper(scriptUrl, username, password);
-      if (result.status === 'success' && result.authToken) {
+      const result = await loginAdminSupabase({ email: username, password }, 'developer');
+      if (result.status === 'success' && result.admin) {
         localStorage.setItem(DEVELOPER_SESSION_KEY, JSON.stringify({
           role: 'developer',
-          username: username.trim().toUpperCase(),
-          authToken: result.authToken,
-          expiresAt: result.expiresAt
+          username: result.admin.email || username.trim().toLowerCase(),
+          authToken: result.admin.authToken,
+          expiresAt: result.admin.expiresAt,
+          email: result.admin.email,
+          fullName: result.admin.fullName
         }));
         setIsDeveloperMode(true);
         navigateTo('developer');
@@ -405,9 +406,10 @@ function AppContent() {
         setAdminSession(null);
         localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
         localStorage.removeItem(ADMIN_SESSION_KEY);
+        await handleFetchData(scriptUrl);
         return { success: true };
       }
-      return { success: false, message: result.message || 'Log masuk developer gagal.' };
+      return { success: false, message: result.message || 'Log masuk developer Supabase gagal.' };
     } catch (error) {
       return { success: false, message: 'Gagal menghubungi server developer.' };
     }
@@ -421,10 +423,15 @@ function AppContent() {
       logAudit('LOGIN', user.schoolCode, 'user', `Log masuk: ${user.schoolName} (${user.schoolCode})`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
       const actor = userSession?.schoolCode || adminSession?.username || (isDeveloperMode ? 'DEVELOPER' : 'UNKNOWN');
       const role = isDeveloperMode ? 'developer' : adminSession ? adminSession.role : adminRole || 'user';
       logAudit('LOGOUT', actor, role as any, `Log keluar`);
+      
+      // Sign out from Supabase if logged in
+      const { supabase } = await import('./services/supabaseClient');
+      await supabase.auth.signOut();
+      
       setUserSession(null);
       setAdminRole(null);
       setAdminSession(null);
@@ -470,8 +477,7 @@ function AppContent() {
   const handleDeleteData = async (item: SubmissionData) => {
       if(!confirm(`Padam rekod peserta: ${item.student}?`)) return;
       try {
-        const token = await fetchServerCsrf(scriptUrl);
-        const result = await deleteSubmission(scriptUrl, item, token || undefined);
+        const result = await deleteSubmission(scriptUrl, item);
         if (result.status === 'success') {
           const actor = userSession?.schoolCode || adminSession?.username || 'ADMIN';
           const role = isDeveloperMode ? 'developer' : adminSession ? adminSession.role : adminRole || 'user';
@@ -479,12 +485,13 @@ function AppContent() {
           alert("Rekod berjaya dipadam.");
           setTimeout(handleRefreshData, 1000);
         } else {
-          alert("Gagal memadam: " + (result.message || 'Ralat tidak diketahui.'));
+          alert(result.message || "Gagal memadam rekod.");
         }
-      } catch (err) {
-          alert("Gagal memadam.");
+      } catch (error) {
+        alert("Ralat semasa memadam rekod.");
       }
   };
+
 
   const renderContent = () => {
       // Check for maintenance mode using accessState (respects config.json priority)

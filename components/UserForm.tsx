@@ -5,8 +5,7 @@ import { APP_VERSION, LOGO_URL, LOCAL_STORAGE_KEYS } from '../constants';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { generateBadgeInfo } from '../services/geminiService';
 import { BadgeModal } from './BadgeModal';
-import { submitRegistration } from '../services/api';
-import { fetchServerCsrf } from '../services/security';
+import { submitRegistration } from '../services/supabaseApi';
 
 interface UserFormProps {
   schools: SchoolType[]; 
@@ -317,9 +316,8 @@ export const UserForm: React.FC<UserFormProps> = ({
 
     setSubmitting(true);
     try {
-        const token = await fetchServerCsrf(scriptUrl);
         if (!token) { alert('Gagal mendapatkan token keselamatan dari server. Sila cuba lagi.'); setSubmitting(false); return; }
-        await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined, token);
+        await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
         setSubmitted(true);
         window.scrollTo(0, 0);
         setTimeout(refreshData, 1500);

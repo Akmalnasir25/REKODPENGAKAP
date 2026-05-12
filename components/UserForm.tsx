@@ -316,7 +316,6 @@ export const UserForm: React.FC<UserFormProps> = ({
 
     setSubmitting(true);
     try {
-        if (!token) { alert('Gagal mendapatkan token keselamatan dari server. Sila cuba lagi.'); setSubmitting(false); return; }
         await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
         setSubmitted(true);
         window.scrollTo(0, 0);

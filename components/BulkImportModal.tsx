@@ -141,7 +141,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     if (!canSubmit) return;
     setIsSubmitting(true);
     try {
-      const csrf = await fetchServerCsrf(scriptUrl);
       const result = await bulkSubmitRegistration(scriptUrl, {
         schoolName,
         schoolCode,
@@ -157,10 +156,10 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           phoneNumber: r.phoneNumber,
           remarks: r.remarks
         }))
-      }, csrf || undefined);
+      });
 
       if (result.status === 'success') {
-        alert(`Import berjaya. ${result.count || records.length} rekod dimasukkan.`);
+        alert(`Import berjaya. ${records.length} rekod dimasukkan.`);
         onSuccess();
         onClose();
       } else {

@@ -48,7 +48,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
   const [sourceYear, setSourceYear] = useState(currentYear);
   const [targetYear, setTargetYear] = useState(currentYear + 1);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{status: string, message: string} | null>(null);
+  const [result, setResult] = useState<{status: string, message?: string} | null>(null);
 
   // New Session State
   const [newSessionYear, setNewSessionYear] = useState(currentYear + 1);

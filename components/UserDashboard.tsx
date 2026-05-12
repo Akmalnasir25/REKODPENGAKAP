@@ -20,10 +20,8 @@ import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
-import { OnboardingTutorial, TutorialHelpButton } from './ui/OnboardingTutorial';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
-import { PresenceIndicator } from './ui/PresenceIndicator';
 
 
 interface UserDashboardProps {
@@ -552,9 +550,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   return (
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
       
-      {/* Onboarding Tutorial (first-time users) */}
-      <OnboardingTutorial />
-
       {/* MOBILE HEADER (DARK) */}
       <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600">
           <div className="flex items-center gap-2">
@@ -562,7 +557,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <div className="text-sm font-bold truncate w-36">{user.schoolName}</div>
           </div>
           <div className="flex items-center gap-1">
-              <NotificationBell />
               <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-2 hover:bg-slate-800 rounded">
                   <Menu size={24} />
               </button>
@@ -593,9 +587,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-xs leading-tight mb-1 uppercase tracking-wide">{user.schoolName}</h2>
                     <p className="text-[10px] text-amber-500 font-mono bg-slate-900/50 px-2 py-0.5 rounded inline-block border border-amber-500/20">{user.schoolCode}</p>
-                    <div className="mt-2">
-                      <PresenceIndicator userName={user.schoolName} userRole="user" currentView="dashboard" />
-                    </div>
                   </div>
               )}
           </div>
@@ -652,14 +643,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="p-4 border-t border-slate-800 bg-slate-900">
-              {/* Quick Tools */}
-              {isDesktopSidebarOpen && (
-                <div className="flex items-center justify-center gap-1 mb-3 pb-3 border-b border-slate-800">
-                  <NotificationBell />
-                  <TutorialHelpButton className="text-slate-400" />
-                </div>
-              )}
-
               <SidebarItem 
                 icon={User} 
                 label="Profil Saya" 
@@ -686,8 +669,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       <main className="flex-1 overflow-hidden flex flex-col h-screen overflow-y-auto">
         {/* Top Toolbar - sentiasa nampak */}
         <div className="hidden md:flex items-center justify-end gap-2 px-6 py-2 bg-white border-b border-gray-200 print:hidden">
-          <PresenceIndicator userName={user.schoolName} userRole="user" currentView="dashboard" className="mr-auto" />
-          <TutorialHelpButton />
           <NotificationBell />
         </div>
 
@@ -1366,11 +1347,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   leaderMembershipId: profile.leaderMembershipId,
                   leaderRace: profile.leaderRace,
                   remarks: profile.remarks
-                },
-                token || undefined
+                }
               );
               
-              if (result.success) {
+              if (result.status === 'success') {
                 alert('✅ Profil berjaya dikemaskini!');
                 setShowProfileModal(false);
                 onRefresh(); // Refresh data to show updated profile

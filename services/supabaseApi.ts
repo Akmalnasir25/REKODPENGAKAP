@@ -329,12 +329,13 @@ export const updateParticipantId = async (_url: string, _rowIndex: number, newId
   }
 };
 
-export const addSchool = async (_url: string, schoolData: { name: string; schoolCode: string; negeriCode?: string; daerahCode?: string; groupNumber?: string; }, _csrfToken?: string): Promise<ApiResponse> => {
+export const addSchool = async (_url: string, schoolData: { name?: string; schoolName?: string; schoolCode: string; negeriCode?: string; daerahCode?: string; groupNumber?: string; }, _csrfToken?: string): Promise<ApiResponse> => {
   try {
+    const schoolName = schoolData.name || schoolData.schoolName || schoolData.schoolCode;
     const negeriId = schoolData.negeriCode ? await getNegeriId(schoolData.negeriCode) : null;
     const daerahId = schoolData.daerahCode ? await getDaerahId(schoolData.daerahCode) : null;
     const { error } = await supabase.from('schools').insert({
-      name: normalize(schoolData.name),
+      name: normalize(schoolName),
       school_code: normalize(schoolData.schoolCode),
       negeri_id: negeriId,
       daerah_id: daerahId,
@@ -371,10 +372,15 @@ export const deleteSchool = async (_url: string, schoolCodeOrName: string, _csrf
   }
 };
 
-export const updateSchoolPermission = async (_url: string, schoolName: string, permissionType: 'allowStudents' | 'allowAssistants' | 'allowExaminers', value: boolean, _csrfToken?: string): Promise<ApiResponse> => {
+export const updateSchoolPermission = async (_url: string, schoolName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'all', value: boolean, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const field = permissionType === 'allowStudents' ? 'allow_students' : permissionType === 'allowAssistants' ? 'allow_assistants' : 'allow_examiners';
-    const { error } = await supabase.from('schools').update({ [field]: value }).eq('name', normalize(schoolName));
+    let updateData: Record<string, boolean> = {};
+    if (permissionType === 'students') updateData = { allow_students: value };
+    else if (permissionType === 'assistants') updateData = { allow_assistants: value };
+    else if (permissionType === 'examiners') updateData = { allow_examiners: value };
+    else updateData = { allow_students: value, allow_assistants: value, allow_examiners: value };
+    
+    const { error } = await supabase.from('schools').update(updateData).eq('name', normalize(schoolName));
     if (error) throw error;
     return { status: 'success' };
   } catch (error: any) {
@@ -382,9 +388,15 @@ export const updateSchoolPermission = async (_url: string, schoolName: string, p
   }
 };
 
-export const toggleSchoolEditBatch = async (_url: string, schools: string[], allow: boolean, _csrfToken?: string): Promise<ApiResponse> => {
+export const toggleSchoolEditBatch = async (_url: string, allow: boolean, permissionType: 'students' | 'assistants' | 'examiners' | 'all', _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const { error } = await supabase.from('schools').update({ allow_students: allow, allow_assistants: allow, allow_examiners: allow }).in('name', schools.map(normalize));
+    let updateData: Record<string, boolean> = {};
+    if (permissionType === 'students') updateData = { allow_students: allow };
+    else if (permissionType === 'assistants') updateData = { allow_assistants: allow };
+    else if (permissionType === 'examiners') updateData = { allow_examiners: allow };
+    else updateData = { allow_students: allow, allow_assistants: allow, allow_examiners: allow };
+    
+    const { error } = await supabase.from('schools').update(updateData).eq('is_active', true);
     if (error) throw error;
     return { status: 'success' };
   } catch (error: any) {
@@ -514,11 +526,27 @@ export const deleteBadgeType = async (_url: string, badgeName: string, _csrfToke
   }
 };
 
-export const toggleRegistration = async (_url: string, badgeName: string, isOpen: boolean, _csrfToken?: string): Promise<ApiResponse> => {
+export const toggleRegistration = async (_url: string, statusOrBadge: boolean | string, badgeNameOrNothing?: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const { error } = await supabase.from('badges').update({ is_open: isOpen }).eq('name', badgeName.trim());
-    if (error) throw error;
-    return { status: 'success', message: `Pendaftaran ${badgeName} ${isOpen ? 'dibuka' : 'ditutup'}.` };
+    let isOpen: boolean;
+    let badgeName: string | undefined;
+    
+    if (typeof statusOrBadge === 'boolean') {
+      isOpen = statusOrBadge;
+      badgeName = badgeNameOrNothing;
+    } else {
+      badgeName = statusOrBadge;
+      isOpen = badgeNameOrNothing === undefined ? true : Boolean(badgeNameOrNothing);
+    }
+
+    if (badgeName) {
+      const { error } = await supabase.from('badges').update({ is_open: isOpen }).eq('name', badgeName.trim());
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('badges').update({ is_open: isOpen }).neq('name', '');
+      if (error) throw error;
+    }
+    return { status: 'success', message: `Pendaftaran ${isOpen ? 'dibuka' : 'ditutup'}.` };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal toggle registration.' };
   }
@@ -534,8 +562,10 @@ export const updateBadgeDeadline = async (_url: string, badgeName: string, deadl
   }
 };
 
-export const changePassword = async (_url: string, _schoolCode: string, _oldPassword: string, newPassword: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const changePassword = async (_url: string, dataOrSchoolCode: { schoolCode: string; oldPassword: string; newPassword: string } | string, _oldPassword?: string, maybeNewPassword?: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
+    const newPassword = typeof dataOrSchoolCode === 'object' ? dataOrSchoolCode.newPassword : maybeNewPassword;
+    if (!newPassword) return { status: 'error', message: 'Kata laluan baru tidak dijumpai.' };
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) throw error;
     return { status: 'success', message: 'Kata laluan berjaya ditukar.' };

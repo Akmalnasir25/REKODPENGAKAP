@@ -20,6 +20,7 @@ import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
+import { SchoolQRGenerator } from './ui/QRVerification';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
 
@@ -1063,6 +1064,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 school={user.schoolName}
                                 title="SENARAI PENDAFTARAN PENGAKAP"
                             />
+                            {filteredData.length > 0 && (
+                              <SchoolQRGenerator data={filteredData} year={selectedYear} />
+                            )}
                         </div>
                     </div>
                     

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge } from '../services/api';
+import { resetSchoolClaim } from '../services/supabaseAuth';
 import { School } from '../types';
 
 interface AdminSchoolsProps {
@@ -12,15 +13,17 @@ interface AdminSchoolsProps {
   negeriCode?: string;
   daerahCode?: string;
   onRefresh: () => void;
+  enableResetClaim?: boolean;
 }
 
-export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], scriptUrl, negeriCode, daerahCode, onRefresh }) => {
+export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], scriptUrl, negeriCode, daerahCode, onRefresh, enableResetClaim = false }) => {
   const [newSchoolName, setNewSchoolName] = useState('');
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<{name: string, type: string} | null>(null);
   const [batchToggling, setBatchToggling] = useState<string | null>(null);
   const [unlockingBadge, setUnlockingBadge] = useState<string | null>(null); 
   const [approvingBadge, setApprovingBadge] = useState<string | null>(null); 
+  const [resettingClaim, setResettingClaim] = useState<string | null>(null);
 
   // Batch toggle check
   const allStudentsAllowed = schools.length > 0 && schools.every(s => s.allowStudents);
@@ -91,6 +94,35 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], script
         alert("Gagal memadam. Sila cuba lagi.");
     } finally {
         setLoading(false);
+    }
+  };
+
+  const handleResetClaim = async (school: School) => {
+    if (!school.schoolCode) {
+      alert('Kod sekolah tidak dijumpai untuk sekolah ini. Sila semak data sekolah.');
+      return;
+    }
+
+    const confirmed = confirm(
+      `Reset akaun sekolah: ${school.name}?\n\n` +
+      `Email/user lama akan dipadam daripada Supabase Auth dan sekolah boleh daftar semula menggunakan kod sekolah yang sama.\n\n` +
+      `Teruskan?`
+    );
+    if (!confirmed) return;
+
+    setResettingClaim(school.name);
+    try {
+      const response = await resetSchoolClaim({ schoolCode: school.schoolCode });
+      if (response.status === 'success') {
+        alert(response.message || 'Akaun sekolah berjaya direset.');
+        onRefresh();
+      } else {
+        alert('Gagal reset akaun sekolah: ' + (response.message || 'Ralat tidak diketahui.'));
+      }
+    } catch (e) {
+      alert('Ralat sambungan. Gagal reset akaun sekolah.');
+    } finally {
+      setResettingClaim(null);
     }
   };
 
@@ -324,6 +356,16 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], script
                                 {isLoadingThis && toggling?.type === 'all' ? <LoadingSpinner size="sm" /> : (isAllEnabled ? <ToggleRight size={24}/> : <ToggleLeft size={24}/>)}
                             </button>
                             <div className="w-px h-4 bg-gray-300 mx-1"></div>
+                            {enableResetClaim && (
+                                <button
+                                    onClick={() => handleResetClaim(s)}
+                                    disabled={resettingClaim === s.name}
+                                    className="text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition p-1 rounded"
+                                    title="Reset Akaun Sekolah Supabase"
+                                >
+                                    {resettingClaim === s.name ? <LoadingSpinner size="sm" color="border-amber-600" /> : <RefreshCw size={16} />}
+                                </button>
+                            )}
                             <button 
                                 onClick={() => handleDelete(s.name)} 
                                 className="text-gray-300 hover:text-red-500 transition p-1"

@@ -201,6 +201,35 @@ export const resetPassword = async (email: string): Promise<AuthResult> => {
 };
 
 // ============================================================
+// RESET SCHOOL CLAIM (admin only)
+// ============================================================
+
+export const resetSchoolClaim = async (input: { schoolId?: string; schoolCode?: string }): Promise<AuthResult> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      return { status: 'error', message: 'Sila log masuk sebagai admin terlebih dahulu.' };
+    }
+
+    const response = await fetch(`${EDGE_FUNCTION_URL}/reset-school-claim`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    const result = await response.json();
+    return result;
+  } catch (error: any) {
+    return { status: 'error', message: 'Gagal menghubungi server. Sila cuba lagi.' };
+  }
+};
+
+// ============================================================
 // AUTH STATE LISTENER
 // ============================================================
 

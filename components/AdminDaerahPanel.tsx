@@ -353,8 +353,9 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                    schools={filteredSchools} 
                    scriptUrl={scriptUrl} 
                    negeriCode={negeriCode}
-                   daerahCode={daerahCode}
-                   onRefresh={refreshData} 
+                    daerahCode={daerahCode}
+                    enableResetClaim={true}
+                    onRefresh={refreshData} 
                  />
               </div>
             )}

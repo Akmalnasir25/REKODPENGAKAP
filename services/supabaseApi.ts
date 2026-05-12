@@ -407,12 +407,23 @@ export const toggleSchoolEditBatch = async (_url: string, allow: boolean, permis
   }
 };
 
-export const lockSchoolBadge = async (_url: string, schoolCode: string, badgeName: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const school = await getSchoolByCodeOrName(schoolCode);
+    // badgeNameWithYear may be "Keris Gangsa_2025" format from getLockKey
+    const parts = badgeNameWithYear.split('_');
+    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
+    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+    
+    // Try lookup by code first, then by name
+    let school = await getSchoolByCodeOrName(schoolCodeOrName);
+    if (!school) school = await getSchoolByCodeOrName(undefined, schoolCodeOrName);
+    if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
+    
     const badge = await getBadgeByName(badgeName);
-    if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: currentYear(), status: 'locked' }, { onConflict: 'school_id,badge_id,year' });
+    if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
+    
+    const { error } = await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'locked' }, { onConflict: 'school_id,badge_id,year' });
+    if (error) throw error;
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal lock badge.' };

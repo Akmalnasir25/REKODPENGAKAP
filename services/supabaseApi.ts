@@ -177,23 +177,67 @@ const createSubmissionWithPeople = async (
     return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
   }
 
-  try {
-    const response = await fetch(`${EDGE_FUNCTION_URL}/submit-registration`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ leaderInfo, people, customDate, source }),
-    });
+  const school = await getSchoolByCodeOrName(leaderInfo.schoolCode, leaderInfo.schoolName);
+  if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai dalam Supabase.' };
 
-    const result = await response.json();
-    return result;
-  } catch (error: any) {
-    console.error('createSubmissionWithPeople error:', error);
-    return { status: 'error', message: error.message || 'Gagal menyimpan pendaftaran.' };
+  const badge = await getBadgeByName(leaderInfo.badgeType);
+  const submittedAt = toDateOnly(customDate);
+  const year = new Date(submittedAt).getFullYear();
+  const user = session.user;
+
+  const { data: submission, error: subError } = await supabase
+    .from('submissions')
+    .insert({
+      school_id: school.id,
+      badge_id: badge.id,
+      submission_year: year,
+      submitted_at: submittedAt,
+      submitted_by: user?.id || null,
+      status: 'submitted',
+      source,
+      remarks: leaderInfo.groupNumber ? `No Kumpulan: ${leaderInfo.groupNumber}` : null,
+    })
+    .select('*')
+    .single();
+  if (subError) throw subError;
+
+  const rows = people.filter(p => p.name?.trim()).map(p => ({
+    submission_id: submission.id,
+    name: normalize(p.name),
+    gender: p.gender || null,
+    race: p.race || null,
+    membership_id: normalize(p.membershipId),
+    ic_number: p.icNumber || null,
+    phone_number: p.phoneNumber || null,
+    role: (p as any).role || 'PESERTA',
+    category: p.category || null,
+    remarks: p.remarks || null,
+  }));
+
+  if (rows.length > 0) {
+    const { error: peopleError } = await supabase.from('submission_people').insert(rows);
+    if (peopleError) throw peopleError;
   }
+
+  await supabase.from('school_profiles').upsert({
+    school_id: school.id,
+    principal_name: normalize(leaderInfo.principalName),
+    principal_phone: leaderInfo.principalPhone || null,
+    leader_name: normalize(leaderInfo.leaderName),
+    leader_phone: leaderInfo.phone || null,
+    leader_race: leaderInfo.race || null,
+    updated_by: user?.id || null,
+  }, { onConflict: 'school_id' });
+
+  await supabase.from('school_badge_status').upsert({
+    school_id: school.id,
+    badge_id: badge.id,
+    year,
+    status: 'submitted',
+    submitted_at: submittedAt,
+  }, { onConflict: 'school_id,badge_id,year', ignoreDuplicates: true });
+
+  return { status: 'success', message: 'Pendaftaran berjaya disimpan ke Supabase.' };
 };
 
 export const submitRegistration = async (

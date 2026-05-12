@@ -25,13 +25,9 @@ const roleMap = (role?: string): string | undefined => {
 
 const getBadgeByName = async (badgeName: string) => {
   const name = badgeName.trim();
-  let { data, error } = await supabase.from('badges').select('*').eq('name', name).maybeSingle();
+  const { data, error } = await supabase.from('badges').select('*').eq('name', name).maybeSingle();
   if (error) throw error;
-  if (!data) {
-    const inserted = await supabase.from('badges').insert({ name, is_open: true }).select('*').single();
-    if (inserted.error) throw inserted.error;
-    data = inserted.data;
-  }
+  if (!data) throw new Error(`Badge '${name}' tidak dijumpai. Sila hubungi admin untuk tambah badge.`);
   return data;
 };
 

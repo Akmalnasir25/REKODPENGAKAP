@@ -23,6 +23,7 @@ import { AppDataProvider, AuthProvider, ThemeProvider } from './context/AppConte
 import { NotificationProvider } from './context/NotificationContext';
 import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
+import { loginAdminSupabase } from './services/supabaseAuth';
 
 // Helper functions for access control (independent of localStorage)
 const getAccessState = async () => {
@@ -282,25 +283,12 @@ function AppContent() {
             return { success: false, message: 'Akses pentadbir sedang ditutup. Sila hubungi developer.' };
         }
 
-        const csrfToken = generateCSRFToken();
-        const result = await loginAdmin(scriptUrl, username, password, csrfToken);
+        const result = await loginAdminSupabase({ email: username, password }, 'admin');
         
-        if (result.status === 'success') {
-            // Check if the specific role is enabled
-            const isDistrictRole = result.role === 'district';
-            if (isDistrictRole && !currentAccessState.districtAccess) {
-                return { success: false, message: 'Akses daerah sedang ditutup. Sila hubungi developer.' };
-            }
-            if (!isDistrictRole && !currentAccessState.adminAccess) {
-                return { success: false, message: 'Akses pentadbir sedang ditutup. Sila hubungi developer.' };
-            }
-
-            setAdminRole(result.role); // 'admin' or 'district'
-            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
-              role: result.role,
-              authToken: result.authToken,
-              expiresAt: result.expiresAt
-            }));
+        if (result.status === 'success' && result.admin) {
+            setAdminRole('admin');
+            setAdminSession(null);
+            localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(result.admin));
             navigateTo('admin');
             setUserSession(null);
             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
@@ -322,8 +310,6 @@ function AppContent() {
         if (!currentAccessState.adminAccess) {
             return { success: false, message: 'Akses pentadbir sedang ditutup. Sila hubungi developer.' };
         }
-
-        const csrfToken = generateCSRFToken();
 
         if (isPreviewMode) {
             const normalizedUsername = username.trim().toUpperCase() || (role === 'negeri' ? 'PREVIEW_ADMIN_NEGERI' : 'PREVIEW_ADMIN_DAERAH');
@@ -359,7 +345,7 @@ function AppContent() {
             return { success: true, adminData: previewAdmin };
         }
 
-        const result = await loginAdminRegional(scriptUrl, { username, password, role }, csrfToken);
+        const result = await loginAdminSupabase({ email: username, password }, role);
         
         if (result.status === 'success' && result.admin) {
             setAdminSession(result.admin);
@@ -369,13 +355,13 @@ function AppContent() {
             setAdminRole(null); // Clear old admin role
             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
             
-            // Fetch data with hierarchical filtering
+            // Fetch GAS data with Supabase admin scope
             const { negeriCode, daerahCode } = result.admin;
             await handleFetchData(scriptUrl, role, negeriCode, daerahCode);
             
             return { success: true, adminData: result.admin };
         } else {
-            return { success: false, message: result.message || 'Log masuk admin gagal.' };
+            return { success: false, message: result.message || 'Log masuk admin Supabase gagal.' };
         }
     } catch (error) {
         console.error('Admin regional login error:', error);

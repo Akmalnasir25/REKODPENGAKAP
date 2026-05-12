@@ -64,6 +64,93 @@ export const registerSchoolUser = async (input: RegisterSchoolInput): Promise<Au
 };
 
 // ============================================================
+// LOGIN ADMIN / REGIONAL ADMIN (Supabase Auth, GAS data remains)
+// ============================================================
+
+export const loginAdminSupabase = async (
+  input: LoginInput,
+  expectedRole?: 'negeri' | 'daerah' | 'admin' | 'developer'
+): Promise<{ status: 'success' | 'error'; message?: string; admin?: any }> => {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: input.email.trim().toLowerCase(),
+      password: input.password,
+    });
+
+    if (error || !data.user) {
+      return { status: 'error', message: error?.message || 'Log masuk admin gagal.' };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        email,
+        full_name,
+        role,
+        is_active,
+        negeri:negeri_id(code, name),
+        daerah:daerah_id(code, name)
+      `)
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError || !profile || !profile.is_active) {
+      await supabase.auth.signOut();
+      return { status: 'error', message: 'Profil admin tidak aktif atau tidak dijumpai.' };
+    }
+
+    const roleMap: Record<string, 'negeri' | 'daerah' | 'admin' | 'developer' | 'school'> = {
+      negeri_admin: 'negeri',
+      daerah_admin: 'daerah',
+      admin: 'admin',
+      developer: 'developer',
+      school_user: 'school',
+    };
+
+    const mappedRole = roleMap[profile.role] || 'school';
+    if (mappedRole === 'school') {
+      await supabase.auth.signOut();
+      return { status: 'error', message: 'Akaun ini bukan akaun admin.' };
+    }
+
+    if (expectedRole && mappedRole !== expectedRole && !['admin', 'developer'].includes(mappedRole)) {
+      await supabase.auth.signOut();
+      return { status: 'error', message: 'Role admin tidak sepadan dengan pilihan login.' };
+    }
+
+    const negeri = Array.isArray(profile.negeri) ? profile.negeri[0] : profile.negeri;
+    const daerah = Array.isArray(profile.daerah) ? profile.daerah[0] : profile.daerah;
+    const adminRole = mappedRole === 'admin' || mappedRole === 'developer' ? 'negeri' : mappedRole;
+
+    const admin = {
+      username: profile.email || data.user.email || input.email.trim().toLowerCase(),
+      role: adminRole,
+      fullName: profile.full_name || profile.email || data.user.email || 'Admin',
+      email: profile.email || data.user.email,
+      negeriCode: negeri?.code,
+      daerahCode: daerah?.code,
+      authToken: data.session?.access_token,
+      expiresAt: data.session?.expires_at ? data.session.expires_at * 1000 : Date.now() + (24 * 60 * 60 * 1000),
+      scope: {
+        canManageNegeri: ['admin', 'developer', 'negeri'].includes(mappedRole),
+        canManageDaerah: true,
+        canManageSchools: true,
+        canManageBadges: true,
+        canViewAllNegeri: ['admin', 'developer'].includes(mappedRole),
+        canViewAllDaerah: ['admin', 'developer', 'negeri'].includes(mappedRole),
+        negeriAccess: negeri?.code ? [negeri.code] : [],
+        daerahAccess: mappedRole === 'daerah' ? [daerah?.code].filter(Boolean) : 'ALL_IN_NEGERI',
+      },
+    };
+
+    return { status: 'success', admin };
+  } catch (error: any) {
+    return { status: 'error', message: 'Gagal menghubungi Supabase Auth.' };
+  }
+};
+
+// ============================================================
 // LOGIN
 // ============================================================
 

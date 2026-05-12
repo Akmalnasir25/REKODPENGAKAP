@@ -121,8 +121,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   }, [badges]);
 
   const availableYears = useMemo(() => {
-    const years = new Set<number>(allData.map(d => new Date(d.date).getFullYear()));
+    const years = new Set<number>();
+    allData.forEach(d => {
+      const y = new Date(d.date).getFullYear();
+      if (Number.isFinite(y)) years.add(y);
+    });
+
+    // Ensure current and active registration years are always selectable,
+    // even when GAS has no rows yet for that year.
     years.add(currentYear);
+    years.add(2025);
+
     return Array.from(years).sort((a: number, b: number) => b - a);
   }, [allData, currentYear]);
   

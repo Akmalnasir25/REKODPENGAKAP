@@ -208,17 +208,26 @@ function AppContent() {
             try {
                 const parsedSession = JSON.parse(savedSession);
                 if (parsedSession && parsedSession.isLoggedIn) {
-                    // Check if user access is enabled from hardened access state.
-                    const currentAccessState = await getAccessState();
-                    const userAccessEnabled = currentAccessState.userAccess;
-                    if (userAccessEnabled) {
-                        setUserSession(parsedSession);
-                        replaceViewInHash('user_dashboard');
-                        setView('user_dashboard');
-                        sessionRestored = true;
-                    } else {
-                        // User access disabled, clear session
+                    // Verify Supabase auth session is still valid
+                    const { supabase } = await import('./services/supabaseClient');
+                    const { data: { session: supaSession } } = await supabase.auth.getSession();
+                    if (!supaSession) {
+                        // Supabase session expired, clear local session
+                        console.warn('Supabase session expired, clearing local session');
                         localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+                    } else {
+                        // Check if user access is enabled from hardened access state.
+                        const currentAccessState = await getAccessState();
+                        const userAccessEnabled = currentAccessState.userAccess;
+                        if (userAccessEnabled) {
+                            setUserSession(parsedSession);
+                            replaceViewInHash('user_dashboard');
+                            setView('user_dashboard');
+                            sessionRestored = true;
+                        } else {
+                            // User access disabled, clear session
+                            localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+                        }
                     }
                 }
             } catch (e) {

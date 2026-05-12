@@ -172,13 +172,19 @@ const createSubmissionWithPeople = async (
   customDate?: string,
   source: 'manual' | 'bulk_import' | 'migration' = 'manual'
 ) => {
+  // Check session first
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
+  }
+
   const school = await getSchoolByCodeOrName(leaderInfo.schoolCode, leaderInfo.schoolName);
   if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai dalam Supabase.' };
 
   const badge = await getBadgeByName(leaderInfo.badgeType);
   const submittedAt = toDateOnly(customDate);
   const year = new Date(submittedAt).getFullYear();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = session.user;
 
   const { data: submission, error: subError } = await supabase
     .from('submissions')

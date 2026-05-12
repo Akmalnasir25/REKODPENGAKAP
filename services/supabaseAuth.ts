@@ -1,4 +1,4 @@
-import { supabase, EDGE_FUNCTION_URL } from './supabaseClient';
+import { supabase, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from './supabaseClient';
 
 // ============================================================
 // TYPES
@@ -50,6 +50,8 @@ export const registerSchoolUser = async (input: RegisterSchoolInput): Promise<Au
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify(input),
     });

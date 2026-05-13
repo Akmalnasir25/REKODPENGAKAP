@@ -93,7 +93,7 @@ export const fetchCloudData = async (
       supabase.from('badges').select('*').order('name'),
       supabase.from('negeri').select('*').order('name'),
       supabase.from('daerah').select('*, negeri:negeri_id(code,name)').order('name'),
-      supabase.from('school_profiles').select('*, school:school_id(school_code,name)').order('updated_at', { ascending: false }),
+      supabase.from('school_profiles').select('*, school:school_id(school_code,name,group_number)').order('updated_at', { ascending: false }),
       submissionsQuery,
       supabase.from('school_badge_status').select('*, school:school_id(school_code,name), badge:badge_id(name)').order('updated_at', { ascending: false }),
     ]);
@@ -162,6 +162,7 @@ export const fetchCloudData = async (
     const userProfiles: UserProfile[] = (profilesRes.data || []).map((p: any) => ({
       schoolCode: p.school?.school_code || '',
       schoolName: p.school?.name || '',
+      groupNumber: p.school?.group_number || '',
       principalName: p.principal_name || '',
       principalPhone: p.principal_phone || '',
       leaderName: p.leader_name || '',
@@ -198,6 +199,13 @@ const createSubmissionWithPeople = async (
 
   const school = await getSchoolByCodeOrName(leaderInfo.schoolCode, leaderInfo.schoolName);
   if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai dalam Supabase.' };
+  if (leaderInfo.groupNumber) {
+    const { error: schoolUpdateError } = await supabase
+      .from('schools')
+      .update({ group_number: leaderInfo.groupNumber })
+      .eq('id', school.id);
+    if (schoolUpdateError) throw schoolUpdateError;
+  }
 
   const badge = await getBadgeByName(leaderInfo.badgeType);
   const submittedAt = toDateOnly(customDate);
@@ -486,7 +494,14 @@ export const updateUserProfile = async (_url: string, schoolCode: string, profil
     const school = await getSchoolByCodeOrName(schoolCode);
     if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('school_profiles').upsert({
+    if (profileData.groupNumber !== undefined) {
+      const { error: schoolUpdateError } = await supabase
+        .from('schools')
+        .update({ group_number: profileData.groupNumber || null })
+        .eq('id', school.id);
+      if (schoolUpdateError) throw schoolUpdateError;
+    }
+    const { error: profileUpdateError } = await supabase.from('school_profiles').upsert({
       school_id: school.id,
       principal_name: profileData.principalName || null,
       principal_phone: profileData.principalPhone || null,
@@ -499,6 +514,7 @@ export const updateUserProfile = async (_url: string, schoolCode: string, profil
       remarks: profileData.remarks || null,
       updated_by: user?.id || null,
     }, { onConflict: 'school_id' });
+    if (profileUpdateError) throw profileUpdateError;
     return { status: 'success', message: 'Profil berjaya dikemaskini.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal kemaskini profil.' };

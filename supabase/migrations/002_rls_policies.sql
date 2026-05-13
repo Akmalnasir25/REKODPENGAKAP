@@ -64,7 +64,7 @@ $$ language sql security definer stable;
 -- ============================================================
 
 create policy "negeri_select" on public.negeri
-  for select to authenticated using (true);
+  for select using (true);
 
 create policy "negeri_insert" on public.negeri
   for insert to authenticated with check (public.is_admin_or_above());
@@ -80,7 +80,7 @@ create policy "negeri_delete" on public.negeri
 -- ============================================================
 
 create policy "daerah_select" on public.daerah
-  for select to authenticated using (true);
+  for select using (true);
 
 create policy "daerah_insert" on public.daerah
   for insert to authenticated with check (public.is_admin_or_above());

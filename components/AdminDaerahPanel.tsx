@@ -9,7 +9,7 @@ import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
@@ -211,6 +211,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
@@ -225,6 +226,25 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   useEffect(() => {
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
+
+  const handleDeleteAttendance = async (record: any) => {
+    const schoolName = record.school?.name || 'sekolah ini';
+    const badgeName = record.badge?.name || 'program ini';
+    if (!confirm(`Padam pengesahan kehadiran untuk ${schoolName} (${badgeName})?\n\nSelepas dipadam, QR boleh discan semula.`)) return;
+    setDeletingAttendanceId(record.id);
+    try {
+      const res = await deleteAttendanceVerification(record.id);
+      if (res.status === 'success') {
+        await loadAttendanceRecords();
+      } else {
+        alert('Gagal padam: ' + (res.message || 'Ralat tidak diketahui'));
+      }
+    } catch (e) {
+      alert('Ralat sambungan. Gagal padam rekod kehadiran.');
+    } finally {
+      setDeletingAttendanceId(null);
+    }
+  };
 
   // Filter data untuk daerah ini sahaja
   const filteredData = data.filter(d => d.daerahCode === daerahCode);
@@ -645,14 +665,24 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                           </div>
                           <div className="space-y-2 max-h-60 overflow-y-auto">
                             {todayRecords.map((r: any, i: number) => (
-                              <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2">
+                              <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
                                 <div>
                                   <p className="text-xs font-bold text-slate-800">{r.school?.name || '-'}</p>
                                   <p className="text-[10px] text-slate-500">{r.badge?.name || '-'} | {r.participant_count || 0} peserta</p>
                                 </div>
-                                <span className="text-[10px] text-green-600 font-mono">
-                                  {new Date(r.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-green-600 font-mono">
+                                    {new Date(r.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <button
+                                    onClick={() => handleDeleteAttendance(r)}
+                                    disabled={deletingAttendanceId === r.id}
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded p-1 transition disabled:opacity-50"
+                                    title="Padam pengesahan kehadiran"
+                                  >
+                                    {deletingAttendanceId === r.id ? <LoadingSpinner size="sm" color="border-red-500" /> : <Trash2 size={12} />}
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>

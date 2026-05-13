@@ -705,6 +705,17 @@ export const getAttendanceVerifications = async (year?: number, daerahCode?: str
   }
 };
 
+export const deleteAttendanceVerification = async (id: string): Promise<ApiResponse> => {
+  try {
+    if (!id) return { status: 'error', message: 'ID rekod kehadiran tidak sah.' };
+    const { error } = await supabase.from('attendance_verifications').delete().eq('id', id);
+    if (error) throw error;
+    return { status: 'success', message: 'Rekod kehadiran berjaya dipadam.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal padam rekod kehadiran.' };
+  }
+};
+
 export const bulkDeleteSubmissions = async (items: Array<{ icNumber?: string; id?: string; student: string }>): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();

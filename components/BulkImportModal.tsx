@@ -62,13 +62,6 @@ const formatIc = (value: string) => {
   if (digits.length === 12) return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
   return value;
 };
-const genderFromIc = (value: string) => {
-  const digits = value.replace(/\D/g, '');
-  if (digits.length < 1) return '';
-  const lastDigit = Number(digits[digits.length - 1]);
-  if (Number.isNaN(lastDigit)) return '';
-  return lastDigit % 2 === 1 ? 'Lelaki' : 'Perempuan';
-};
 
 export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   scriptUrl,
@@ -101,7 +94,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         row === 2 ? 'ALI BIN ABU' : '',
         row === 2 ? '120101-08-1234' : '',
         row === 2 ? 'AT1234-26' : '',
-        '',
+        row === 2 ? 'Lelaki' : '',
         row === 2 ? 'MELAYU' : '',
         row === 2 ? '0123456789' : '',
         row === 2 ? 'PESERTA' : '',
@@ -113,72 +106,38 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
 
-    for (let row = 2; row <= maxRows; row++) {
-      const genderCell = `D${row}`;
-      ws[genderCell] = {
-        t: 's',
-        f: `IF(B${row}="","",IF(ISODD(VALUE(RIGHT(SUBSTITUTE(B${row},"-",""),1))),"Lelaki","Perempuan"))`,
-        v: row === 2 ? 'Lelaki' : ''
-      } as any;
-    }
-
-    (ws as any)['!dataValidation'] = [
-      {
-        sqref: `E2:E${maxRows}`,
-        type: 'list',
-        allowBlank: true,
-        showErrorMessage: true,
-        errorTitle: 'Kaum tidak sah',
-        error: 'Sila pilih kaum daripada dropdown sahaja.',
-        formulas: [`"${raceOptions.join(',')}"`]
-      },
-      {
-        sqref: `G2:G${maxRows}`,
-        type: 'list',
-        allowBlank: true,
-        showErrorMessage: true,
-        errorTitle: 'Peranan tidak sah',
-        error: 'Sila pilih peranan daripada dropdown sahaja.',
-        formulas: [`"${roleOptions.join(',')}"`]
-      },
-      {
-        sqref: `H2:H${maxRows}`,
-        type: 'list',
-        allowBlank: true,
-        showErrorMessage: true,
-        errorTitle: 'Kategori tidak sah',
-        error: 'Sila pilih kategori daripada dropdown sahaja.',
-        formulas: [`"${categoryOptions.join(',')}"`]
-      }
-    ];
-
-    (ws as any)['!protect'] = {
-      password: 'PPM',
-      selectLockedCells: false,
-      selectUnlockedCells: true,
-      formatCells: false,
-      formatColumns: false,
-      formatRows: false,
-      insertColumns: false,
-      insertRows: false,
-      deleteColumns: false,
-      deleteRows: false
-    };
-
     const instructions = XLSX.utils.aoa_to_sheet([
       ['Panduan Import Pukal'],
-      ['1. Isi data hanya di sheet IMPORT.'],
-      ['2. Jantina dijana automatik berdasarkan digit terakhir No KP: ganjil = Lelaki, genap = Perempuan.'],
-      ['3. Kolum Jantina dikunci supaya formula tidak terpadam.'],
-      ['4. Kolum Kaum, Peranan dan Kategori disediakan sebagai dropdown untuk seragamkan data.'],
-      ['5. Jangan ubah nama header di row pertama.']
+      [''],
+      ['Isi data di sheet IMPORT. Jangan ubah nama header di row pertama.'],
+      ['Satu peserta/pemimpin/penguji mesti satu row sahaja.'],
+      [''],
+      ['JANTINA'],
+      ['Tulis salah satu: Lelaki / Perempuan'],
+      [''],
+      ['KAUM'],
+      [`Contoh/rujukan: ${raceOptions.join(', ')}`],
+      [''],
+      ['PERANAN'],
+      [`Tulis salah satu: ${roleOptions.join(', ')}`],
+      ['Contoh: PEMIMPIN atau PENOLONG PEMIMPIN untuk bahagian pemimpin.'],
+      [''],
+      ['KATEGORI'],
+      [`Tulis salah satu: ${categoryOptions.join(', ')}`],
+      ['Contoh: Udara, Laut, PPKI, PPKI Udara. Jika kosong, sistem akan anggap Perdana.'],
+      [''],
+      ['NO KP'],
+      ['Format disyorkan: 120101-08-1234'],
+      [''],
+      ['NO KEAHLIAN / ID'],
+      ['Wajib diisi dan elakkan duplicate dalam fail import.']
     ]);
-    instructions['!cols'] = [{ wch: 90 }];
+    instructions['!cols'] = [{ wch: 100 }];
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'IMPORT');
     XLSX.utils.book_append_sheet(wb, instructions, 'PANDUAN');
-    XLSX.writeFile(wb, `Template_Import_Pukal_${schoolCode}.xlsx`, { bookType: 'xlsx', cellStyles: true });
+    XLSX.writeFile(wb, `Template_Import_Pukal_${schoolCode}.xlsx`);
   };
 
   const parseFile = async (file: File) => {
@@ -194,7 +153,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const student = compact(studentRaw).toUpperCase();
       const icNumber = formatIc(normalizeIc(row['No KP']));
       const membershipId = compact(row['No Keahlian / ID']).toUpperCase();
-      const gender = normalizeGender(row['Jantina']) || genderFromIc(icNumber);
+      const gender = normalizeGender(row['Jantina']);
       const race = compact(row['Kaum'] || row['Bangsa']).toUpperCase();
       const phoneNumber = compact(row['No Telefon']);
       const role = normalizeRole(row['Peranan'], selectedRole);
@@ -211,7 +170,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       if (!membershipId) errors.push('No Keahlian / ID wajib diisi.');
       if (!gender) errors.push('Jantina wajib diisi.');
       else if (!['Lelaki', 'Perempuan'].includes(gender)) errors.push('Jantina mesti Lelaki atau Perempuan.');
-      if (!race) errors.push('Bangsa wajib diisi.');
+      if (!race) errors.push('Kaum wajib diisi.');
       if (!categoryOptions.includes(category)) errors.push('Kategori mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
       if (!roleOptions.includes(role as BulkRole)) errors.push('Peranan tidak sah.');
 

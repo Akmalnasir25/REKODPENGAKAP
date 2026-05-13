@@ -330,20 +330,33 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera API tidak disokong oleh browser ini.');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch (_) {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
+        const video = videoRef.current;
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.muted = true;
+        await new Promise<void>((resolve) => {
+          if (video.readyState >= 1) return resolve();
+          video.onloadedmetadata = () => resolve();
+        });
+        await video.play();
       }
       setCameraActive(true);
     } catch (e: any) {
+      setCameraActive(false);
       setCameraError(e?.message || 'Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.');
-      setScanMode('manual');
     }
   };
 
@@ -494,7 +507,12 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
                         <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
                         <canvas ref={canvasRef} className="hidden" />
                       </div>
-                      {cameraError && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{cameraError}</p>}
+                      {cameraError && (
+                        <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 space-y-2">
+                          <p>{cameraError}</p>
+                          <button onClick={startCamera} className="px-3 py-1 bg-red-600 text-white rounded font-bold text-[10px]">Cuba Buka Kamera Semula</button>
+                        </div>
+                      )}
                       <p className="text-[10px] text-gray-400 text-center">Halakan kamera kepada QR. Pastikan laman dibuka melalui HTTPS dan permission kamera dibenarkan.</p>
                     </div>
                   )}

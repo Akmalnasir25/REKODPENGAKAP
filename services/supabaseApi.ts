@@ -127,7 +127,7 @@ export const fetchCloudData = async (
         allowAssistants: s.allow_assistants,
         allowExaminers: s.allow_examiners,
         lockedBadges: statusRows
-          .filter((r: any) => ['submitted', 'locked'].includes(r.status))
+          .filter((r: any) => r.status === 'submitted')
           .map((r: any) => r.badge?.name ? `${r.badge.name}_${r.year}` : '')
           .filter(Boolean),
         approvedBadges: statusRows
@@ -441,7 +441,7 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
     const badge = await getBadgeByName(badgeName);
     if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
     
-    const { error } = await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'locked' }, { onConflict: 'school_id,badge_id,year' });
+    const { error } = await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'submitted', submitted_at: new Date().toISOString() }, { onConflict: 'school_id,badge_id,year' });
     if (error) throw error;
     return { status: 'success' };
   } catch (error: any) {
@@ -757,6 +757,7 @@ export const getSubmittedSchools = async (daerahCode?: string, year?: number): P
       .select('*, school:school_id(id, name, school_code, daerah:daerah_id(code)), badge:badge_id(name)')
       .eq('status', 'submitted')
       .eq('year', targetYear)
+      .not('submitted_at', 'is', null)
       .order('submitted_at', { ascending: false });
     if (error) throw error;
     let results = data || [];

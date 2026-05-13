@@ -205,8 +205,46 @@ function AppContent() {
         const { supabase } = await import('./services/supabaseClient');
         const { getProfileWithSchool } = await import('./services/supabaseAuth');
         const { data: { session: supaSession } } = await supabase.auth.getSession();
-        const savedSession = localStorage.getItem(LOCAL_STORAGE_KEYS.SESSION);
+        const savedAdminSession = localStorage.getItem(ADMIN_SESSION_KEY);
+        const savedDeveloperSession = localStorage.getItem(DEVELOPER_SESSION_KEY);
         let sessionRestored = false;
+
+        if (savedDeveloperSession) {
+            try {
+                const parsedDeveloper = JSON.parse(savedDeveloperSession);
+                if (parsedDeveloper && (!parsedDeveloper.expiresAt || parsedDeveloper.expiresAt > Date.now())) {
+                    setIsDeveloperMode(true);
+                    replaceViewInHash('developer');
+                    setView('developer');
+                    updateSessionActivity();
+                    sessionRestored = true;
+                } else {
+                    localStorage.removeItem(DEVELOPER_SESSION_KEY);
+                }
+            } catch (e) {
+                localStorage.removeItem(DEVELOPER_SESSION_KEY);
+            }
+        }
+
+        if (!sessionRestored && savedAdminSession) {
+            try {
+                const parsedAdmin = JSON.parse(savedAdminSession);
+                if (parsedAdmin && (!parsedAdmin.expiresAt || parsedAdmin.expiresAt > Date.now())) {
+                    setAdminSession(parsedAdmin);
+                    setAdminRole(null);
+                    replaceViewInHash('admin');
+                    setView('admin');
+                    updateSessionActivity();
+                    sessionRestored = true;
+                } else {
+                    localStorage.removeItem(ADMIN_SESSION_KEY);
+                }
+            } catch (e) {
+                localStorage.removeItem(ADMIN_SESSION_KEY);
+            }
+        }
+
+        const savedSession = localStorage.getItem(LOCAL_STORAGE_KEYS.SESSION);
         if (savedSession) {
             try {
                 const parsedSession = JSON.parse(savedSession);

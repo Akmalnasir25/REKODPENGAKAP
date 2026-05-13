@@ -72,13 +72,17 @@ export const UserForm: React.FC<UserFormProps> = ({
 
   // Determine permissions
   const currentSchoolSettings = userSession ? schools.find(s => s.name === userSession.schoolName) : null;
-  // If no settings found (e.g. legacy data), default to TRUE if allowEdit is true, or fallback to false
-  const allowStudents = currentSchoolSettings?.allowStudents ?? currentSchoolSettings?.allowEdit ?? false;
-  const allowAssistants = currentSchoolSettings?.allowAssistants ?? currentSchoolSettings?.allowEdit ?? false;
-  const allowExaminers = currentSchoolSettings?.allowExaminers ?? currentSchoolSettings?.allowEdit ?? false;
+  const baseAllowStudents = currentSchoolSettings?.allowStudents ?? currentSchoolSettings?.allowEdit ?? false;
+  const baseAllowAssistants = currentSchoolSettings?.allowAssistants ?? currentSchoolSettings?.allowEdit ?? false;
+  const baseAllowExaminers = currentSchoolSettings?.allowExaminers ?? currentSchoolSettings?.allowEdit ?? false;
+  const currentYear = new Date().getFullYear();
+  const selectedBadgePermissionKey = leaderInfo.badgeType ? `${leaderInfo.badgeType}_${currentYear}` : '';
+  const selectedBadgePermissions = selectedBadgePermissionKey ? currentSchoolSettings?.badgeEditPermissions?.[selectedBadgePermissionKey] : undefined;
+  const allowStudents = selectedBadgePermissions?.students ?? baseAllowStudents;
+  const allowAssistants = selectedBadgePermissions?.assistants ?? baseAllowAssistants;
+  const allowExaminers = selectedBadgePermissions?.examiners ?? baseAllowExaminers;
   
   const lockedBadges = currentSchoolSettings?.lockedBadges || [];
-  const currentYear = new Date().getFullYear();
 
   // EFFECT 1: Load cached leader info on mount (scoped by school code)
   useEffect(() => {

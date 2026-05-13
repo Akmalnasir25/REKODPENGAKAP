@@ -366,10 +366,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       // If badge+year is approved, user cannot modify
       if (approvedBadges.includes(lockKey)) return false;
-      
-      // Removed Role/Permission checks here to allow editing/deleting existing (imported) records
-      // even if the "Add New" permission is revoked.
-      return true;
+
+      const perBadgePermissions = currentSchoolSettings?.badgeEditPermissions?.[lockKey];
+      const role = (item.role || 'PESERTA').toUpperCase();
+      if (role === 'PENGUJI') return perBadgePermissions?.examiners ?? allowExaminers;
+      if (role.includes('PENOLONG') || role === 'PEMIMPIN') return perBadgePermissions?.assistants ?? allowAssistants;
+      return perBadgePermissions?.students ?? allowStudents;
   };
 
   const isCurrentOrFuture = selectedYear >= currentYear;
@@ -378,9 +380,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   
   const currentLockKey = selectedBadgeFilter ? getLockKey(selectedBadgeFilter, selectedYear) : '';
   const isSelectedBadgeLocked = selectedBadgeFilter !== '' && lockedBadges.includes(currentLockKey);
+  const isSelectedBadgeApproved = selectedBadgeFilter !== '' && approvedBadges.includes(currentLockKey);
   
-  // Show submit button if: Registration Open AND At least one permission allowed AND Badge not locked
-  const showSubmitButton = selectedBadgeFilter !== '' && isAnyAllowed && !isSelectedBadgeLocked;
+  // Show submit button if: Registration Open AND At least one permission allowed AND Badge not submitted/approved
+  const showSubmitButton = selectedBadgeFilter !== '' && isAnyAllowed && !isSelectedBadgeLocked && !isSelectedBadgeApproved;
 
   const handleEditClick = (item: SubmissionData) => {
       if (!canModifyRecord(item)) return;
@@ -1290,10 +1293,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             </button>
                         )}
 
-                        {/* SUBMITTED STATUS */}
-                        {isRegistrationOpen && isSelectedBadgeLocked && (
+                        {/* SUBMITTED / APPROVED STATUS */}
+                        {isRegistrationOpen && isSelectedBadgeLocked && !isSelectedBadgeApproved && (
+                            <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-yellow-200 select-none">
+                                <Clock size={16} /> {selectedBadgeFilter} Telah Dihantar
+                            </div>
+                        )}
+                        {isRegistrationOpen && isSelectedBadgeApproved && (
                             <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-green-200 select-none">
-                                <CheckCircle size={16} /> {selectedBadgeFilter} Telah Dihantar
+                                <CheckCircle size={16} /> {selectedBadgeFilter} Telah Disahkan
                             </div>
                         )}
                     </div>

@@ -202,30 +202,28 @@ function AppContent() {
         setScriptUrl(activeUrl);
         
         // 2. Check User Session
+        const { supabase } = await import('./services/supabaseClient');
+        const { getProfileWithSchool } = await import('./services/supabaseAuth');
+        const { data: { session: supaSession } } = await supabase.auth.getSession();
         const savedSession = localStorage.getItem(LOCAL_STORAGE_KEYS.SESSION);
         let sessionRestored = false;
         if (savedSession) {
             try {
                 const parsedSession = JSON.parse(savedSession);
                 if (parsedSession && parsedSession.isLoggedIn) {
-                    // Verify Supabase auth session is still valid
-                    const { supabase } = await import('./services/supabaseClient');
-                    const { data: { session: supaSession } } = await supabase.auth.getSession();
                     if (!supaSession) {
-                        // Supabase session expired, clear local session
                         console.warn('Supabase session expired, clearing local session');
                         localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
                     } else {
-                        // Check if user access is enabled from hardened access state.
                         const currentAccessState = await getAccessState();
                         const userAccessEnabled = currentAccessState.userAccess;
                         if (userAccessEnabled) {
                             setUserSession(parsedSession);
+                            updateSessionActivity();
                             replaceViewInHash('user_dashboard');
                             setView('user_dashboard');
                             sessionRestored = true;
                         } else {
-                            // User access disabled, clear session
                             localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
                         }
                     }
@@ -233,6 +231,33 @@ function AppContent() {
             } catch (e) {
                 console.error("Failed to restore session", e);
                 localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+            }
+        }
+
+        // Restore from Supabase persisted session even if app local session is missing
+        if (!sessionRestored && supaSession?.user) {
+            try {
+                const profile = await getProfileWithSchool(supaSession.user.id);
+                const school = (profile as any)?.school;
+                if ((profile as any)?.role === 'school_user' && school?.school_code) {
+                    const restoredUser: UserSession = {
+                        isLoggedIn: true,
+                        schoolName: school.name || '',
+                        schoolCode: school.school_code || '',
+                        loginTime: new Date().toISOString(),
+                    } as UserSession;
+                    const currentAccessState = await getAccessState();
+                    if (currentAccessState.userAccess) {
+                        setUserSession(restoredUser);
+                        localStorage.setItem(LOCAL_STORAGE_KEYS.SESSION, JSON.stringify(restoredUser));
+                        updateSessionActivity();
+                        replaceViewInHash('user_dashboard');
+                        setView('user_dashboard');
+                        sessionRestored = true;
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to restore Supabase session', e);
             }
         }
 

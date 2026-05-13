@@ -106,6 +106,18 @@ export const fetchCloudData = async (
 
     const schools: School[] = (schoolsRes.data || []).map((s: any) => {
       const statusRows = (statusRes.data || []).filter((r: any) => r.school?.school_code === s.school_code);
+      const badgeEditPermissions = statusRows.reduce((acc: Record<string, any>, r: any) => {
+        if (!r.badge?.name || !r.year) return acc;
+        const key = `${r.badge.name}_${r.year}`;
+        let notes: any = {};
+        try {
+          notes = typeof r.notes === 'string' && r.notes.trim().startsWith('{') ? JSON.parse(r.notes) : {};
+        } catch (_) {
+          notes = {};
+        }
+        if (notes.editPermissions) acc[key] = notes.editPermissions;
+        return acc;
+      }, {});
       return {
         name: s.name,
         schoolCode: s.school_code,
@@ -114,8 +126,15 @@ export const fetchCloudData = async (
         allowStudents: s.allow_students,
         allowAssistants: s.allow_assistants,
         allowExaminers: s.allow_examiners,
-        lockedBadges: statusRows.filter((r: any) => r.status === 'locked').map((r: any) => r.badge?.name).filter(Boolean),
-        approvedBadges: statusRows.filter((r: any) => r.status === 'approved').map((r: any) => r.badge?.name).filter(Boolean),
+        lockedBadges: statusRows
+          .filter((r: any) => ['submitted', 'locked'].includes(r.status))
+          .map((r: any) => r.badge?.name ? `${r.badge.name}_${r.year}` : '')
+          .filter(Boolean),
+        approvedBadges: statusRows
+          .filter((r: any) => r.status === 'approved')
+          .map((r: any) => r.badge?.name ? `${r.badge.name}_${r.year}` : '')
+          .filter(Boolean),
+        badgeEditPermissions,
       };
     });
 
@@ -235,7 +254,7 @@ const createSubmissionWithPeople = async (
     year,
     status: 'submitted',
     submitted_at: submittedAt,
-  }, { onConflict: 'school_id,badge_id,year', ignoreDuplicates: true });
+  }, { onConflict: 'school_id,badge_id,year' });
 
   return { status: 'success', message: 'Pendaftaran berjaya disimpan ke Supabase.' };
 };
@@ -430,24 +449,32 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
   }
 };
 
-export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeName: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
+    const parts = badgeNameWithYear.split('_');
+    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
+    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+
     const school = await getSchoolByCodeOrName(undefined, schoolName);
     const badge = await getBadgeByName(badgeName);
     if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    await supabase.from('school_badge_status').delete().eq('school_id', school.id).eq('badge_id', badge.id).eq('year', currentYear()).eq('status', 'locked');
+    await supabase.from('school_badge_status').delete().eq('school_id', school.id).eq('badge_id', badge.id).eq('year', year || currentYear());
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal unlock badge.' };
   }
 };
 
-export const approveSchoolBadge = async (_url: string, schoolName: string, badgeName: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const approveSchoolBadge = async (_url: string, schoolName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
+    const parts = badgeNameWithYear.split('_');
+    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
+    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+
     const school = await getSchoolByCodeOrName(undefined, schoolName);
     const badge = await getBadgeByName(badgeName);
     if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: currentYear(), status: 'approved' }, { onConflict: 'school_id,badge_id,year' });
+    await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'approved' }, { onConflict: 'school_id,badge_id,year' });
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal approve badge.' };
@@ -740,6 +767,57 @@ export const getSubmittedSchools = async (daerahCode?: string, year?: number): P
   } catch (error: any) {
     console.error('getSubmittedSchools error:', error);
     return [];
+  }
+};
+
+export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean, year: number = currentYear(), _csrfToken?: string): Promise<ApiResponse> => {
+  try {
+    const badge = await getBadgeByName(badgeName);
+    if (!badge) return { status: 'error', message: 'Program tidak dijumpai.' };
+
+    const { data: activeSchools, error: schoolsErr } = await supabase.from('schools').select('id').eq('is_active', true);
+    if (schoolsErr) throw schoolsErr;
+
+    const schoolIds = (activeSchools || []).map((s: any) => s.id);
+    const { data: existingRows, error: existingErr } = await supabase
+      .from('school_badge_status')
+      .select('*')
+      .eq('badge_id', badge.id)
+      .eq('year', year)
+      .in('school_id', schoolIds);
+    if (existingErr) throw existingErr;
+
+    const existingMap = new Map((existingRows || []).map((r: any) => [r.school_id, r]));
+    const applyPermission = (current: any = {}) => permissionType === 'all'
+      ? { ...current, students: allow, assistants: allow, examiners: allow }
+      : { ...current, [permissionType]: allow };
+
+    const rows = (activeSchools || []).map((s: any) => {
+      const existing = existingMap.get(s.id) as any;
+      let notes: any = {};
+      try {
+        notes = typeof existing?.notes === 'string' && existing.notes.trim().startsWith('{') ? JSON.parse(existing.notes) : {};
+      } catch (_) {
+        notes = {};
+      }
+      return {
+        school_id: s.id,
+        badge_id: badge.id,
+        year,
+        status: existing?.status || 'open',
+        submitted_at: existing?.submitted_at || null,
+        approved_at: existing?.approved_at || null,
+        approved_by: existing?.approved_by || null,
+        locked_at: existing?.locked_at || null,
+        notes: JSON.stringify({ ...notes, editPermissions: applyPermission(notes.editPermissions || {}) }),
+      };
+    });
+
+    const { error } = await supabase.from('school_badge_status').upsert(rows, { onConflict: 'school_id,badge_id,year' });
+    if (error) throw error;
+    return { status: 'success', message: `Kawalan edit ${badgeName} berjaya dikemaskini.` };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini kawalan edit program.' };
   }
 };
 

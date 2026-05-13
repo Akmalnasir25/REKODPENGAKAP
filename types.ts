@@ -66,6 +66,11 @@ export interface School {
   
   lockedBadges?: string[]; 
   approvedBadges?: string[]; 
+  badgeEditPermissions?: Record<string, {
+    students?: boolean;
+    assistants?: boolean;
+    examiners?: boolean;
+  }>;
 }
 
 export interface Negeri {

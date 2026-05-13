@@ -39,10 +39,14 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState(profile);
 
-  // Re-sync formData when profile prop changes
+  const profileSignature = JSON.stringify(profile);
+
+  // Re-sync formData when profile prop changes, but never overwrite active typing while editing
   React.useEffect(() => {
-    setFormData(profile);
-  }, [profile]);
+    if (!isEditing) {
+      setFormData(profile);
+    }
+  }, [profileSignature, isEditing]);
 
   const handleChange = (field: keyof UserProfile, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

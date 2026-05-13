@@ -1,7 +1,7 @@
 
 
 import React, { useState } from 'react';
-import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
@@ -26,6 +26,15 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const [unlockingBadge, setUnlockingBadge] = useState<string | null>(null); 
   const [approvingBadge, setApprovingBadge] = useState<string | null>(null); 
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
+  const [schoolSearch, setSchoolSearch] = useState('');
+
+  const filteredSchools = schools.filter(s => {
+    const query = schoolSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [s.name, s.schoolCode, s.negeriCode, s.daerahCode]
+      .filter(Boolean)
+      .some(value => String(value).toLowerCase().includes(query));
+  });
 
   // Batch toggle check
   const allStudentsAllowed = schools.length > 0 && schools.every(s => s.allowStudents);
@@ -396,8 +405,32 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
         </div>
       )}
 
+      <div className="mb-3 bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={schoolSearch}
+            onChange={e => setSchoolSearch(e.target.value)}
+            placeholder="Cari nama / kod sekolah..."
+            className="w-full pl-9 pr-10 py-2 border border-gray-200 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          {schoolSearch && (
+            <button
+              onClick={() => setSchoolSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              title="Kosongkan carian"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+        <p className="text-[10px] text-gray-400 mt-2 font-semibold">
+          Paparan: {filteredSchools.length} / {schools.length} sekolah
+        </p>
+      </div>
+
       <div className="max-h-[600px] overflow-y-auto border rounded-lg bg-gray-50 p-2">
-        {schools.map((s, i) => {
+        {filteredSchools.map((s, i) => {
             const isLoadingThis = toggling?.name === s.name;
             const isAllEnabled = s.allowStudents && s.allowAssistants && s.allowExaminers;
 
@@ -541,7 +574,11 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                 </div>
             )
         })}
-        {schools.length === 0 && <p className="text-center text-gray-400 p-4">Tiada sekolah dalam database.</p>}
+        {filteredSchools.length === 0 && (
+          <p className="text-center text-gray-400 p-4">
+            {schoolSearch ? 'Tiada sekolah sepadan dengan carian.' : 'Tiada sekolah dalam database.'}
+          </p>
+        )}
       </div>
     </div>
   );

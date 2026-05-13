@@ -103,14 +103,20 @@ serve(async (req) => {
     }
 
     const claimedUserId = school.claimed_by;
+    let deleteUserWarning = "";
 
     if (claimedUserId) {
+      await supabaseAdmin.from("submissions").update({ submitted_by: null }).eq("submitted_by", claimedUserId);
+      await supabaseAdmin.from("school_profiles").update({ updated_by: null }).eq("updated_by", claimedUserId);
+      await supabaseAdmin.from("attendance_verifications").update({ verified_by: null }).eq("verified_by", claimedUserId);
+      await supabaseAdmin.from("attachments").update({ uploaded_by: null }).eq("uploaded_by", claimedUserId);
+      await supabaseAdmin.from("school_badge_status").update({ approved_by: null }).eq("approved_by", claimedUserId);
+      await supabaseAdmin.from("audit_logs").update({ actor_user_id: null }).eq("actor_user_id", claimedUserId);
+
       const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(claimedUserId);
       if (deleteUserError) {
-        return new Response(
-          JSON.stringify({ status: "error", message: "Gagal memadam user lama: " + deleteUserError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.warn("Delete old auth user failed, continuing reset:", deleteUserError.message);
+        deleteUserWarning = ` User Auth lama tidak dapat dipadam secara automatik (${deleteUserError.message}), tetapi akaun sekolah telah dinyahaktifkan dan claim telah dibuka.`;
       }
     }
 
@@ -154,7 +160,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         status: "success",
-        message: "Akaun sekolah berjaya direset. Sekolah boleh daftar semula menggunakan kod sekolah yang sama.",
+        message: "Akaun sekolah berjaya direset. Sekolah boleh daftar semula menggunakan kod sekolah yang sama." + deleteUserWarning,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

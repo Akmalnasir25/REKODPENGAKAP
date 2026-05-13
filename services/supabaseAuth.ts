@@ -176,6 +176,12 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
     const profile = await getProfileWithSchool(data.user.id);
     const school = profile?.school as any;
 
+    // Check if profile is active
+    if (!profile?.is_active) {
+      await supabase.auth.signOut();
+      return { status: 'error', message: 'Akaun anda telah dinyahaktifkan. Sila hubungi admin.' };
+    }
+
     return {
       status: 'success',
       message: 'Log masuk berjaya!',

@@ -373,7 +373,7 @@ export const onAuthStateChange = (callback: (event: string, session: any) => voi
 export const fetchSchoolsForRegistration = async () => {
   const { data, error } = await supabase
     .from('schools')
-    .select('id, name, school_code, is_claimed')
+    .select('id, name, school_code, is_claimed, negeri:negeri_id(code), daerah:daerah_id(code)')
     .eq('is_active', true)
     .order('name');
 

@@ -24,6 +24,15 @@ interface AuthScreenProps {
 
 type AuthMode = 'login' | 'register' | 'forgot_password' | 'developer';
 
+type RegistrationSchool = {
+  id: string;
+  name: string;
+  school_code: string;
+  is_claimed: boolean;
+  negeri?: { code: string } | { code: string }[] | null;
+  daerah?: { code: string } | { code: string }[] | null;
+};
+
 export const AuthScreen: React.FC<AuthScreenProps> = ({ 
   scriptUrl, 
   onLoginSuccess, 
@@ -44,7 +53,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [schoolName, setSchoolName] = useState('');
   const [schoolCode, setSchoolCode] = useState(''); // Also used as Admin Username
   const [email, setEmail] = useState('');
-  const [supabaseSchools, setSupabaseSchools] = useState<Array<{ id: string; name: string; school_code: string; is_claimed: boolean }>>([]);
+  const [supabaseSchools, setSupabaseSchools] = useState<RegistrationSchool[]>([]);
   const [selectedNegeri, setSelectedNegeri] = useState('');
   const [selectedDaerah, setSelectedDaerah] = useState('');
   
@@ -68,9 +77,19 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   useEffect(() => {
       if (authMode !== 'register') return;
       fetchSchoolsForRegistration()
-          .then((data) => setSupabaseSchools(data as Array<{ id: string; name: string; school_code: string; is_claimed: boolean }>))
+          .then((data) => setSupabaseSchools(data as RegistrationSchool[]))
           .catch(() => setSupabaseSchools([]));
   }, [authMode]);
+
+  const getRelationCode = (relation?: { code: string } | { code: string }[] | null) => {
+      if (Array.isArray(relation)) return relation[0]?.code || '';
+      return relation?.code || '';
+  };
+
+  const filteredRegistrationSchools = supabaseSchools.filter((school) => {
+      if (!selectedNegeri || !selectedDaerah) return false;
+      return getRelationCode(school.negeri) === selectedNegeri && getRelationCode(school.daerah) === selectedDaerah;
+  });
 
   const resetForm = () => {
       setSchoolName('');
@@ -434,6 +453,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                                     value={selectedDaerah}
                                     onChange={(e) => {
                                         setSelectedDaerah(e.target.value);
+                                        setSchoolName('');
                                     }}
                                 >
                                     <option value="">-- Pilih Daerah --</option>
@@ -444,27 +464,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                             </div>
                         </div>
 
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Sekolah</label>
-                            <div className="relative">
-                                <SchoolIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                <select 
-                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
-                                    value={schoolName}
-                                    onChange={(e) => setSchoolName(e.target.value)}
-                                    required
-                                >
-                                    <option value="">-- Pilih Sekolah --</option>
-                                    {supabaseSchools
-                                        .map((s) => <option key={s.id} value={s.id} disabled={s.is_claimed}>{s.name}{s.is_claimed ? ' (Sudah didaftarkan)' : ''}</option>)}
-                                </select>
+                        {selectedDaerah && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Sekolah</label>
+                                <div className="relative">
+                                    <SchoolIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <select 
+                                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
+                                        value={schoolName}
+                                        onChange={(e) => setSchoolName(e.target.value)}
+                                        required
+                                    >
+                                        <option value="">-- Pilih Sekolah --</option>
+                                        {filteredRegistrationSchools
+                                            .map((s) => <option key={s.id} value={s.id} disabled={s.is_claimed}>{s.name}{s.is_claimed ? ' (Sudah didaftarkan)' : ''}</option>)}
+                                    </select>
+                                </div>
+                                {supabaseSchools.length === 0 && (
+                                    <p className="text-amber-600 text-xs mt-1">
+                                        Tiada senarai sekolah daripada Supabase. Sila semak data schools atau RLS policy.
+                                    </p>
+                                )}
+                                {supabaseSchools.length > 0 && filteredRegistrationSchools.length === 0 && (
+                                    <p className="text-amber-600 text-xs mt-1">
+                                        Tiada sekolah ditemui untuk daerah yang dipilih.
+                                    </p>
+                                )}
                             </div>
-                            {supabaseSchools.length === 0 && (
-                                <p className="text-amber-600 text-xs mt-1">
-                                    Tiada senarai sekolah daripada Supabase. Sila semak data schools atau RLS policy.
-                                </p>
-                            )}
-                        </div>
+                        )}
                     </>
                 )}
 

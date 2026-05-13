@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "afiqstore": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Afiq Store",
+      "options": {
+        "baseURL": "https://api.afiqstores.cloud/v1",
+        "apiKey": "{env:AFIQSTORE_API_KEY}"
+      },
+      "models": {
+        "anthropic/claude-opus-4.7": {
+          "name": "Claude Opus 4.7"
+        }
+      }
+    }
+  }
+}

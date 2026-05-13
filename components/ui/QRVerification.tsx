@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import QRCode from 'qrcode';
+import jsQR from 'jsqr';
 import { QrCode, Download, Printer, X, CheckCircle, School, Users, ScanLine, Camera, Keyboard } from 'lucide-react';
 import { SubmissionData } from '../../types';
 
@@ -282,6 +283,7 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const parseQRText = (text: string): SchoolQRData | null => {
@@ -324,21 +326,23 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
 
   const startCamera = async () => {
     setCameraError('');
-    if (!('BarcodeDetector' in window)) {
-      setCameraError('Browser ini tidak menyokong camera QR scanner. Gunakan Chrome/Android atau scanner device/manual input.');
-      setScanMode('manual');
-      return;
-    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera API tidak disokong oleh browser ini.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
         await videoRef.current.play();
       }
       setCameraActive(true);
-    } catch (e) {
-      setCameraError('Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.');
+    } catch (e: any) {
+      setCameraError(e?.message || 'Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.');
       setScanMode('manual');
     }
   };
@@ -356,16 +360,21 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
   }, [isOpen, scanMode, scannedData, verified]);
 
   useEffect(() => {
-    if (!cameraActive || !videoRef.current || scannedData) return;
+    if (!cameraActive || !videoRef.current || !canvasRef.current || scannedData) return;
     let cancelled = false;
-    const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-    const tick = async () => {
-      if (cancelled || !videoRef.current) return;
-      try {
-        const codes = await detector.detect(videoRef.current);
-        const value = codes?.[0]?.rawValue;
-        if (value && handleDecodedText(value)) return;
-      } catch (_) {}
+    const tick = () => {
+      if (cancelled || !videoRef.current || !canvasRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (ctx && video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
+        if (code?.data && handleDecodedText(code.data)) return;
+      }
       requestAnimationFrame(tick);
     };
     tick();
@@ -483,6 +492,7 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
                     <div className="space-y-2">
                       <div className="bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
                         <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+                        <canvas ref={canvasRef} className="hidden" />
                       </div>
                       {cameraError && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{cameraError}</p>}
                       <p className="text-[10px] text-gray-400 text-center">Halakan kamera kepada QR. Pastikan laman dibuka melalui HTTPS dan permission kamera dibenarkan.</p>

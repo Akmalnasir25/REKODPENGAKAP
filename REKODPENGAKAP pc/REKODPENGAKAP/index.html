@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pengakap - Pengurusan Data</title>
+    <link rel="icon" type="image/png" href="https://www.dropbox.com/scl/fi/k89h4n5x9628z6ojzmsjc/Untitled-design-2.png?rlkey=8o1b8nxpowuj5mfachltdghqr&st=91curw10&raw=1">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Hide scrollbar for horizontal scroll */
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        
+        /* PRINT OPTIMIZATION */
+        @media print {
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: auto;
+                background: white;
+            }
+            
+            /* Force page breaks and remove overflow */
+            table {
+                page-break-inside: auto;
+                margin-bottom: 20mm;
+            }
+            
+            tr {
+                page-break-inside: avoid;
+            }
+            
+            /* Ensure content flows to next page */
+            div {
+                page-break-inside: avoid;
+            }
+            
+            /* Margin untuk printing - LANDSCAPE & COLOR */
+            @page {
+                margin: 10mm;
+                size: A4 landscape;
+            }
+            
+            /* Pastikan text visible dan COLOR */
+            body {
+                color: black;
+                background: white;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

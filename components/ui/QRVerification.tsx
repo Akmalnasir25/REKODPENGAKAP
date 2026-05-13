@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import QRCode from 'qrcode';
-import { QrCode, Download, Printer, X, CheckCircle, School, Users, ScanLine } from 'lucide-react';
+import { QrCode, Download, Printer, X, CheckCircle, School, Users, ScanLine, Camera, Keyboard } from 'lucide-react';
 import { SubmissionData } from '../../types';
 
 /**
@@ -9,14 +9,14 @@ import { SubmissionData } from '../../types';
  */
 
 interface SchoolQRData {
-  v: 2; // version 2 = school-based
+  v: 3; // compact school-based QR
   schoolCode: string;
   schoolName: string;
   badge: string;
   year: number;
   totalParticipants: number;
-  participants: { name: string; ic: string; id: string; role: string; category: string }[];
   generatedAt: string;
+  ref: string;
 }
 
 interface SchoolGroup {
@@ -36,21 +36,16 @@ const safeGetYear = (value: unknown): number | null => {
  * Generate QR payload for a school group
  */
 const generateSchoolQRPayload = (group: SchoolGroup, year: number): string => {
+  const ref = `${group.schoolCode}-${group.badge.replace(/\s/g, '')}-${year}`.toUpperCase();
   const payload: SchoolQRData = {
-    v: 2,
+    v: 3,
     schoolCode: group.schoolCode,
     schoolName: group.schoolName,
     badge: group.badge,
     year,
     totalParticipants: group.participants.length,
-    participants: group.participants.map(p => ({
-      name: p.student,
-      ic: p.icNumber || '',
-      id: p.id || '',
-      role: p.role || 'PESERTA',
-      category: p.category || '',
-    })),
     generatedAt: new Date().toISOString(),
+    ref,
   };
   return JSON.stringify(payload);
 };
@@ -66,7 +61,7 @@ interface AttendanceRecord {
   verifiedAt: number;
   verifiedBy: string;
   totalParticipants: number;
-  participants: string[]; // names
+  participants: string[]; // names, if available
 }
 
 const ATTENDANCE_KEY = 'ATTENDANCE_RECORDS';
@@ -283,20 +278,103 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
   const [verified, setVerified] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [records, setRecords] = useState<AttendanceRecord[]>(getAttendanceRecords());
+  const [scanMode, setScanMode] = useState<'camera' | 'manual'>('camera');
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const parseQRText = (text: string): SchoolQRData | null => {
+    try {
+      const parsed = JSON.parse(text) as any;
+      if ((parsed.v === 2 || parsed.v === 3) && parsed.schoolCode && parsed.schoolName && parsed.badge) {
+        return {
+          v: 3,
+          schoolCode: parsed.schoolCode,
+          schoolName: parsed.schoolName,
+          badge: parsed.badge,
+          year: parsed.year || new Date().getFullYear(),
+          totalParticipants: parsed.totalParticipants || parsed.participants?.length || 0,
+          generatedAt: parsed.generatedAt || new Date().toISOString(),
+          ref: parsed.ref || `${parsed.schoolCode}-${String(parsed.badge).replace(/\s/g, '')}-${parsed.year || new Date().getFullYear()}`.toUpperCase(),
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleDecodedText = (text: string) => {
+    const parsed = parseQRText(text.trim());
+    if (parsed) {
+      setScannedData(parsed);
+      setManualInput('');
+      stopCamera();
+      return true;
+    }
+    return false;
+  };
 
   const handleManualVerify = () => {
-    try {
-      const parsed = JSON.parse(manualInput) as SchoolQRData;
-      if (parsed.v === 2 && parsed.schoolCode && parsed.participants) {
-        setScannedData(parsed);
-        setManualInput('');
-      } else {
-        alert('Format QR tidak sah. Pastikan QR dijana dari sistem ini.');
-      }
-    } catch {
+    if (!handleDecodedText(manualInput)) {
       alert('Data tidak sah. Sila scan QR yang betul atau tampal data QR.');
     }
   };
+
+  const startCamera = async () => {
+    setCameraError('');
+    if (!('BarcodeDetector' in window)) {
+      setCameraError('Browser ini tidak menyokong camera QR scanner. Gunakan Chrome/Android atau scanner device/manual input.');
+      setScanMode('manual');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (e) {
+      setCameraError('Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.');
+      setScanMode('manual');
+    }
+  };
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  };
+
+  useEffect(() => {
+    if (!isOpen || scanMode !== 'camera' || scannedData || verified) return;
+    startCamera();
+    return () => stopCamera();
+  }, [isOpen, scanMode, scannedData, verified]);
+
+  useEffect(() => {
+    if (!cameraActive || !videoRef.current || scannedData) return;
+    let cancelled = false;
+    const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+    const tick = async () => {
+      if (cancelled || !videoRef.current) return;
+      try {
+        const codes = await detector.detect(videoRef.current);
+        const value = codes?.[0]?.rawValue;
+        if (value && handleDecodedText(value)) return;
+      } catch (_) {}
+      requestAnimationFrame(tick);
+    };
+    tick();
+    return () => { cancelled = true; };
+  }, [cameraActive, scannedData]);
+
+  useEffect(() => {
+    if (!isOpen) stopCamera();
+  }, [isOpen]);
 
   const handleConfirmAttendance = () => {
     if (!scannedData) return;
@@ -309,7 +387,7 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
       verifiedAt: Date.now(),
       verifiedBy: verifierName,
       totalParticipants: scannedData.totalParticipants,
-      participants: scannedData.participants.map(p => p.name),
+      participants: [],
     };
 
     saveAttendanceRecord(record);
@@ -374,15 +452,10 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
                     </div>
                   </div>
                   
-                  <div className="bg-white rounded-lg p-3 mb-3 max-h-40 overflow-y-auto">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Senarai Peserta ({scannedData.totalParticipants})</p>
-                    {scannedData.participants.map((p, i) => (
-                      <div key={i} className="flex items-center gap-2 py-1 border-b border-gray-50 last:border-0">
-                        <span className="text-[10px] text-gray-400 w-5">{i + 1}.</span>
-                        <span className="text-xs font-medium text-gray-800 flex-1">{p.name}</span>
-                        <span className="text-[9px] text-gray-400 font-mono">{p.ic}</span>
-                      </div>
-                    ))}
+                  <div className="bg-white rounded-lg p-3 mb-3">
+                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Maklumat QR</p>
+                    <p className="text-xs text-gray-700">Jumlah peserta berdaftar: <strong>{scannedData.totalParticipants}</strong></p>
+                    <p className="text-[10px] text-gray-400 font-mono mt-1">Ref: {scannedData.ref}</p>
                   </div>
 
                   <button
@@ -394,26 +467,51 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
                 </div>
               )}
 
-              {/* Manual Input (fallback for devices without camera) */}
+              {/* Scanner Input */}
               {!scannedData && !verified && (
-                <div>
-                  <p className="text-xs text-gray-600 mb-2 font-bold">Tampal data QR di bawah:</p>
-                  <textarea
-                    value={manualInput}
-                    onChange={e => setManualInput(e.target.value)}
-                    placeholder='Tampal kandungan QR di sini (format JSON)...'
-                    className="w-full p-3 border border-gray-300 rounded-lg text-xs h-24 resize-none focus:ring-2 focus:ring-green-500 outline-none font-mono"
-                  />
-                  <button
-                    onClick={handleManualVerify}
-                    disabled={!manualInput.trim()}
-                    className="mt-2 w-full py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Sahkan Data QR
-                  </button>
-                  <p className="text-[10px] text-gray-400 mt-2 text-center">
-                    Gunakan aplikasi pengimbas QR untuk membaca kod, kemudian tampal hasilnya di sini.
-                  </p>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setScanMode('camera')} className={`py-2 rounded-lg text-xs font-bold border flex items-center justify-center gap-1 ${scanMode === 'camera' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200'}`}>
+                      <Camera size={14} /> Kamera
+                    </button>
+                    <button onClick={() => { setScanMode('manual'); stopCamera(); }} className={`py-2 rounded-lg text-xs font-bold border flex items-center justify-center gap-1 ${scanMode === 'manual' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'}`}>
+                      <Keyboard size={14} /> Scanner Device / Manual
+                    </button>
+                  </div>
+
+                  {scanMode === 'camera' && (
+                    <div className="space-y-2">
+                      <div className="bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
+                        <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
+                      </div>
+                      {cameraError && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2">{cameraError}</p>}
+                      <p className="text-[10px] text-gray-400 text-center">Halakan kamera kepada QR. Pastikan laman dibuka melalui HTTPS dan permission kamera dibenarkan.</p>
+                    </div>
+                  )}
+
+                  {scanMode === 'manual' && (
+                    <div>
+                      <p className="text-xs text-gray-600 mb-2 font-bold">Scanner device / tampal data QR:</p>
+                      <input
+                        value={manualInput}
+                        onChange={e => setManualInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && manualInput.trim()) handleManualVerify(); }}
+                        placeholder="Klik sini dan scan guna scanner device, atau tampal kandungan QR"
+                        autoFocus
+                        className="w-full p-3 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-green-500 outline-none font-mono"
+                      />
+                      <button
+                        onClick={handleManualVerify}
+                        disabled={!manualInput.trim()}
+                        className="mt-2 w-full py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Sahkan Data QR
+                      </button>
+                      <p className="text-[10px] text-gray-400 mt-2 text-center">
+                        Untuk scanner USB/Bluetooth, fokuskan cursor dalam kotak ini kemudian scan QR.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

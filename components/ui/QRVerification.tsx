@@ -282,6 +282,8 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
   const [scanMode, setScanMode] = useState<'camera' | 'manual'>('camera');
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -324,39 +326,72 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
     }
   };
 
-  const startCamera = async () => {
+  const loadCameraDevices = async () => {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = allDevices.filter(d => d.kind === 'videoinput');
+      setDevices(videoDevices);
+      if (!selectedDeviceId && videoDevices[0]?.deviceId) setSelectedDeviceId(videoDevices[0].deviceId);
+    } catch (_) {}
+  };
+
+  const startCamera = async (deviceIdOverride?: string) => {
     setCameraError('');
+    stopCamera();
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera API tidak disokong oleh browser ini.');
       }
 
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: false,
-        });
-      } catch (_) {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const deviceId = deviceIdOverride || selectedDeviceId;
+      const attempts: MediaStreamConstraints[] = [];
+      if (deviceId) attempts.push({ video: { deviceId: { exact: deviceId } }, audio: false });
+      attempts.push({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      attempts.push({ video: true, audio: false });
+
+      let stream: MediaStream | null = null;
+      let lastError: any = null;
+      for (const constraints of attempts) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          break;
+        } catch (err) {
+          lastError = err;
+        }
       }
+      if (!stream) throw lastError || new Error('Kamera tidak dapat dimulakan.');
 
       streamRef.current = stream;
+      await loadCameraDevices();
+
       if (videoRef.current) {
         const video = videoRef.current;
         video.srcObject = stream;
         video.setAttribute('playsinline', 'true');
         video.muted = true;
-        await new Promise<void>((resolve) => {
-          if (video.readyState >= 1) return resolve();
-          video.onloadedmetadata = () => resolve();
+        await new Promise<void>((resolve, reject) => {
+          const timer = window.setTimeout(() => reject(new Error('Video camera timeout.')), 5000);
+          if (video.readyState >= 1) {
+            window.clearTimeout(timer);
+            return resolve();
+          }
+          video.onloadedmetadata = () => {
+            window.clearTimeout(timer);
+            resolve();
+          };
         });
         await video.play();
       }
       setCameraActive(true);
     } catch (e: any) {
-      setCameraActive(false);
-      setCameraError(e?.message || 'Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.');
+      stopCamera();
+      const msg = e?.name === 'NotAllowedError'
+        ? 'Permission kamera ditolak. Sila allow camera permission pada browser.'
+        : e?.name === 'NotReadableError'
+          ? 'Kamera tidak boleh dimulakan. Tutup app/tab lain yang menggunakan kamera, kemudian cuba semula.'
+          : e?.message || 'Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.';
+      setCameraError(msg);
     }
   };
 
@@ -365,6 +400,11 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
     streamRef.current = null;
     setCameraActive(false);
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    loadCameraDevices();
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || scanMode !== 'camera' || scannedData || verified) return;
@@ -503,6 +543,17 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
 
                   {scanMode === 'camera' && (
                     <div className="space-y-2">
+                      {devices.length > 1 && (
+                        <select
+                          value={selectedDeviceId}
+                          onChange={e => { setSelectedDeviceId(e.target.value); startCamera(e.target.value); }}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-semibold bg-white"
+                        >
+                          {devices.map((device, idx) => (
+                            <option key={device.deviceId || idx} value={device.deviceId}>{device.label || `Kamera ${idx + 1}`}</option>
+                          ))}
+                        </select>
+                      )}
                       <div className="bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center">
                         <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
                         <canvas ref={canvasRef} className="hidden" />

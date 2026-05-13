@@ -33,7 +33,10 @@ interface BulkImportModalProps {
   onSuccess: () => void;
 }
 
-const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Bangsa', 'No Telefon', 'Peranan', 'Kategori', 'Catatan'];
+const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Kaum', 'No Telefon', 'Peranan', 'Kategori', 'Catatan'];
+const categoryOptions = ['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'];
+const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI', 'PENERIMA RAMBU'];
+const raceOptions = ['MELAYU', 'CINA', 'INDIA', 'BUMIPUTERA SABAH', 'BUMIPUTERA SARAWAK', 'ORANG ASLI', 'LAIN-LAIN'];
 const normalize = (value: any) => String(value || '').trim();
 const compact = (value: any) => normalize(value).replace(/\s+/g, ' ');
 const normalizeIc = (value: any) => normalize(value).replace(/\s+/g, '');
@@ -58,6 +61,13 @@ const formatIc = (value: string) => {
   const digits = value.replace(/\D/g, '');
   if (digits.length === 12) return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
   return value;
+};
+const genderFromIc = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 1) return '';
+  const lastDigit = Number(digits[digits.length - 1]);
+  if (Number.isNaN(lastDigit)) return '';
+  return lastDigit % 2 === 1 ? 'Lelaki' : 'Perempuan';
 };
 
 export const BulkImportModal: React.FC<BulkImportModalProps> = ({
@@ -84,14 +94,91 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const canSubmit = selectedBadge && records.length > 0 && errorCount === 0 && confirmed && !isSubmitting;
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      requiredHeaders,
-      ['ALI BIN ABU', '120101-08-1234', 'AT1234-26', 'Lelaki', 'Melayu', '0123456789', 'PESERTA', 'Perdana', '']
+    const maxRows = 300;
+    const rows: any[][] = [requiredHeaders];
+    for (let row = 2; row <= maxRows; row++) {
+      rows.push([
+        row === 2 ? 'ALI BIN ABU' : '',
+        row === 2 ? '120101-08-1234' : '',
+        row === 2 ? 'AT1234-26' : '',
+        '',
+        row === 2 ? 'MELAYU' : '',
+        row === 2 ? '0123456789' : '',
+        row === 2 ? 'PESERTA' : '',
+        row === 2 ? 'Perdana' : '',
+        ''
+      ]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
+
+    for (let row = 2; row <= maxRows; row++) {
+      const genderCell = `D${row}`;
+      ws[genderCell] = {
+        t: 's',
+        f: `IF(B${row}="","",IF(ISODD(VALUE(RIGHT(SUBSTITUTE(B${row},"-",""),1))),"Lelaki","Perempuan"))`,
+        v: row === 2 ? 'Lelaki' : ''
+      } as any;
+    }
+
+    (ws as any)['!dataValidation'] = [
+      {
+        sqref: `E2:E${maxRows}`,
+        type: 'list',
+        allowBlank: true,
+        showErrorMessage: true,
+        errorTitle: 'Kaum tidak sah',
+        error: 'Sila pilih kaum daripada dropdown sahaja.',
+        formulas: [`"${raceOptions.join(',')}"`]
+      },
+      {
+        sqref: `G2:G${maxRows}`,
+        type: 'list',
+        allowBlank: true,
+        showErrorMessage: true,
+        errorTitle: 'Peranan tidak sah',
+        error: 'Sila pilih peranan daripada dropdown sahaja.',
+        formulas: [`"${roleOptions.join(',')}"`]
+      },
+      {
+        sqref: `H2:H${maxRows}`,
+        type: 'list',
+        allowBlank: true,
+        showErrorMessage: true,
+        errorTitle: 'Kategori tidak sah',
+        error: 'Sila pilih kategori daripada dropdown sahaja.',
+        formulas: [`"${categoryOptions.join(',')}"`]
+      }
+    ];
+
+    (ws as any)['!protect'] = {
+      password: 'PPM',
+      selectLockedCells: false,
+      selectUnlockedCells: true,
+      formatCells: false,
+      formatColumns: false,
+      formatRows: false,
+      insertColumns: false,
+      insertRows: false,
+      deleteColumns: false,
+      deleteRows: false
+    };
+
+    const instructions = XLSX.utils.aoa_to_sheet([
+      ['Panduan Import Pukal'],
+      ['1. Isi data hanya di sheet IMPORT.'],
+      ['2. Jantina dijana automatik berdasarkan digit terakhir No KP: ganjil = Lelaki, genap = Perempuan.'],
+      ['3. Kolum Jantina dikunci supaya formula tidak terpadam.'],
+      ['4. Kolum Kaum, Peranan dan Kategori disediakan sebagai dropdown untuk seragamkan data.'],
+      ['5. Jangan ubah nama header di row pertama.']
     ]);
-    ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 15 }, { wch: 20 }, { wch: 14 }, { wch: 30 }];
+    instructions['!cols'] = [{ wch: 90 }];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'IMPORT');
-    XLSX.writeFile(wb, `Template_Import_Pukal_${schoolCode}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, instructions, 'PANDUAN');
+    XLSX.writeFile(wb, `Template_Import_Pukal_${schoolCode}.xlsx`, { bookType: 'xlsx', cellStyles: true });
   };
 
   const parseFile = async (file: File) => {
@@ -107,8 +194,8 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const student = compact(studentRaw).toUpperCase();
       const icNumber = formatIc(normalizeIc(row['No KP']));
       const membershipId = compact(row['No Keahlian / ID']).toUpperCase();
-      const gender = normalizeGender(row['Jantina']);
-      const race = compact(row['Bangsa']).toUpperCase();
+      const gender = normalizeGender(row['Jantina']) || genderFromIc(icNumber);
+      const race = compact(row['Kaum'] || row['Bangsa']).toUpperCase();
       const phoneNumber = compact(row['No Telefon']);
       const role = normalizeRole(row['Peranan'], selectedRole);
       const category = compact(row['Kategori']) || 'Perdana';
@@ -125,9 +212,8 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       if (!gender) errors.push('Jantina wajib diisi.');
       else if (!['Lelaki', 'Perempuan'].includes(gender)) errors.push('Jantina mesti Lelaki atau Perempuan.');
       if (!race) errors.push('Bangsa wajib diisi.');
-      if (!['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'].includes(category)) errors.push('Kategori mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
-      const validRoles: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI', 'PENERIMA RAMBU'];
-      if (!validRoles.includes(role as BulkRole)) errors.push('Peranan tidak sah.');
+      if (!categoryOptions.includes(category)) errors.push('Kategori mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
+      if (!roleOptions.includes(role as BulkRole)) errors.push('Peranan tidak sah.');
 
       const icKey = `${icNumber}_${selectedBadge}_${selectedYear}`;
       const idKey = membershipId;
@@ -197,7 +283,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         <div className="p-5 border-b flex justify-between items-center">
           <div>
             <h3 className="font-black text-lg text-gray-800 flex items-center gap-2"><Upload className="text-indigo-600" /> Import Pukal Berstruktur</h3>
-            <p className="text-xs text-gray-500">Nama, No KP, No Keahlian/ID, Jantina dan Bangsa adalah wajib.</p>
+            <p className="text-xs text-gray-500">Nama, No KP, No Keahlian/ID, Jantina dan Kaum adalah wajib.</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded"><X size={20} /></button>
         </div>
@@ -236,7 +322,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
               <div className="overflow-x-auto border rounded-lg max-h-[360px]">
                 <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-100 sticky top-0"><tr><th className="p-2">Row</th><th className="p-2">Nama</th><th className="p-2">KP</th><th className="p-2">ID</th><th className="p-2">Jantina</th><th className="p-2">Bangsa</th><th className="p-2">Peranan</th><th className="p-2">Kategori</th><th className="p-2">Status</th></tr></thead>
+                  <thead className="bg-slate-100 sticky top-0"><tr><th className="p-2">Row</th><th className="p-2">Nama</th><th className="p-2">KP</th><th className="p-2">ID</th><th className="p-2">Jantina</th><th className="p-2">Kaum</th><th className="p-2">Peranan</th><th className="p-2">Kategori</th><th className="p-2">Status</th></tr></thead>
                   <tbody>
                     {records.map(r => <tr key={r.rowNumber} className="border-t"><td className="p-2">{r.rowNumber}</td><td className="p-2 font-bold">{r.student}</td><td className="p-2 font-mono">{r.icNumber}</td><td className="p-2 font-mono">{r.membershipId}</td><td className="p-2">{r.gender}</td><td className="p-2">{r.race}</td><td className="p-2">{r.role}</td><td className="p-2">{r.category}</td><td className="p-2">{r.errors.length ? <span className="text-red-700 font-bold">{r.errors.join(' ')}</span> : r.warnings.length ? <span className="text-amber-700 font-bold">{r.warnings.join(' ')}</span> : <span className="text-green-700 font-bold">OK</span>}</td></tr>)}
                   </tbody>

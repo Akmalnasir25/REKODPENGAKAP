@@ -262,7 +262,7 @@ export const UserForm: React.FC<UserFormProps> = ({
     // 1. Consolidate entries that have content
     const allEntries = [
         ...participants.map(p => ({...p, listName: 'Peserta'})),
-        ...assistants.map(p => ({...p, listName: 'Penolong'})),
+        ...assistants.map(p => ({...p, listName: 'Pemimpin/Penolong Pemimpin'})),
         ...examiners.map(p => ({...p, listName: 'Penguji'}))
     ].filter(p => p.name.trim() !== '' || (p.icNumber && p.icNumber.trim() !== ''));
 
@@ -631,7 +631,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                             ${!allowAssistants ? 'opacity-50 cursor-not-allowed' : ''}
                         `}
                     >
-                        {allowAssistants ? <Users size={16} /> : <Lock size={16}/>} Penolong Pemimpin ({assistants.length})
+                        {allowAssistants ? <Users size={16} /> : <Lock size={16}/>} Pemimpin/Penolong Pemimpin ({assistants.length})
                     </button>
                     <button 
                         type="button"
@@ -662,11 +662,11 @@ export const UserForm: React.FC<UserFormProps> = ({
                     {activeTab === 'assistants' && allowAssistants && (
                         <div>
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700">Senarai Penolong Pemimpin</h3>
+                                <h3 className="font-bold text-gray-700">Senarai Pemimpin/Penolong Pemimpin</h3>
                             </div>
                             {assistants.map((p, i) => renderPersonInputs(p, i, assistants, setAssistants, 2, true))}
                             <button type="button" onClick={() => addPerson(assistants, setAssistants)} className="mt-4 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
-                                <Plus size={20}/> Tambah Penolong Pemimpin
+                                <Plus size={20}/> Tambah Pemimpin/Penolong Pemimpin
                             </button>
                         </div>
                     )}

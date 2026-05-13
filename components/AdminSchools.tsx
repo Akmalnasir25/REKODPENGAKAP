@@ -27,8 +27,14 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const [approvingBadge, setApprovingBadge] = useState<string | null>(null); 
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
   const [schoolSearch, setSchoolSearch] = useState('');
+  const [accountFilter, setAccountFilter] = useState<'all' | 'registered' | 'unregistered'>('all');
+
+  const registeredAccountCount = schools.filter(s => s.isClaimed).length;
+  const unregisteredAccountCount = schools.length - registeredAccountCount;
 
   const filteredSchools = schools.filter(s => {
+    if (accountFilter === 'registered' && !s.isClaimed) return false;
+    if (accountFilter === 'unregistered' && s.isClaimed) return false;
     const query = schoolSearch.trim().toLowerCase();
     if (!query) return true;
     return [s.name, s.schoolCode, s.negeriCode, s.daerahCode]
@@ -405,6 +411,33 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
         </div>
       )}
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <button
+          onClick={() => setAccountFilter('all')}
+          className={`text-left p-4 rounded-xl border transition ${accountFilter === 'all' ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-100' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+        >
+          <p className="text-xs font-bold text-gray-500 uppercase">Jumlah Sekolah</p>
+          <p className="text-2xl font-black text-gray-800 mt-1">{schools.length}</p>
+          <p className="text-[10px] text-gray-400 font-semibold mt-1">Semua sekolah dalam akses admin</p>
+        </button>
+        <button
+          onClick={() => setAccountFilter('registered')}
+          className={`text-left p-4 rounded-xl border transition ${accountFilter === 'registered' ? 'bg-green-50 border-green-300 ring-2 ring-green-100' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+        >
+          <p className="text-xs font-bold text-green-700 uppercase flex items-center gap-1"><CheckCircle size={14} /> Sudah Daftar Akaun</p>
+          <p className="text-2xl font-black text-green-700 mt-1">{registeredAccountCount}</p>
+          <p className="text-[10px] text-green-600 font-semibold mt-1">Sekolah sudah claim/daftar akaun</p>
+        </button>
+        <button
+          onClick={() => setAccountFilter('unregistered')}
+          className={`text-left p-4 rounded-xl border transition ${accountFilter === 'unregistered' ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-100' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+        >
+          <p className="text-xs font-bold text-amber-700 uppercase flex items-center gap-1"><Clock size={14} /> Belum Daftar Akaun</p>
+          <p className="text-2xl font-black text-amber-700 mt-1">{unregisteredAccountCount}</p>
+          <p className="text-[10px] text-amber-600 font-semibold mt-1">Sekolah belum claim/daftar akaun</p>
+        </button>
+      </div>
+
       <div className="mb-3 bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -446,6 +479,12 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isAllEnabled ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                                     {isAllEnabled ? 'AKSES PENUH' : 'AKSES TERHAD'}
                                 </span>
+                                <span className={`ml-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${s.isClaimed ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`} title={s.claimedEmail ? `Email: ${s.claimedEmail}` : undefined}>
+                                    {s.isClaimed ? 'SUDAH DAFTAR AKAUN' : 'BELUM DAFTAR AKAUN'}
+                                </span>
+                                {s.isClaimed && s.claimedEmail && (
+                                    <p className="text-[10px] text-gray-400 mt-1 font-semibold">Akaun: {s.claimedEmail}</p>
+                                )}
                             </div>
                         </div>
                         

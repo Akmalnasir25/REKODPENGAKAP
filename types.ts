@@ -58,6 +58,9 @@ export interface School {
   schoolCode?: string;
   negeriCode?: string;
   daerahCode?: string;
+  isClaimed?: boolean;
+  claimedEmail?: string;
+  claimedAt?: string;
   // Granular Permissions
   allowStudents: boolean;
   allowAssistants: boolean;

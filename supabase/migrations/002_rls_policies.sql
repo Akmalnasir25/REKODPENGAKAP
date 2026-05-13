@@ -117,6 +117,12 @@ create policy "schools_insert" on public.schools
 create policy "schools_update" on public.schools
   for update to authenticated using (public.is_admin_or_above());
 
+-- School users can update their own school row for profile fields such as group_number
+create policy "schools_update_own_profile" on public.schools
+  for update to authenticated
+  using (id = public.get_my_school_id())
+  with check (id = public.get_my_school_id());
+
 create policy "schools_delete" on public.schools
   for delete to authenticated using (public.is_developer());
 

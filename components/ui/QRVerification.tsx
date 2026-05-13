@@ -346,21 +346,37 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
 
       const deviceId = deviceIdOverride || selectedDeviceId;
       const attempts: MediaStreamConstraints[] = [];
-      if (deviceId) attempts.push({ video: { deviceId: { exact: deviceId } }, audio: false });
+      
+      // Try selected device with ideal (not exact)
+      if (deviceId) {
+        attempts.push({ video: { deviceId: { ideal: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      }
+      
+      // Try environment camera
       attempts.push({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      
+      // Try any camera with resolution
+      attempts.push({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      
+      // Try any camera without constraints
       attempts.push({ video: true, audio: false });
 
       let stream: MediaStream | null = null;
       let lastError: any = null;
+      
       for (const constraints of attempts) {
         try {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
-          break;
+          if (stream) break;
         } catch (err) {
           lastError = err;
+          console.warn('Camera attempt failed:', err);
         }
       }
-      if (!stream) throw lastError || new Error('Kamera tidak dapat dimulakan.');
+      
+      if (!stream) {
+        throw lastError || new Error('Kamera tidak dapat dimulakan.');
+      }
 
       streamRef.current = stream;
       await loadCameraDevices();
@@ -370,28 +386,50 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
         video.srcObject = stream;
         video.setAttribute('playsinline', 'true');
         video.muted = true;
+        
         await new Promise<void>((resolve, reject) => {
-          const timer = window.setTimeout(() => reject(new Error('Video camera timeout.')), 5000);
-          if (video.readyState >= 1) {
+          const timer = window.setTimeout(() => reject(new Error('Video timeout selepas 5 saat.')), 5000);
+          
+          const cleanup = () => {
             window.clearTimeout(timer);
+            video.onloadedmetadata = null;
+          };
+          
+          if (video.readyState >= 1) {
+            cleanup();
             return resolve();
           }
+          
           video.onloadedmetadata = () => {
-            window.clearTimeout(timer);
+            cleanup();
             resolve();
           };
         });
+        
         await video.play();
       }
+      
       setCameraActive(true);
+      setCameraError('');
     } catch (e: any) {
       stopCamera();
-      const msg = e?.name === 'NotAllowedError'
-        ? 'Permission kamera ditolak. Sila allow camera permission pada browser.'
-        : e?.name === 'NotReadableError'
-          ? 'Kamera tidak boleh dimulakan. Tutup app/tab lain yang menggunakan kamera, kemudian cuba semula.'
-          : e?.message || 'Tidak dapat akses kamera. Benarkan camera permission atau guna scanner device/manual input.';
-      setCameraError(msg);
+      console.error('Camera error:', e);
+      
+      let msg = 'Tidak dapat akses kamera.';
+      
+      if (e?.name === 'NotAllowedError' || e?.name === 'PermissionDeniedError') {
+        msg = 'Permission kamera ditolak. Klik icon lock di sebelah URL, kemudian allow camera.';
+      } else if (e?.name === 'NotReadableError' || e?.name === 'TrackStartError') {
+        msg = 'Kamera sedang digunakan oleh app/tab lain. Tutup app tersebut (Zoom/Teams/WhatsApp), kemudian cuba semula.';
+      } else if (e?.name === 'NotFoundError' || e?.name === 'DevicesNotFoundError') {
+        msg = 'Tiada kamera dijumpai pada device ini.';
+      } else if (e?.name === 'NotSupportedError' || e?.name === 'TypeError') {
+        msg = 'Browser ini tidak menyokong camera API. Guna Chrome/Edge/Firefox terkini.';
+      } else if (e?.message) {
+        msg = e.message;
+      }
+      
+      setCameraError(`${msg} (Error: ${e?.name || 'Unknown'})`);
     }
   };
 

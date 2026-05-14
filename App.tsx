@@ -24,7 +24,6 @@ import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
 import { loginAdminSupabase } from './services/supabaseAuth';
 import { FloatingChatbot } from './components/FloatingChatbot';
-import { NotificationBell } from './components/NotificationBell';
 
 // Helper functions for access control (independent of localStorage)
 const getAccessState = async () => {
@@ -820,24 +819,15 @@ function AppContent() {
         {renderContent()}
       </div>
 
-      {/* Notification Bell - desktop sahaja (mobile ada dalam header panel) */}
-      {supabaseUserId && (
-        <div className="hidden md:block fixed top-3 right-3 z-[9998]">
-          <NotificationBell userId={supabaseUserId} />
-        </div>
-      )}
-
-      {/* Floating Chatbot - sudut bawah kanan */}
+      {/* Floating Chatbot dengan tab Chat + Notifikasi */}
       {chatbotUser && (
-        <div className="fixed bottom-6 right-6 z-[9997]">
-          <FloatingChatbot
-            userId={chatbotUser.userId}
-            senderName={chatbotUser.senderName}
-            senderEmail={chatbotUser.senderEmail}
-            role={chatbotUser.role}
-            schoolName={chatbotUser.schoolName}
-          />
-        </div>
+        <FloatingChatbot
+          userId={chatbotUser.userId}
+          senderName={chatbotUser.senderName}
+          senderEmail={chatbotUser.senderEmail}
+          role={chatbotUser.role}
+          schoolName={chatbotUser.schoolName}
+        />
       )}
     </>
   );

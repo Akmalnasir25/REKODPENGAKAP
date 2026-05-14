@@ -53,14 +53,17 @@ async function updateSession(supabase: any, updates: object) {
 async function clearSession(supabase: any) {
   await supabase.from('broadcast_sessions').update({
     step: null, scope: null, negeri_id: null, negeri_name: null, daerah_id: null, daerah_name: null,
+    school_id: null, school_name: null,
     updated_at: new Date().toISOString()
   }).eq('id', 'admin_session');
 }
 
-async function broadcastNotification(supabase: any, message: string, scope: string, negeriId?: string, daerahId?: string, scopeName?: string) {
+async function broadcastNotification(supabase: any, message: string, scope: string, negeriId?: string, daerahId?: string, schoolId?: string, scopeName?: string) {
   let query = supabase.from('schools').select('claimed_by').eq('is_claimed', true).not('claimed_by', 'is', null);
 
-  if (scope === 'negeri' && negeriId) {
+  if (scope === 'school' && schoolId) {
+    query = query.eq('id', schoolId);
+  } else if (scope === 'negeri' && negeriId) {
     query = query.eq('negeri_id', negeriId);
   } else if (scope === 'daerah' && daerahId) {
     query = query.eq('daerah_id', daerahId);
@@ -168,10 +171,41 @@ serve(async (req) => {
         const pipeIdx = withoutPrefix.indexOf('|');
         const daerahId = withoutPrefix.substring(0, pipeIdx);
         const daerahName = withoutPrefix.substring(pipeIdx + 1);
-        await updateSession(supabase, { step: 'waiting_message', daerah_id: daerahId, daerah_name: daerahName });
+        await updateSession(supabase, { step: 'choose_school', daerah_id: daerahId, daerah_name: daerahName });
+
+        // Ambil senarai sekolah dalam daerah
+        const { data: schoolList } = await supabase.from('schools').select('id,name').eq('daerah_id', daerahId).eq('is_active', true).order('name');
+        const buttons = [
+          [{ text: `📍 Semua Sekolah dalam ${daerahName}`, callback_data: `all_school_${daerahId}|${daerahName}` }],
+          ...(schoolList?.map((s: any) => ([{ text: `🏫 ${s.name}`, callback_data: `school_${s.id}|${s.name}` }])) || [])
+        ];
+        await editMessage(chatId, msgId, `${HEADER}
+
+🏫 <b>Pilih Sekolah</b> — ${daerahName}
+<i>Pilih sekolah atau hantar kepada semua sekolah dalam daerah ini</i>`, { inline_keyboard: buttons });
+
+      } else if (data.startsWith('all_school_')) {
+        const withoutPrefix = data.replace('all_school_', '');
+        const pipeIdx = withoutPrefix.indexOf('|');
+        const daerahId = withoutPrefix.substring(0, pipeIdx);
+        const daerahName = withoutPrefix.substring(pipeIdx + 1);
+        await updateSession(supabase, { step: 'waiting_message', scope: 'daerah', daerah_id: daerahId, daerah_name: daerahName, school_id: null, school_name: null });
         await editMessage(chatId, msgId, `${HEADER}
 
 📍 <b>Daerah:</b> ${daerahName}
+🏫 <b>Skop:</b> Semua Sekolah
+
+✏️ Taip mesej siaran anda sekarang:`);
+
+      } else if (data.startsWith('school_')) {
+        const withoutPrefix = data.replace('school_', '');
+        const pipeIdx = withoutPrefix.indexOf('|');
+        const schoolId = withoutPrefix.substring(0, pipeIdx);
+        const schoolName = withoutPrefix.substring(pipeIdx + 1);
+        await updateSession(supabase, { step: 'waiting_message', scope: 'school', school_id: schoolId, school_name: schoolName });
+        await editMessage(chatId, msgId, `${HEADER}
+
+🏫 <b>Sekolah:</b> ${schoolName}
 
 ✏️ Taip mesej siaran anda sekarang:`);
       }
@@ -213,9 +247,9 @@ serve(async (req) => {
     // Terima mesej broadcast
     if (session?.step === 'waiting_message' && !replyToMessageId) {
       const scope = session.scope;
-      const scopeName = session.daerah_name || session.negeri_name || 'Semua';
+      const scopeName = session.school_name || session.daerah_name || session.negeri_name || 'Semua';
 
-      const count = await broadcastNotification(supabase, text, scope, session.negeri_id, session.daerah_id, scopeName);
+      const count = await broadcastNotification(supabase, text, scope, session.negeri_id, session.daerah_id, session.school_id, scopeName);
 
       await clearSession(supabase);
 

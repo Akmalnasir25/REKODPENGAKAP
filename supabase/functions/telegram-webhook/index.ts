@@ -58,6 +58,17 @@ async function clearSession(supabase: any) {
   }).eq('id', 'admin_session');
 }
 
+function getBroadcastMenuMarkup() {
+  return {
+    inline_keyboard: [
+      [{ text: '🌐 Semua Pengguna', callback_data: 'scope_all' }],
+      [{ text: '🗺️ Mengikut Negeri', callback_data: 'scope_negeri' }],
+      [{ text: '📍 Mengikut Daerah', callback_data: 'scope_daerah' }],
+      [{ text: '🏫 Mengikut Sekolah', callback_data: 'scope_school' }],
+    ],
+  };
+}
+
 async function broadcastNotification(supabase: any, message: string, scope: string, negeriId?: string, daerahId?: string, schoolId?: string, scopeName?: string) {
   let query = supabase.from('schools').select('claimed_by').eq('is_claimed', true).not('claimed_by', 'is', null);
 
@@ -123,7 +134,19 @@ serve(async (req) => {
 
 ✏️ Taip mesej siaran anda sekarang:`);
 
-      } else if (data === 'scope_negeri') {
+      } else if (data === 'scope_school') {
+      await updateSession(supabase, { step: 'choose_negeri', scope: 'school' });
+
+      const { data: negeriList } = await supabase.from('negeri').select('id,name').order('name');
+      const buttons = (negeriList || []).map((n: any) => ([{ text: `🗺️ ${n.name}`, callback_data: `sn_${n.id}|${n.name}` }]));
+
+      await editMessage(chatId, msgId, `${HEADER}
+
+🗺️ <b>Pilih Negeri</b>
+<i>Langkah 1/3 — Pilih negeri dahulu</i>`, {
+        inline_keyboard: buttons,
+      });
+    } else if (data === 'scope_negeri') {
         await updateSession(supabase, { step: 'choose_negeri', scope: 'negeri' });
         const { data: negeriList } = await supabase.from('negeri').select('id,name').order('name');
         const buttons = negeriList?.map((n: any) => ([{ text: `🗺️ ${n.name}`, callback_data: `negeri_${n.id}|${n.name}` }])) || [];
@@ -166,83 +189,86 @@ serve(async (req) => {
 📍 <b>Pilih Daerah</b> — ${negeriName}
 <i>Langkah 2/2 — Pilih daerah</i>`, { inline_keyboard: buttons });
 
-      } else if (data.startsWith('daerah_')) {
-        const withoutPrefix = data.replace('daerah_', '');
-        const pipeIdx = withoutPrefix.indexOf('|');
-        const daerahId = withoutPrefix.substring(0, pipeIdx);
-        const daerahName = withoutPrefix.substring(pipeIdx + 1);
-        await updateSession(supabase, { step: 'choose_school', daerah_id: daerahId, daerah_name: daerahName });
+    } else if (data.startsWith('daerah_')) {
+      const withoutPrefix = data.replace('daerah_', '');
+      const pipeIdx = withoutPrefix.indexOf('|');
+      const daerahId = withoutPrefix.substring(0, pipeIdx);
+      const daerahName = withoutPrefix.substring(pipeIdx + 1);
 
-        // Ambil senarai sekolah dalam daerah
-        const { data: schoolList } = await supabase.from('schools').select('id,name').eq('daerah_id', daerahId).eq('is_active', true).order('name');
-        const buttons = [
-          [{ text: `📍 Semua Sekolah dalam ${daerahName}`, callback_data: `all_school_${daerahId}|${daerahName}` }],
-          ...(schoolList?.map((s: any) => ([{ text: `🏫 ${s.name}`, callback_data: `school_${s.id}|${s.name}` }])) || [])
-        ];
+      await updateSession(supabase, { step: 'waiting_message', daerah_id: daerahId, daerah_name: daerahName });
+
+      await editMessage(chatId, msgId, `${HEADER}
+
+📍 <b>Daerah:</b> ${daerahName}
+
+✏️ Taip mesej siaran anda sekarang:`);
+      return new Response('OK', { status: 200 });
+    } else if (data.startsWith('sn_')) {
+      const withoutPrefix = data.replace('sn_', '');
+      const pipeIdx = withoutPrefix.indexOf('|');
+      const negeriId = withoutPrefix.substring(0, pipeIdx);
+      const negeriName = withoutPrefix.substring(pipeIdx + 1);
+      await updateSession(supabase, { step: 'choose_daerah', negeri_id: negeriId, negeri_name: negeriName });
+      const { data: daerahList } = await supabase.from('daerah').select('id,name').eq('negeri_id', negeriId).order('name');
+      const buttons = (daerahList || []).map((d: any) => ([{ text: `📍 ${d.name}`, callback_data: `sd_${d.id}|${d.name}` }]));
+      await editMessage(chatId, msgId, `${HEADER}
+
+📍 <b>Pilih Daerah</b> — ${negeriName}
+<i>Langkah 2/3 — Pilih daerah</i>`, { inline_keyboard: buttons });
+
+    } else if (data.startsWith('sd_')) {
+      const withoutPrefix = data.replace('sd_', '');
+      const pipeIdx = withoutPrefix.indexOf('|');
+      const daerahId = withoutPrefix.substring(0, pipeIdx);
+      const daerahName = withoutPrefix.substring(pipeIdx + 1);
+      await updateSession(supabase, { step: 'choose_school', daerah_id: daerahId, daerah_name: daerahName });
+      const { data: schoolList } = await supabase.from('schools').select('id,name').eq('daerah_id', daerahId).eq('is_claimed', true).order('name');
+      const buttons = (schoolList || []).map((s: any) => ([{ text: `🏫 ${s.name}`, callback_data: `ss_${s.id}|${s.name}` }]));
+      if (buttons.length === 0) {
+        await editMessage(chatId, msgId, `${HEADER}
+
+⚠️ <b>Tiada Sekolah</b>
+Tiada sekolah berdaftar di daerah <b>${daerahName}</b>.`);
+        await clearSession(supabase);
+      } else {
         await editMessage(chatId, msgId, `${HEADER}
 
 🏫 <b>Pilih Sekolah</b> — ${daerahName}
-<i>Pilih sekolah atau hantar kepada semua sekolah dalam daerah ini</i>`, { inline_keyboard: buttons });
+<i>Langkah 3/3 — Pilih sekolah</i>`, { inline_keyboard: buttons });
+      }
 
-      } else if (data.startsWith('all_school_')) {
-        const withoutPrefix = data.replace('all_school_', '');
-        const pipeIdx = withoutPrefix.indexOf('|');
-        const daerahId = withoutPrefix.substring(0, pipeIdx);
-        const daerahName = withoutPrefix.substring(pipeIdx + 1);
-        await updateSession(supabase, { step: 'waiting_message', scope: 'daerah', daerah_id: daerahId, daerah_name: daerahName, school_id: null, school_name: null });
-        await editMessage(chatId, msgId, `${HEADER}
-
-📍 <b>Daerah:</b> ${daerahName}
-🏫 <b>Skop:</b> Semua Sekolah
-
-✏️ Taip mesej siaran anda sekarang:`);
-
-      } else if (data.startsWith('school_')) {
-        const withoutPrefix = data.replace('school_', '');
-        const pipeIdx = withoutPrefix.indexOf('|');
-        const schoolId = withoutPrefix.substring(0, pipeIdx);
-        const schoolName = withoutPrefix.substring(pipeIdx + 1);
-        await updateSession(supabase, { step: 'waiting_message', scope: 'school', school_id: schoolId, school_name: schoolName });
-        await editMessage(chatId, msgId, `${HEADER}
+    } else if (data.startsWith('ss_')) {
+      const withoutPrefix = data.replace('ss_', '');
+      const pipeIdx = withoutPrefix.indexOf('|');
+      const schoolId = withoutPrefix.substring(0, pipeIdx);
+      const schoolName = withoutPrefix.substring(pipeIdx + 1);
+      await updateSession(supabase, { step: 'waiting_message', school_id: schoolId, school_name: schoolName });
+      await editMessage(chatId, msgId, `${HEADER}
 
 🏫 <b>Sekolah:</b> ${schoolName}
 
 ✏️ Taip mesej siaran anda sekarang:`);
-      }
+    }
 
       return new Response('OK', { status: 200 });
     }
 
-    // Handle regular message
-    const message = body?.message;
-    if (!message) return new Response('OK', { status: 200 });
-
-    const chatId = String(message.chat?.id);
-    const text: string = message.text || '';
-    const replyToMessageId: number | undefined = message.reply_to_message?.message_id;
-
-    if (chatId !== ADMIN_CHAT_ID) return new Response('OK', { status: 200 });
-
-    // Command /broadcast
-    if (text === '/broadcast') {
-      await clearSession(supabase);
-      await sendMessage(chatId, `${HEADER}
-
-📢 <b>Sistem Siaran Mesej</b>
-<i>Pilih skop penghantaran mesej kepada pengguna</i>
-
-`, {
-        inline_keyboard: [
-          [{ text: '📍  Mengikut Daerah', callback_data: 'scope_daerah' }],
-          [{ text: '🗺️  Mengikut Negeri', callback_data: 'scope_negeri' }],
-          [{ text: '🌐  Semua Pengguna', callback_data: 'scope_all' }],
-        ],
-      });
-      return new Response('OK', { status: 200 });
-    }
+    const msg = body.message || {};
+    const chatId = String(msg.chat?.id);
+    const text = msg.text || '';
+    const replyToMessageId = msg.reply_to_message?.message_id;
+    const from = msg.from || {};
+    const userName = [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || 'Pengguna';
 
     // Ambil session dari Supabase
     const session = await getSession(supabase);
+
+    // Command untuk tampilkan menu siaran
+    if (text === '/siaran') {
+      await clearSession(supabase);
+      await sendMessage(chatId, `${HEADER}\n\n📢 <b>Pilih Skop Siaran:</b>`, getBroadcastMenuMarkup());
+      return new Response('OK', { status: 200 });
+    }
 
     // Terima mesej broadcast
     if (session?.step === 'waiting_message' && !replyToMessageId) {
@@ -305,13 +331,13 @@ Pastikan anda <b>reply</b> kepada mesej pertanyaan asal dari pengguna.`);
       await supabase.from('feedbacks').update({ status: 'resolved', updated_at: new Date().toISOString() }).eq('id', feedback.id);
       await sendMessage(chatId, `${HEADER}
 
-✅ <b>Reply Berjaya Dihantar!</b>
+✅ Reply Berjaya Dihantar!
 
 👤 Penerima: <b>${feedback.sender_name}</b>
 📝 Status: <b>Pertanyaan Selesai</b>
 🕐 Masa: <b>${new Date().toLocaleString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' })}</b>
 
-💬 <b>Reply anda:</b>
+💬 Reply anda:
 <blockquote>${text}</blockquote>`);
     }
 

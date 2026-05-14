@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "rekodpengakap",
     "public": "dist",
     "ignore": [
       "firebase.json",

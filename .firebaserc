@@ -7,6 +7,9 @@
       "hosting": {
         "ppmdaftar": [
           "ppmdaftar"
+        ],
+        "rekodpengakap": [
+          "rekodpengakap"
         ]
       }
     }

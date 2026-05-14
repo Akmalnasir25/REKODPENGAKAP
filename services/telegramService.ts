@@ -36,7 +36,7 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
       `<i>Pusat Kawalan Admin</i>`,
       `━━━━━━━━━━━━━━━━━━━━━━`,
       ``,
-      `📩 <b>Aduan / Maklum Balas Baru</b>`,
+      `📩 <b>Pertanyaan / Maklum Balas Baru</b>`,
       ``,
       `👤 <b>Nama:</b> ${payload.senderName}`,
       `📧 <b>Email:</b> ${payload.senderEmail}`,

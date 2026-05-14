@@ -115,6 +115,7 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
           {/* Header */}
           <div className="bg-amber-500 px-4 py-3 flex items-center justify-between">
             <p className="text-white font-bold text-sm">Pusat Bantuan</p>
+            <p className="text-amber-100 text-xs">Pertanyaan atau maklum balas</p>
             <button
               onClick={() => { setIsOpen(false); setStatus('idle'); setMessage(''); }}
               className="text-white hover:text-amber-200 transition-colors"
@@ -135,7 +136,7 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
               }`}
             >
               <MessageSquare size={14} />
-              Hantar Aduan
+              Pertanyaan
             </button>
             <button
               onClick={() => setActiveTab('notifications')}
@@ -171,8 +172,8 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
               {status === 'success' ? (
                 <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
                   <CheckCircle size={40} className="text-green-500" />
-                  <p className="text-green-700 font-semibold text-sm">Mesej berjaya dihantar!</p>
-                  <p className="text-slate-400 text-xs">Admin akan semak dan baiki secepat mungkin.</p>
+                  <p className="text-green-700 font-semibold text-sm">Pertanyaan berjaya dihantar!</p>
+                  <p className="text-slate-400 text-xs">Admin akan semak dan balas secepat mungkin.</p>
                 </div>
               ) : status === 'error' ? (
                 <div className="flex flex-col items-center justify-center py-4 gap-2 text-center">
@@ -184,13 +185,13 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
                 <>
                   <textarea
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-300 min-h-[100px]"
-                    placeholder="Taip masalah atau cadangan anda di sini..."
+                    placeholder="Taip pertanyaan atau maklum balas anda di sini..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     disabled={status === 'sending'}
                     maxLength={1000}
-                    aria-label="Mesej maklum balas"
+                    aria-label="Mesej pertanyaan"
                   />
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-300">{message.length}/1000</span>

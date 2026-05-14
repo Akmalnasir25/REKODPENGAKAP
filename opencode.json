@@ -1,22 +1,32 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "afiqstore": {
+    "afiqstore_baru": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Afiq Store",
+      "name": "Afiq Store (Deepseek)",
       "options": {
-        "baseURL": "https://api.afiqstores.cloud/v1",
-        "apiKey": "{env:AFIQSTORE_API_KEY}"
+        "baseURL": "https://api.afiqstoreapi.cloud/v1",
+        "apiKey": "afq-eOe_y01zxD05WC3g9PqJAew_EADQ5K75"
       },
       "models": {
-        "openai/gpt-5.5": {
-          "name": "GPT 5.5"
-        },
-        "anthropic/claude-opus-4.7": {
-          "name": "Claude Opus 4.7"
-        }
+        "deepseek-v4-pro": { "name": "Deepseek V4 Pro" },
+        "qwen3p6-plus": { "name": "Qwen 3.6 Plus" },
+        "kimi-k2p6": { "name": "Kimi K2 P6" }
+      }
+    },
+    "afiqstore_lama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Afiq Store (Claude & GPT)",
+      "options": {
+        "baseURL": "https://api.afiqstores.cloud/v1",
+        "apiKey": "snfx-GCKUpAVwOTIVyCBLtNT5uFBbUXdLRGSJmwipM2l1s8Hzh"
+      },
+      "models": {
+        "anthropic/claude-opus-4.7": { "name": "Claude Opus 4.7" },
+        "openai/gpt-5.5": { "name": "GPT 5.5" },
+        "openai/gpt-5.4": { "name": "GPT 5.4" }
       }
     }
   },
-  "model": "afiqstore:anthropic/claude-opus-4.7"
+  "model": "afiqstore_baru:deepseek-v4-pro"
 }

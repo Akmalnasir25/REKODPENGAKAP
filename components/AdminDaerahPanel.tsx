@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -14,71 +14,17 @@ import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface PengesahanTabProps {
-  daerahCode: string;
-  scriptUrl: string;
   data: SubmissionData[];
-  schools: SchoolType[];
-  badges: Badge[];
+  submittedList: any[];
+  loading: boolean;
+  actionLoading: string | null;
   onRefresh: () => void;
+  onApprove: (schoolName: string, badgeName: string) => void;
+  onReopen: (schoolName: string, badgeName: string) => void;
 }
 
-const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, scriptUrl, data, schools, badges, onRefresh }) => {
-  const [submittedList, setSubmittedList] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const fetchSubmitted = useCallback(async () => {
-    setLoading(true);
-    try {
-      const results = await getSubmittedSchools(daerahCode, new Date().getFullYear());
-      setSubmittedList(results);
-    } catch (e) {
-      console.error('Failed to fetch submitted schools:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [daerahCode]);
-
-  useEffect(() => {
-    fetchSubmitted();
-  }, [fetchSubmitted]);
-
-  const handleApprove = async (schoolName: string, badgeName: string) => {
-    if (!confirm(`Sahkan pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
-    setActionLoading(`approve-${schoolName}-${badgeName}`);
-    try {
-      const res = await approveSchoolBadge(scriptUrl, schoolName, badgeName);
-      if (res.status === 'success') {
-        await fetchSubmitted();
-        onRefresh();
-      } else {
-        alert('Gagal: ' + res.message);
-      }
-    } catch (e) {
-      alert('Ralat sambungan.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleReopen = async (schoolName: string, badgeName: string) => {
-    if (!confirm(`Tolak/Buka semula pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
-    setActionLoading(`reopen-${schoolName}-${badgeName}`);
-    try {
-      const badgeKey = `${badgeName}_${new Date().getFullYear()}`;
-      const res = await reopenSchoolBadge(scriptUrl, schoolName, badgeKey);
-      if (res.status === 'success') {
-        await fetchSubmitted();
-        onRefresh();
-      } else {
-        alert('Gagal: ' + res.message);
-      }
-    } catch (e) {
-      alert('Ralat sambungan.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
+const PengesahanTab: React.FC<PengesahanTabProps> = ({ data, submittedList, loading, actionLoading, onRefresh, onApprove, onReopen }) => {
+  const [showReport, setShowReport] = useState(false);
 
   // Group by badge
   const grouped = submittedList.reduce((acc: Record<string, any[]>, item: any) => {
@@ -87,6 +33,14 @@ const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, scriptUrl, da
     acc[badgeName].push(item);
     return acc;
   }, {});
+
+  // Report summary data
+  const currentYear = new Date().getFullYear();
+  const totalSchools = submittedList.length;
+  const approvedCount = submittedList.filter((item: any) => item.status === 'approved').length;
+  const rejectedCount = submittedList.filter((item: any) => item.status === 'rejected' || item.status === 'reopened').length;
+  const pendingCount = submittedList.filter((item: any) => item.status === 'submitted').length;
+  const totalParticipants = data.filter((d) => new Date(d.date).getFullYear() === currentYear).length;
 
   // Count participants per school+badge from data
   const getParticipantCount = (schoolName: string, badgeName: string) => {
@@ -104,14 +58,80 @@ const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, scriptUrl, da
         <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
           <CheckCircle size={20} className="text-green-600" /> Pengesahan Pendaftaran
         </h2>
-        <button onClick={fetchSubmitted} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowReport(!showReport)}
+            className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 border border-blue-200 transition flex items-center gap-1"
+          >
+            <FileText size={14} />
+            {showReport ? 'Tutup Laporan' : 'Lihat Laporan'}
+          </button>
+          <button onClick={onRefresh} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       <p className="text-sm text-slate-500 mb-6">
         Senarai sekolah yang telah menghantar pendaftaran (status: submitted) dan menunggu pengesahan.
       </p>
+
+      {showReport && !loading && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-6">
+          <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
+            <BarChart3 size={18} className="text-blue-600" /> Laporan Ringkasan Pengesahan
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
+              <p className="text-2xl font-bold text-slate-800">{totalSchools}</p>
+              <p className="text-xs text-slate-500 mt-1">Jumlah Sekolah</p>
+            </div>
+            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
+              <p className="text-2xl font-bold text-green-600">{approvedCount}</p>
+              <p className="text-xs text-slate-500 mt-1">Telah Disahkan</p>
+            </div>
+            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
+              <p className="text-2xl font-bold text-red-600">{rejectedCount}</p>
+              <p className="text-xs text-slate-500 mt-1">Ditolak/Dibuka Semula</p>
+            </div>
+            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
+              <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
+              <p className="text-xs text-slate-500 mt-1">Menunggu Pengesahan</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
+              <p className="text-2xl font-bold text-blue-600">{totalParticipants}</p>
+              <p className="text-xs text-slate-500 mt-1">Jumlah Peserta Tahun {currentYear}</p>
+            </div>
+            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
+              <p className="text-2xl font-bold text-purple-600">{Object.keys(grouped).length}</p>
+              <p className="text-xs text-slate-500 mt-1">Jumlah Lencana Aktif</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <p className="text-xs text-slate-500 mb-2 font-semibold">Ringkasan Mengikut Lencana:</p>
+            <div className="space-y-1.5">
+              {Object.entries(grouped).map(([badgeName, items]: [string, any[]]) => {
+                const approved = items.filter((item) => item.status === 'approved').length;
+                const pending = items.filter((item) => item.status === 'submitted').length;
+                const rejected = items.filter((item) => item.status === 'rejected' || item.status === 'reopened').length;
+                return (
+                  <div key={badgeName} className="flex items-center justify-between text-xs bg-white rounded px-3 py-2 border border-slate-200">
+                    <span className="font-medium text-slate-700">{badgeName}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-green-600 font-semibold">{approved} disahkan</span>
+                      <span className="text-amber-600 font-semibold">{pending} menunggu</span>
+                      <span className="text-red-600 font-semibold">{rejected} ditolak</span>
+                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">{items.length} sekolah</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div className="flex justify-center py-8">
@@ -154,7 +174,7 @@ const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, scriptUrl, da
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleApprove(schoolName, badgeName)}
+                      onClick={() => onApprove(schoolName, badgeName)}
                       disabled={isApproving}
                       className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1"
                     >
@@ -162,7 +182,7 @@ const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, scriptUrl, da
                       Sahkan
                     </button>
                     <button
-                      onClick={() => handleReopen(schoolName, badgeName)}
+                      onClick={() => onReopen(schoolName, badgeName)}
                       disabled={isReopening}
                       className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 border border-red-200 transition disabled:opacity-50 flex items-center gap-1"
                     >
@@ -212,6 +232,62 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
+  const [submittedList, setSubmittedList] = useState<any[]>([]);
+  const [loadingSubmitted, setLoadingSubmitted] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const fetchSubmitted = useCallback(async () => {
+    setLoadingSubmitted(true);
+    try {
+      const results = await getSubmittedSchools(daerahCode, new Date().getFullYear());
+      setSubmittedList(results);
+    } catch (e) {
+      console.error('Failed to fetch submitted schools:', e);
+    } finally {
+      setLoadingSubmitted(false);
+    }
+  }, [daerahCode]);
+
+  useEffect(() => {
+    fetchSubmitted();
+  }, [fetchSubmitted]);
+
+  const handleApproveSubmitted = async (schoolName: string, badgeName: string) => {
+    if (!confirm(`Sahkan pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
+    setActionLoading(`approve-${schoolName}-${badgeName}`);
+    try {
+      const res = await approveSchoolBadge(scriptUrl, schoolName, badgeName);
+      if (res.status === 'success') {
+        await fetchSubmitted();
+        refreshData();
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReopenSubmitted = async (schoolName: string, badgeName: string) => {
+    if (!confirm(`Tolak/Buka semula pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
+    setActionLoading(`reopen-${schoolName}-${badgeName}`);
+    try {
+      const badgeKey = `${badgeName}_${new Date().getFullYear()}`;
+      const res = await reopenSchoolBadge(scriptUrl, schoolName, badgeKey);
+      if (res.status === 'success') {
+        await fetchSubmitted();
+        refreshData();
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
@@ -430,7 +506,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
   ];
 
-  const SidebarItem = ({ icon: Icon, label, onClick, isActive, className }: any) => (
+  const SidebarItem = ({ icon: Icon, label, badge, onClick, isActive, className }: any) => (
     <button 
       onClick={onClick} 
       className={`
@@ -441,7 +517,14 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
       `}
       title={!isDesktopSidebarOpen ? label : ''}
     >
-        <Icon size={18} className="shrink-0" /> 
+        <div className="relative">
+          <Icon size={18} className="shrink-0" />
+          {badge > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+              {badge > 9 ? '9+' : badge}
+            </span>
+          )}
+        </div>
         <span className={`${!isDesktopSidebarOpen ? 'md:hidden' : 'block'} whitespace-nowrap`}>
             {label}
         </span>
@@ -499,6 +582,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                     key={item.id}
                     icon={item.icon}
                     label={item.label}
+                    badge={item.id === 'pengesahan' ? pendingCount : 0}
                     isActive={tab === item.id}
                     onClick={() => { setTab(item.id as any); setIsMobileSidebarOpen(false); }}
                   />
@@ -582,6 +666,9 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   schools={filteredSchools}
                   badges={badges}
                   onRefresh={refreshData}
+                  onApprove={approveItem}
+                  onReject={rejectItem}
+                  onUpdateGred={updateGred}
                 />
               </div>
             )}

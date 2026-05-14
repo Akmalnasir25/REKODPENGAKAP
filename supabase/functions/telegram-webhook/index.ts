@@ -126,7 +126,19 @@ serve(async (req) => {
 
       await answerCallbackQuery(callbackQuery.id);
 
-      if (data === 'scope_all') {
+      if (data === 'broadcast') {
+        await editMessage(chatId, msgId, `${HEADER}
+
+📢 <b>Siaran ke Pengguna</b>
+<i>Pilih skop siaran:</i>`, {
+          inline_keyboard: [
+            [{ text: '🌐 Semua Pengguna', callback_data: 'scope_all' }],
+            [{ text: '🗺️ Mengikut Negeri', callback_data: 'scope_negeri' }],
+            [{ text: '📍 Mengikut Daerah', callback_data: 'scope_daerah' }],
+            [{ text: '🏫 Mengikut Sekolah', callback_data: 'scope_school' }],
+          ],
+        });
+      } else if (data === 'scope_all') {
         await updateSession(supabase, { step: 'waiting_message', scope: 'all', negeri_name: 'Semua Pengguna', negeri_id: null, daerah_id: null, daerah_name: null });
         await editMessage(chatId, msgId, `${HEADER}
 
@@ -264,9 +276,17 @@ Tiada sekolah berdaftar di daerah <b>${daerahName}</b>.`);
     const session = await getSession(supabase);
 
     // Command untuk tampilkan menu siaran
-    if (text === '/siaran') {
+    if (text === '/siaran' || text === '/broadcast') {
       await clearSession(supabase);
       await sendMessage(chatId, `${HEADER}\n\n📢 <b>Pilih Skop Siaran:</b>`, getBroadcastMenuMarkup());
+      return new Response('OK', { status: 200 });
+    }
+
+    // Command start / menu
+    if (text === '/start' || text === '/menu') {
+      await clearSession(supabase);
+      const menuKeyboard = { inline_keyboard: [[{ text: '📢 Buat Siaran', callback_data: 'broadcast' }]] };
+      await sendMessage(chatId, `👋 <b>Selamat datang ke Panel Admin</b>\n\nPilih tindakan:`, { reply_markup: JSON.stringify(menuKeyboard) });
       return new Response('OK', { status: 200 });
     }
 

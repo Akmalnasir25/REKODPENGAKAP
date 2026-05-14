@@ -8,8 +8,10 @@ import { BadgeModal } from './BadgeModal';
 import { submitRegistration } from '../services/supabaseApi';
 
 interface UserFormProps {
-  schools: SchoolType[]; 
-  badgeTypes: Badge[]; 
+  schools: SchoolType[];
+  badgeTypes: Badge[];
+  negeriList?: import('../types').Negeri[];
+  daerahList?: import('../types').Daerah[];
   scriptUrl: string;
   isRegistrationOpen: boolean;
   onAdminClick: () => void;
@@ -20,20 +22,23 @@ interface UserFormProps {
   existingData?: SubmissionData[]; // Added for validation
 }
 
-export const UserForm: React.FC<UserFormProps> = ({ 
-    schools, badgeTypes = [], scriptUrl, isRegistrationOpen, onAdminClick, isLoadingData, refreshData, userSession, onBackToDashboard, existingData 
+export const UserForm: React.FC<UserFormProps> = ({
+    schools, badgeTypes = [], negeriList = [], daerahList = [], scriptUrl, isRegistrationOpen, onAdminClick, isLoadingData, refreshData, userSession, onBackToDashboard, existingData
 }) => {
   // State
-  const [leaderInfo, setLeaderInfo] = useState<LeaderInfo>({ 
-      schoolName: userSession?.schoolName || '', 
-      schoolCode: userSession?.schoolCode || '', 
-      principalName: '', 
+  const [leaderInfo, setLeaderInfo] = useState<LeaderInfo>({
+      schoolName: userSession?.schoolName || '',
+      schoolCode: userSession?.schoolCode || '',
+      principalName: '',
       principalPhone: '',
-      leaderName: '', 
+      leaderName: '',
       race: 'Melayu', // Default
-      phone: '', 
-      badgeType: '' 
+      phone: '',
+      badgeType: ''
   });
+
+  const [selectedNegeri, setSelectedNegeri] = useState('');
+  const [selectedDaerah, setSelectedDaerah] = useState('');
   
   // Registration Data
   const [activeTab, setActiveTab] = useState<'participants' | 'assistants' | 'examiners'>('participants');
@@ -565,16 +570,83 @@ export const UserForm: React.FC<UserFormProps> = ({
                         </div>
                     ) : (
                         <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Negeri</label>
+                                    <select
+                                        required
+                                        className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition"
+                                        value={selectedNegeri}
+                                        onChange={e => {
+                                            const negeriCode = e.target.value;
+                                            setSelectedNegeri(negeriCode);
+                                            setSelectedDaerah('');
+                                            setLeaderInfo(prev => ({ ...prev, schoolName: '', schoolCode: '' }));
+                                        }}
+                                    >
+                                        <option value="">-- Pilih Negeri --</option>
+                                        {negeriList.map((n, idx) => (
+                                            <option key={idx} value={n.code}>{n.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Daerah</label>
+                                    <select
+                                        required
+                                        className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition disabled:bg-gray-100 disabled:text-gray-400"
+                                        value={selectedDaerah}
+                                        disabled={!selectedNegeri}
+                                        onChange={e => {
+                                            const daerahCode = e.target.value;
+                                            setSelectedDaerah(daerahCode);
+                                            setLeaderInfo(prev => ({ ...prev, schoolName: '', schoolCode: '' }));
+                                        }}
+                                    >
+                                        <option value="">-- Pilih Daerah --</option>
+                                        {daerahList
+                                            .filter(d => d.negeriCode === selectedNegeri)
+                                            .map((d, idx) => (
+                                                <option key={idx} value={d.code}>{d.name}</option>
+                                            ))}
+                                    </select>
+                                </div>
+                            </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Nama Sekolah</label>
-                                <select required className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition" value={leaderInfo.schoolName} onChange={e=>setLeaderInfo({...leaderInfo, schoolName: e.target.value})}>
+                                <select
+                                    required
+                                    className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition disabled:bg-gray-100 disabled:text-gray-400"
+                                    value={leaderInfo.schoolName}
+                                    disabled={!selectedDaerah}
+                                    onChange={e => {
+                                        const schoolName = e.target.value;
+                                        const selectedSchool = schools.find(s => s.name === schoolName);
+                                        setLeaderInfo(prev => ({
+                                            ...prev,
+                                            schoolName,
+                                            schoolCode: selectedSchool?.schoolCode || ''
+                                        }));
+                                    }}
+                                >
                                     <option value="">-- Pilih Sekolah --</option>
-                                    {schools.map((s, idx) => <option key={idx} value={s.name}>{s.name}</option>)}
+                                    {schools
+                                        .filter(s => s.daerahCode === selectedDaerah)
+                                        .map((s, idx) => (
+                                            <option key={idx} value={s.name}>{s.name}</option>
+                                        ))}
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Kod Sekolah</label>
-                                <input required className="w-full p-3 border rounded-lg uppercase focus:ring-2 focus:ring-amber-400 outline-none transition" placeholder="KOD SEKOLAH" value={leaderInfo.schoolCode} onChange={e=>setLeaderInfo({...leaderInfo, schoolCode: e.target.value})}/>
+                                <input
+                                    required
+                                    className="w-full p-3 border rounded-lg uppercase focus:ring-2 focus:ring-amber-400 outline-none transition disabled:bg-gray-100 disabled:text-gray-400"
+                                    placeholder="KOD SEKOLAH"
+                                    value={leaderInfo.schoolCode}
+                                    disabled={!!schools.find(s => s.name === leaderInfo.schoolName)?.schoolCode}
+                                    onChange={e => setLeaderInfo({ ...leaderInfo, schoolCode: e.target.value })}
+                                />
                             </div>
                         </>
                     )}

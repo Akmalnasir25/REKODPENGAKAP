@@ -23,7 +23,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
 import { loginAdminSupabase } from './services/supabaseAuth';
-import { FloatingChatbot } from './components/FloatingChatbot';
+
 
 // Helper functions for access control (independent of localStorage)
 const getAccessState = async () => {
@@ -774,39 +774,6 @@ function AppContent() {
       }
   };
 
-  // Determine current user info for FloatingChatbot
-  const chatbotUser = (() => {
-    if (userSession) {
-      return {
-        userId: supabaseUserId || undefined,
-        senderName: userSession.schoolName || userSession.schoolCode || 'Pengguna',
-        senderEmail: userSession.schoolCode ? `${userSession.schoolCode.toLowerCase()}@sekolah` : '',
-        role: 'school_user',
-        schoolName: userSession.schoolName,
-      };
-    }
-    if (adminSession) {
-      return {
-        userId: supabaseUserId || undefined,
-        senderName: adminSession.fullName || adminSession.username || 'Admin',
-        senderEmail: (adminSession as any).email || adminSession.username || '',
-        role: adminSession.role === 'negeri' ? 'negeri_admin' : 'daerah_admin',
-        schoolName: undefined,
-      };
-    }
-    if (isDeveloperMode) {
-      const devSession = (() => { try { return JSON.parse(localStorage.getItem('DEVELOPER_SESSION_DATA') || '{}'); } catch { return {}; } })();
-      return {
-        userId: supabaseUserId || undefined,
-        senderName: devSession.fullName || devSession.username || 'Developer',
-        senderEmail: devSession.email || devSession.username || '',
-        role: 'developer',
-        schoolName: undefined,
-      };
-    }
-    return null;
-  })();
-
   return (
     <>
       {connectionError && (
@@ -818,17 +785,6 @@ function AppContent() {
       <div className={connectionError ? "mt-8" : ""}>
         {renderContent()}
       </div>
-
-      {/* Floating Chatbot dengan tab Chat + Notifikasi */}
-      {chatbotUser && (
-        <FloatingChatbot
-          userId={chatbotUser.userId}
-          senderName={chatbotUser.senderName}
-          senderEmail={chatbotUser.senderEmail}
-          role={chatbotUser.role}
-          schoolName={chatbotUser.schoolName}
-        />
-      )}
     </>
   );
 }

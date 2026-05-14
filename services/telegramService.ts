@@ -53,6 +53,9 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
     );
 
     const result = await response.json();
+    if (!result.ok) {
+      console.error('Telegram API error:', JSON.stringify(result));
+    }
     return result.ok === true;
   } catch (error) {
     console.error('Telegram send error:', error);

@@ -820,9 +820,9 @@ function AppContent() {
         {renderContent()}
       </div>
 
-      {/* Notification Bell - sudut kanan atas */}
+      {/* Notification Bell - desktop sahaja (mobile ada dalam header panel) */}
       {supabaseUserId && (
-        <div className="fixed top-3 right-3 z-[9998]">
+        <div className="hidden md:block fixed top-3 right-3 z-[9998]">
           <NotificationBell userId={supabaseUserId} />
         </div>
       )}

@@ -19,6 +19,7 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
+import { NotificationBell as TelegramNotificationBell } from './NotificationBell';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { SchoolQRGenerator } from './ui/QRVerification';
 import { useDeadlineChecker } from '../context/NotificationContext';
@@ -633,6 +634,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <div className="text-sm font-bold truncate w-36">{user.schoolName}</div>
           </div>
           <div className="flex items-center gap-1">
+              {user.userId && (
+                <TelegramNotificationBell userId={user.userId} />
+              )}
               <button onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} className="p-2 hover:bg-slate-800 rounded">
                   <Menu size={24} />
               </button>

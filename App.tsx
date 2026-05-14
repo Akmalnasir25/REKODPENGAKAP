@@ -816,25 +816,24 @@ function AppContent() {
         </div>
       )}
 
-      {/* Notification Bell - tunjuk bila ada session aktif */}
-      {supabaseUserId && (
-        <div className="fixed top-4 right-4 z-50">
-          <NotificationBell userId={supabaseUserId} />
-        </div>
-      )}
-
       <div className={connectionError ? "mt-8" : ""}>
         {renderContent()}
       </div>
 
+      {/* Notification Bell + Floating Chatbot - sudut bawah kanan */}
       {chatbotUser && (
-        <FloatingChatbot
-          userId={chatbotUser.userId}
-          senderName={chatbotUser.senderName}
-          senderEmail={chatbotUser.senderEmail}
-          role={chatbotUser.role}
-          schoolName={chatbotUser.schoolName}
-        />
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+          {supabaseUserId && (
+            <NotificationBell userId={supabaseUserId} />
+          )}
+          <FloatingChatbot
+            userId={chatbotUser.userId}
+            senderName={chatbotUser.senderName}
+            senderEmail={chatbotUser.senderEmail}
+            role={chatbotUser.role}
+            schoolName={chatbotUser.schoolName}
+          />
+        </div>
       )}
     </>
   );

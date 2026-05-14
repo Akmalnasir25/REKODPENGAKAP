@@ -1,5 +1,5 @@
 const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '8836450420:AAFjG2lH6Q2tlQi3KjCvINq2jzPFJrYqy_4';
-const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID || '571382718';
+const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID || '39114512';
 
 export interface FeedbackPayload {
   senderName: string;

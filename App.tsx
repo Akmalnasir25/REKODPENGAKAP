@@ -24,6 +24,7 @@ import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
 import { loginAdminSupabase } from './services/supabaseAuth';
 import { FloatingChatbot } from './components/FloatingChatbot';
+import { NotificationBell } from './components/NotificationBell';
 
 // Helper functions for access control (independent of localStorage)
 const getAccessState = async () => {
@@ -93,6 +94,7 @@ function AppContent() {
   const [adminRole, setAdminRole] = useState<'admin' | 'district' | null>(null);
   const [adminSession, setAdminSession] = useState<AdminRegional | null>(null);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
+  const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
 
   // Access Control State
   const [accessState, setAccessState] = useState({
@@ -288,6 +290,7 @@ function AppContent() {
                     const currentAccessState = await getAccessState();
                     if (currentAccessState.userAccess) {
                         setUserSession(restoredUser);
+                        setSupabaseUserId(supaSession.user.id);
                         localStorage.setItem(LOCAL_STORAGE_KEYS.SESSION, JSON.stringify(restoredUser));
                         updateSessionActivity();
                         replaceViewInHash('user_dashboard');
@@ -298,6 +301,11 @@ function AppContent() {
             } catch (e) {
                 console.error('Failed to restore Supabase session', e);
             }
+        }
+
+        // Set supabaseUserId dari session yang ada
+        if (supaSession?.user) {
+            setSupabaseUserId(supaSession.user.id);
         }
 
         // 3. Fetch Data
@@ -494,6 +502,12 @@ function AppContent() {
       navigateTo('user_dashboard');
       handleFetchData(scriptUrl);
       logAudit('LOGIN', user.schoolCode, 'user', `Log masuk: ${user.schoolName} (${user.schoolCode})`);
+      // Set supabaseUserId dari Supabase auth
+      import('./services/supabaseClient').then(({ supabase }) => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user?.id) setSupabaseUserId(session.user.id);
+        });
+      });
   };
 
   const handleLogout = async () => {
@@ -509,6 +523,7 @@ function AppContent() {
       setAdminRole(null);
       setAdminSession(null);
       setIsDeveloperMode(false);
+      setSupabaseUserId(null);
       localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION); // Clear Session
       localStorage.removeItem(ADMIN_SESSION_KEY);
       localStorage.removeItem(DEVELOPER_SESSION_KEY);
@@ -760,6 +775,7 @@ function AppContent() {
   const chatbotUser = (() => {
     if (userSession) {
       return {
+        userId: supabaseUserId || undefined,
         senderName: userSession.schoolName || userSession.schoolCode || 'Pengguna',
         senderEmail: userSession.schoolCode ? `${userSession.schoolCode.toLowerCase()}@sekolah` : '',
         role: 'school_user',
@@ -768,6 +784,7 @@ function AppContent() {
     }
     if (adminSession) {
       return {
+        userId: supabaseUserId || undefined,
         senderName: adminSession.fullName || adminSession.username || 'Admin',
         senderEmail: (adminSession as any).email || adminSession.username || '',
         role: adminSession.role === 'negeri' ? 'negeri_admin' : 'daerah_admin',
@@ -777,6 +794,7 @@ function AppContent() {
     if (isDeveloperMode) {
       const devSession = (() => { try { return JSON.parse(localStorage.getItem('DEVELOPER_SESSION_DATA') || '{}'); } catch { return {}; } })();
       return {
+        userId: supabaseUserId || undefined,
         senderName: devSession.fullName || devSession.username || 'Developer',
         senderEmail: devSession.email || devSession.username || '',
         role: 'developer',
@@ -794,12 +812,20 @@ function AppContent() {
         </div>
       )}
 
+      {/* Notification Bell - tunjuk bila ada session aktif */}
+      {supabaseUserId && (
+        <div className="fixed top-4 right-4 z-50">
+          <NotificationBell userId={supabaseUserId} />
+        </div>
+      )}
+
       <div className={connectionError ? "mt-8" : ""}>
         {renderContent()}
       </div>
 
       {chatbotUser && (
         <FloatingChatbot
+          userId={chatbotUser.userId}
           senderName={chatbotUser.senderName}
           senderEmail={chatbotUser.senderEmail}
           role={chatbotUser.role}

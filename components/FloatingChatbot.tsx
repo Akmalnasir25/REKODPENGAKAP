@@ -3,6 +3,7 @@ import { MessageCircle, X, Send, CheckCircle, AlertCircle, Loader } from 'lucide
 import { sendTelegramFeedback } from '../services/telegramService';
 
 interface FloatingChatbotProps {
+  userId?: string;
   senderName: string;
   senderEmail: string;
   role: string;
@@ -11,7 +12,7 @@ interface FloatingChatbotProps {
 
 type Status = 'idle' | 'sending' | 'success' | 'error';
 
-export function FloatingChatbot({ senderName, senderEmail, role, schoolName }: FloatingChatbotProps) {
+export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolName }: FloatingChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<Status>('idle');
@@ -21,6 +22,7 @@ export function FloatingChatbot({ senderName, senderEmail, role, schoolName }: F
 
     setStatus('sending');
     const success = await sendTelegramFeedback({
+      userId,
       senderName,
       senderEmail,
       role,

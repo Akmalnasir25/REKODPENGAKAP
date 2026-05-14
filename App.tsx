@@ -820,12 +820,16 @@ function AppContent() {
         {renderContent()}
       </div>
 
-      {/* Notification Bell + Floating Chatbot - sudut bawah kanan */}
+      {/* Notification Bell - sudut kanan atas */}
+      {supabaseUserId && (
+        <div className="fixed top-3 right-3 z-[9998]">
+          <NotificationBell userId={supabaseUserId} />
+        </div>
+      )}
+
+      {/* Floating Chatbot - sudut bawah kanan */}
       {chatbotUser && (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-          {supabaseUserId && (
-            <NotificationBell userId={supabaseUserId} />
-          )}
+        <div className="fixed bottom-6 right-6 z-[9997]">
           <FloatingChatbot
             userId={chatbotUser.userId}
             senderName={chatbotUser.senderName}

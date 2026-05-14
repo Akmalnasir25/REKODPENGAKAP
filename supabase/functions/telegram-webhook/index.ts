@@ -7,7 +7,7 @@ const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN') || '8836450420:AAFjG2lH6Q2t
 const ADMIN_CHAT_ID = Deno.env.get('TELEGRAM_CHAT_ID') || '39114512';
 
 async function sendMessage(chatId: string, text: string, replyMarkup?: object) {
-  const body: any = { chat_id: chatId, text };
+  const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
   if (replyMarkup) body.reply_markup = replyMarkup;
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
@@ -15,6 +15,10 @@ async function sendMessage(chatId: string, text: string, replyMarkup?: object) {
     body: JSON.stringify(body),
   });
 }
+
+const HEADER = `🛡️ <b>SISTEM DAFTAR PENGAKAP</b>
+<i>Pusat Kawalan Admin</i>
+━━━━━━━━━━━━━━━━━━━━━━`;
 
 async function answerCallbackQuery(callbackQueryId: string) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
@@ -96,19 +100,29 @@ serve(async (req) => {
 
       if (data === 'scope_all') {
         await updateSession(supabase, { step: 'waiting_message', scope: 'all', negeri_name: 'Semua Pengguna', negeri_id: null, daerah_id: null, daerah_name: null });
-        await sendMessage(chatId, '✏️ Taip mesej untuk dihantar kepada SEMUA pengguna:');
+        await sendMessage(chatId, `${HEADER}
+
+🌐 <b>Skop:</b> Semua Pengguna
+
+✏️ Taip mesej siaran anda sekarang:`);
 
       } else if (data === 'scope_negeri') {
         await updateSession(supabase, { step: 'choose_negeri', scope: 'negeri' });
         const { data: negeriList } = await supabase.from('negeri').select('id,name').order('name');
-        const buttons = negeriList?.map((n: any) => ([{ text: n.name, callback_data: `negeri_${n.id}|${n.name}` }])) || [];
-        await sendMessage(chatId, '🗺️ Pilih negeri:', { inline_keyboard: buttons });
+        const buttons = negeriList?.map((n: any) => ([{ text: `🗺️ ${n.name}`, callback_data: `negeri_${n.id}|${n.name}` }])) || [];
+        await sendMessage(chatId, `${HEADER}
+
+🗺️ <b>Pilih Negeri</b>
+<i>Mesej akan dihantar kepada semua pengguna dalam negeri yang dipilih</i>`, { inline_keyboard: buttons });
 
       } else if (data === 'scope_daerah') {
         await updateSession(supabase, { step: 'choose_negeri', scope: 'daerah' });
         const { data: negeriList } = await supabase.from('negeri').select('id,name').order('name');
-        const buttons = negeriList?.map((n: any) => ([{ text: n.name, callback_data: `pick_negeri_${n.id}|${n.name}` }])) || [];
-        await sendMessage(chatId, '🗺️ Pilih negeri dulu:', { inline_keyboard: buttons });
+        const buttons = negeriList?.map((n: any) => ([{ text: `🗺️ ${n.name}`, callback_data: `pick_negeri_${n.id}|${n.name}` }])) || [];
+        await sendMessage(chatId, `${HEADER}
+
+📍 <b>Pilih Negeri</b>
+<i>Langkah 1/2 — Pilih negeri dahulu</i>`, { inline_keyboard: buttons });
 
       } else if (data.startsWith('negeri_')) {
         const withoutPrefix = data.replace('negeri_', '');
@@ -116,7 +130,11 @@ serve(async (req) => {
         const negeriId = withoutPrefix.substring(0, pipeIdx);
         const negeriName = withoutPrefix.substring(pipeIdx + 1);
         await updateSession(supabase, { step: 'waiting_message', negeri_id: negeriId, negeri_name: negeriName });
-        await sendMessage(chatId, `✏️ Taip mesej untuk dihantar kepada semua pengguna di negeri ${negeriName}:`);
+        await sendMessage(chatId, `${HEADER}
+
+🗺️ <b>Negeri:</b> ${negeriName}
+
+✏️ Taip mesej siaran anda sekarang:`);
 
       } else if (data.startsWith('pick_negeri_')) {
         const withoutPrefix = data.replace('pick_negeri_', '');
@@ -125,8 +143,11 @@ serve(async (req) => {
         const negeriName = withoutPrefix.substring(pipeIdx + 1);
         await updateSession(supabase, { step: 'choose_daerah', negeri_id: negeriId, negeri_name: negeriName });
         const { data: daerahList } = await supabase.from('daerah').select('id,name').eq('negeri_id', negeriId).order('name');
-        const buttons = daerahList?.map((d: any) => ([{ text: d.name, callback_data: `daerah_${d.id}|${d.name}` }])) || [];
-        await sendMessage(chatId, `📍 Pilih daerah dalam ${negeriName}:`, { inline_keyboard: buttons });
+        const buttons = daerahList?.map((d: any) => ([{ text: `📍 ${d.name}`, callback_data: `daerah_${d.id}|${d.name}` }])) || [];
+        await sendMessage(chatId, `${HEADER}
+
+📍 <b>Pilih Daerah</b> — ${negeriName}
+<i>Langkah 2/2 — Pilih daerah</i>`, { inline_keyboard: buttons });
 
       } else if (data.startsWith('daerah_')) {
         const withoutPrefix = data.replace('daerah_', '');
@@ -134,7 +155,11 @@ serve(async (req) => {
         const daerahId = withoutPrefix.substring(0, pipeIdx);
         const daerahName = withoutPrefix.substring(pipeIdx + 1);
         await updateSession(supabase, { step: 'waiting_message', daerah_id: daerahId, daerah_name: daerahName });
-        await sendMessage(chatId, `✏️ Taip mesej untuk dihantar kepada semua pengguna di daerah ${daerahName}:`);
+        await sendMessage(chatId, `${HEADER}
+
+📍 <b>Daerah:</b> ${daerahName}
+
+✏️ Taip mesej siaran anda sekarang:`);
       }
 
       return new Response('OK', { status: 200 });
@@ -153,11 +178,16 @@ serve(async (req) => {
     // Command /broadcast
     if (text === '/broadcast') {
       await clearSession(supabase);
-      await sendMessage(chatId, '📢 Pilih skop penghantaran mesej:', {
+      await sendMessage(chatId, `${HEADER}
+
+📢 <b>Sistem Siaran Mesej</b>
+<i>Pilih skop penghantaran mesej kepada pengguna</i>
+
+`, {
         inline_keyboard: [
-          [{ text: '📍 Daerah', callback_data: 'scope_daerah' }],
-          [{ text: '🗺️ Negeri', callback_data: 'scope_negeri' }],
-          [{ text: '🌐 Semua Pengguna', callback_data: 'scope_all' }],
+          [{ text: '📍  Mengikut Daerah', callback_data: 'scope_daerah' }],
+          [{ text: '🗺️  Mengikut Negeri', callback_data: 'scope_negeri' }],
+          [{ text: '🌐  Semua Pengguna', callback_data: 'scope_all' }],
         ],
       });
       return new Response('OK', { status: 200 });
@@ -176,9 +206,24 @@ serve(async (req) => {
       await clearSession(supabase);
 
       if (count > 0) {
-        await sendMessage(chatId, `✅ Mesej berjaya dihantar kepada ${count} pengguna di ${scopeName}.`);
+        await sendMessage(chatId, `${HEADER}
+
+✅ <b>Siaran Berjaya!</b>
+
+📊 <b>Statistik Penghantaran:</b>
+├ 👥 Penerima: <b>${count} pengguna</b>
+├ 📍 Skop: <b>${scopeName}</b>
+└ 🕐 Masa: <b>${new Date().toLocaleString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' })}</b>
+
+💬 <b>Mesej yang dihantar:</b>
+<blockquote>${text}</blockquote>`);
       } else {
-        await sendMessage(chatId, `⚠️ Tiada pengguna ditemui untuk ${scopeName}. Mesej tidak dihantar.`);
+        await sendMessage(chatId, `${HEADER}
+
+⚠️ <b>Tiada Pengguna Ditemui</b>
+
+Tiada pengguna berdaftar untuk skop <b>${scopeName}</b>.
+Mesej tidak dihantar.`);
       }
 
       return new Response('OK', { status: 200 });
@@ -193,7 +238,11 @@ serve(async (req) => {
         .single();
 
       if (feedbackError || !feedback) {
-        await sendMessage(chatId, '⚠️ Aduan tidak dijumpai dalam sistem. Pastikan anda reply kepada mesej aduan asal.');
+        await sendMessage(chatId, `${HEADER}
+
+⚠️ <b>Aduan Tidak Dijumpai</b>
+
+Pastikan anda <b>reply</b> kepada mesej aduan asal dari pengguna.`);
         return new Response('OK', { status: 200 });
       }
 
@@ -206,7 +255,16 @@ serve(async (req) => {
       });
 
       await supabase.from('feedbacks').update({ status: 'resolved', updated_at: new Date().toISOString() }).eq('id', feedback.id);
-      await sendMessage(chatId, `✅ Reply berjaya dihantar kepada ${feedback.sender_name}. Aduan ditandakan sebagai selesai.`);
+      await sendMessage(chatId, `${HEADER}
+
+✅ <b>Reply Berjaya Dihantar!</b>
+
+👤 Penerima: <b>${feedback.sender_name}</b>
+📝 Status: <b>Aduan Selesai</b>
+🕐 Masa: <b>${new Date().toLocaleString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' })}</b>
+
+💬 <b>Reply anda:</b>
+<blockquote>${text}</blockquote>`);
     }
 
     return new Response('OK', { status: 200 });

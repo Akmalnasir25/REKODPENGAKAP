@@ -32,16 +32,22 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
     });
 
     const text = [
-      `📩 Maklum Balas / Masalah Baru`,
+      `🛡️ <b>SISTEM DAFTAR PENGAKAP</b>`,
+      `<i>Pusat Kawalan Admin</i>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
       ``,
-      `👤 Nama: ${payload.senderName}`,
-      `📧 Email: ${payload.senderEmail}`,
-      `🏷 Peranan: ${roleLabel[payload.role] ?? payload.role}`,
-      payload.schoolName ? `🏫 Sekolah: ${payload.schoolName}` : null,
-      `🕐 Masa: ${now}`,
+      `📩 <b>Aduan / Maklum Balas Baru</b>`,
       ``,
-      `💬 Mesej:`,
-      `${payload.message}`,
+      `👤 <b>Nama:</b> ${payload.senderName}`,
+      `📧 <b>Email:</b> ${payload.senderEmail}`,
+      `🏷 <b>Peranan:</b> ${roleLabel[payload.role] ?? payload.role}`,
+      payload.schoolName ? `🏫 <b>Sekolah:</b> ${payload.schoolName}` : null,
+      `🕐 <b>Masa:</b> ${now}`,
+      ``,
+      `💬 <b>Mesej:</b>`,
+      `<blockquote>${payload.message}</blockquote>`,
+      ``,
+      `<i>💡 Reply mesej ini untuk balas terus kepada pengguna</i>`,
     ]
       .filter((line) => line !== null)
       .join('\n');
@@ -55,6 +61,7 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
         body: JSON.stringify({
           chat_id: CHAT_ID,
           text,
+          parse_mode: 'HTML',
         }),
       }
     );

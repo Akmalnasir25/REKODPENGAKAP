@@ -254,16 +254,16 @@ Mesej tidak dihantar.`);
       if (feedbackError || !feedback) {
         await sendMessage(chatId, `${HEADER}
 
-⚠️ <b>Aduan Tidak Dijumpai</b>
+⚠️ <b>Pertanyaan Tidak Dijumpai</b>
 
-Pastikan anda <b>reply</b> kepada mesej aduan asal dari pengguna.`);
+Pastikan anda <b>reply</b> kepada mesej pertanyaan asal dari pengguna.`);
         return new Response('OK', { status: 200 });
       }
 
       await supabase.from('notifications').insert({
         feedback_id: feedback.id,
         user_id: feedback.user_id,
-        title: 'Maklum Balas Aduan',
+        title: 'Maklum Balas Pertanyaan',
         message: text,
         is_read: false,
       });
@@ -274,7 +274,7 @@ Pastikan anda <b>reply</b> kepada mesej aduan asal dari pengguna.`);
 ✅ <b>Reply Berjaya Dihantar!</b>
 
 👤 Penerima: <b>${feedback.sender_name}</b>
-📝 Status: <b>Aduan Selesai</b>
+📝 Status: <b>Pertanyaan Selesai</b>
 🕐 Masa: <b>${new Date().toLocaleString('ms-MY', { timeZone: 'Asia/Kuala_Lumpur' })}</b>
 
 💬 <b>Reply anda:</b>

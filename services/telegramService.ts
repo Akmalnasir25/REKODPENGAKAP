@@ -26,15 +26,15 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
     });
 
     const text = [
-      `📩 *Maklum Balas / Masalah Baru*`,
+      `📩 Maklum Balas / Masalah Baru`,
       ``,
-      `👤 *Nama:* ${payload.senderName}`,
-      `📧 *Email:* ${payload.senderEmail}`,
-      `🏷️ *Peranan:* ${roleLabel[payload.role] ?? payload.role}`,
-      payload.schoolName ? `🏫 *Sekolah:* ${payload.schoolName}` : null,
-      `🕐 *Masa:* ${now}`,
+      `👤 Nama: ${payload.senderName}`,
+      `📧 Email: ${payload.senderEmail}`,
+      `🏷 Peranan: ${roleLabel[payload.role] ?? payload.role}`,
+      payload.schoolName ? `🏫 Sekolah: ${payload.schoolName}` : null,
+      `🕐 Masa: ${now}`,
       ``,
-      `💬 *Mesej:*`,
+      `💬 Mesej:`,
       `${payload.message}`,
     ]
       .filter((line) => line !== null)
@@ -48,7 +48,6 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
         body: JSON.stringify({
           chat_id: CHAT_ID,
           text,
-          parse_mode: 'Markdown',
         }),
       }
     );

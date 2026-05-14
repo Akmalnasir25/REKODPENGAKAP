@@ -9,7 +9,20 @@ const ADMIN_CHAT_ID = Deno.env.get('TELEGRAM_CHAT_ID') || '39114512';
 async function sendMessage(chatId: string, text: string, replyMarkup?: object) {
   const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
   if (replyMarkup) body.reply_markup = replyMarkup;
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  return data?.result?.message_id as number | undefined;
+}
+
+async function editMessage(chatId: string, messageId: number, text: string, replyMarkup?: object) {
+  const body: any = { chat_id: chatId, message_id: messageId, text, parse_mode: 'HTML' };
+  if (replyMarkup) body.reply_markup = replyMarkup;
+  else body.reply_markup = { inline_keyboard: [] }; // buang buttons lama
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -89,6 +102,7 @@ serve(async (req) => {
     if (body.callback_query) {
       const callbackQuery = body.callback_query;
       const chatId = String(callbackQuery.message?.chat?.id);
+      const msgId = callbackQuery.message?.message_id as number;
       const data = callbackQuery.data as string;
 
       if (chatId !== ADMIN_CHAT_ID) {
@@ -100,7 +114,7 @@ serve(async (req) => {
 
       if (data === 'scope_all') {
         await updateSession(supabase, { step: 'waiting_message', scope: 'all', negeri_name: 'Semua Pengguna', negeri_id: null, daerah_id: null, daerah_name: null });
-        await sendMessage(chatId, `${HEADER}
+        await editMessage(chatId, msgId, `${HEADER}
 
 🌐 <b>Skop:</b> Semua Pengguna
 
@@ -110,7 +124,7 @@ serve(async (req) => {
         await updateSession(supabase, { step: 'choose_negeri', scope: 'negeri' });
         const { data: negeriList } = await supabase.from('negeri').select('id,name').order('name');
         const buttons = negeriList?.map((n: any) => ([{ text: `🗺️ ${n.name}`, callback_data: `negeri_${n.id}|${n.name}` }])) || [];
-        await sendMessage(chatId, `${HEADER}
+        await editMessage(chatId, msgId, `${HEADER}
 
 🗺️ <b>Pilih Negeri</b>
 <i>Mesej akan dihantar kepada semua pengguna dalam negeri yang dipilih</i>`, { inline_keyboard: buttons });
@@ -119,7 +133,7 @@ serve(async (req) => {
         await updateSession(supabase, { step: 'choose_negeri', scope: 'daerah' });
         const { data: negeriList } = await supabase.from('negeri').select('id,name').order('name');
         const buttons = negeriList?.map((n: any) => ([{ text: `🗺️ ${n.name}`, callback_data: `pick_negeri_${n.id}|${n.name}` }])) || [];
-        await sendMessage(chatId, `${HEADER}
+        await editMessage(chatId, msgId, `${HEADER}
 
 📍 <b>Pilih Negeri</b>
 <i>Langkah 1/2 — Pilih negeri dahulu</i>`, { inline_keyboard: buttons });
@@ -130,7 +144,7 @@ serve(async (req) => {
         const negeriId = withoutPrefix.substring(0, pipeIdx);
         const negeriName = withoutPrefix.substring(pipeIdx + 1);
         await updateSession(supabase, { step: 'waiting_message', negeri_id: negeriId, negeri_name: negeriName });
-        await sendMessage(chatId, `${HEADER}
+        await editMessage(chatId, msgId, `${HEADER}
 
 🗺️ <b>Negeri:</b> ${negeriName}
 
@@ -144,7 +158,7 @@ serve(async (req) => {
         await updateSession(supabase, { step: 'choose_daerah', negeri_id: negeriId, negeri_name: negeriName });
         const { data: daerahList } = await supabase.from('daerah').select('id,name').eq('negeri_id', negeriId).order('name');
         const buttons = daerahList?.map((d: any) => ([{ text: `📍 ${d.name}`, callback_data: `daerah_${d.id}|${d.name}` }])) || [];
-        await sendMessage(chatId, `${HEADER}
+        await editMessage(chatId, msgId, `${HEADER}
 
 📍 <b>Pilih Daerah</b> — ${negeriName}
 <i>Langkah 2/2 — Pilih daerah</i>`, { inline_keyboard: buttons });
@@ -155,7 +169,7 @@ serve(async (req) => {
         const daerahId = withoutPrefix.substring(0, pipeIdx);
         const daerahName = withoutPrefix.substring(pipeIdx + 1);
         await updateSession(supabase, { step: 'waiting_message', daerah_id: daerahId, daerah_name: daerahName });
-        await sendMessage(chatId, `${HEADER}
+        await editMessage(chatId, msgId, `${HEADER}
 
 📍 <b>Daerah:</b> ${daerahName}
 

@@ -219,6 +219,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 }
                 recordLoginAttempt(true);
                 onLoginSuccess({
+                    userId: result.user.id,
                     schoolName: result.user.schoolName,
                     schoolCode: result.user.schoolCode,
                     isLoggedIn: true,

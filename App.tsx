@@ -502,12 +502,16 @@ function AppContent() {
       navigateTo('user_dashboard');
       handleFetchData(scriptUrl);
       logAudit('LOGIN', user.schoolCode, 'user', `Log masuk: ${user.schoolName} (${user.schoolCode})`);
-      // Set supabaseUserId dari Supabase auth
-      import('./services/supabaseClient').then(({ supabase }) => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user?.id) setSupabaseUserId(session.user.id);
+      // Set supabaseUserId terus dari user object
+      if (user.userId) {
+        setSupabaseUserId(user.userId);
+      } else {
+        import('./services/supabaseClient').then(({ supabase }) => {
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user?.id) setSupabaseUserId(session.user.id);
+          });
         });
-      });
+      }
   };
 
   const handleLogout = async () => {

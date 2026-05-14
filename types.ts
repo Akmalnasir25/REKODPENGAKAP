@@ -152,6 +152,7 @@ export interface ApiResponse {
 }
 
 export interface UserSession {
+  userId?: string;
   schoolName: string;
   schoolCode: string;
   isLoggedIn: boolean;

@@ -222,6 +222,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     userId: result.user.id,
                     schoolName: result.user.schoolName,
                     schoolCode: result.user.schoolCode,
+                    schoolId: result.user.schoolId,
                     isLoggedIn: true,
                 });
             } else {

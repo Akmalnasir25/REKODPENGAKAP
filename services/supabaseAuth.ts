@@ -25,6 +25,7 @@ export interface AuthResult {
     email: string;
     schoolName?: string;
     schoolCode?: string;
+    schoolId?: string;
     role?: string;
   };
 }
@@ -190,6 +191,7 @@ export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
         email: data.user.email || '',
         schoolName: school?.name || data.user.user_metadata?.school_name || '',
         schoolCode: school?.school_code || data.user.user_metadata?.school_code || '',
+        schoolId: school?.id || '',
         role: profile?.role || 'school_user',
       },
     };

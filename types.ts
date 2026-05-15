@@ -155,6 +155,7 @@ export interface UserSession {
   userId?: string;
   schoolName: string;
   schoolCode: string;
+  schoolId?: string;
   isLoggedIn: boolean;
   groupNumber?: string;
   authToken?: string;

@@ -783,6 +783,7 @@ function AppContent() {
         senderEmail: userSession.schoolCode ? `${userSession.schoolCode.toLowerCase()}@sekolah` : '',
         role: 'school_user',
         schoolName: userSession.schoolName,
+        schoolId: userSession.schoolId,
       };
     }
     if (adminSession) {
@@ -792,6 +793,7 @@ function AppContent() {
         senderEmail: (adminSession as any).email || adminSession.username || '',
         role: adminSession.role === 'negeri' ? 'negeri_admin' : 'daerah_admin',
         schoolName: undefined,
+        schoolId: undefined,
       };
     }
     if (isDeveloperMode) {
@@ -802,6 +804,7 @@ function AppContent() {
         senderEmail: devSession.email || devSession.username || '',
         role: 'developer',
         schoolName: undefined,
+        schoolId: undefined,
       };
     }
     return null;
@@ -827,6 +830,7 @@ function AppContent() {
           senderEmail={chatbotUser.senderEmail}
           role={chatbotUser.role}
           schoolName={chatbotUser.schoolName}
+          schoolId={chatbotUser.schoolId}
         />
       )}
     </>

@@ -12,11 +12,63 @@ export interface FeedbackPayload {
   senderEmail: string;
   role: string;
   schoolName?: string;
+  schoolId?: string;
   message: string;
+  category?: 'sistem' | 'umum'; // Default: umum
 }
 
 export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<boolean> {
   try {
+    const { supabase } = await import('./supabaseClient');
+
+    // Ambil negeri_id dan daerah_id dari sekolah user
+    let negeriId: string | null = null;
+    let daerahId: string | null = null;
+
+    if (payload.schoolId) {
+      const { data: schoolData } = await supabase
+        .from('schools')
+        .select('negeri_id, daerah_id')
+        .eq('id', payload.schoolId)
+        .single();
+
+      if (schoolData) {
+        negeriId = schoolData.negeri_id;
+        daerahId = schoolData.daerah_id;
+      }
+    }
+
+    // Ambil semua groups yang perlu terima mesej ini
+    let groupsQuery = supabase
+      .from('telegram_groups')
+      .select('chat_id, role, label, negeri_id, daerah_id')
+      .eq('is_active', true);
+
+    const { data: allGroups } = await groupsQuery;
+
+    const category = payload.category || 'umum'; // Default: umum
+
+    // Filter groups berdasarkan scope dan kategori
+    const targetGroups = (allGroups || []).filter((group: any) => {
+      // Developer dapat semua kategori
+      if (group.role === 'developer') {
+        return category === 'sistem'; // Developer hanya dapat kategori 'sistem'
+      }
+      
+      // Kategori 'umum' - hantar ke admin negeri dan daerah
+      if (category === 'umum') {
+        if (group.role === 'negeri_admin' && group.negeri_id === negeriId) return true;
+        if (group.role === 'daerah_admin' && group.daerah_id === daerahId) return true;
+      }
+      
+      return false;
+    });
+
+    if (targetGroups.length === 0) {
+      console.warn('No telegram groups found for this feedback');
+      return false;
+    }
+
     const roleLabel: Record<string, string> = {
       school_user: 'Guru / Sekolah',
       daerah_admin: 'Admin Daerah',
@@ -38,6 +90,7 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
       ``,
       `📩 <b>Pertanyaan / Maklum Balas Baru</b>`,
       ``,
+      `📂 <b>Kategori:</b> ${category === 'sistem' ? '⚙️ Sistem' : '💬 Umum'}`,
       `👤 <b>Nama:</b> ${payload.senderName}`,
       `📧 <b>Email:</b> ${payload.senderEmail}`,
       `🏷 <b>Peranan:</b> ${roleLabel[payload.role] ?? payload.role}`,
@@ -52,42 +105,71 @@ export async function sendTelegramFeedback(payload: FeedbackPayload): Promise<bo
       .filter((line) => line !== null)
       .join('\n');
 
-    // Hantar ke Telegram
-    const response = await fetch(
-      `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: CHAT_ID,
-          text,
-          parse_mode: 'HTML',
-        }),
-      }
-    );
+    // Simpan feedback dalam Supabase dulu
+    const { data: feedbackData, error: feedbackError} = await supabase
+      .from('feedbacks')
+      .insert({
+        user_id: payload.userId || null,
+        sender_name: payload.senderName,
+        sender_email: payload.senderEmail,
+        role: payload.role,
+        school_name: payload.schoolName || null,
+        message: payload.message,
+        category: category,
+        negeri_id: negeriId,
+        daerah_id: daerahId,
+        status: 'open',
+      })
+      .select()
+      .single();
 
-    const result = await response.json();
-    if (!result.ok) {
-      console.error('Telegram API error:', JSON.stringify(result));
+    if (feedbackError || !feedbackData) {
+      console.error('Failed to save feedback:', feedbackError);
       return false;
     }
 
-    // Simpan feedback dalam Supabase
-    const telegramMessageId = result.result?.message_id ?? null;
+    const feedbackId = feedbackData.id;
 
-    const { supabase } = await import('./supabaseClient');
-    await supabase.from('feedbacks').insert({
-      user_id: payload.userId || null,
-      sender_name: payload.senderName,
-      sender_email: payload.senderEmail,
-      role: payload.role,
-      school_name: payload.schoolName || null,
-      message: payload.message,
-      telegram_message_id: telegramMessageId,
-      status: 'open',
+    // Hantar ke semua target groups
+    const sendPromises = targetGroups.map(async (group: any) => {
+      try {
+        const response = await fetch(
+          `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: group.chat_id,
+              text,
+              parse_mode: 'HTML',
+            }),
+          }
+        );
+
+        const result = await response.json();
+        if (result.ok && result.result?.message_id) {
+          // Simpan mapping feedback -> telegram message
+          await supabase.from('feedback_telegram_messages').insert({
+            feedback_id: feedbackId,
+            chat_id: group.chat_id,
+            telegram_message_id: result.result.message_id,
+          });
+          return { success: true, group: group.label };
+        } else {
+          console.error(`Failed to send to ${group.label}:`, result);
+          return { success: false, group: group.label };
+        }
+      } catch (err) {
+        console.error(`Error sending to ${group.label}:`, err);
+        return { success: false, group: group.label };
+      }
     });
 
-    return true;
+    const results = await Promise.all(sendPromises);
+    const successCount = results.filter(r => r.success).length;
+
+    console.log(`Feedback sent to ${successCount}/${targetGroups.length} groups`);
+    return successCount > 0;
   } catch (error) {
     console.error('Telegram send error:', error);
     return false;

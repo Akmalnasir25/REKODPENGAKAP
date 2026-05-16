@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, Image, Upload } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -12,6 +12,7 @@ import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '.
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { uploadLogo, getLogoUrl } from '../services/logoService';
 
 interface PengesahanTabProps {
   daerahCode: string;
@@ -199,7 +200,7 @@ interface AdminDaerahPanelProps {
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
   daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'logo'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -212,6 +213,8 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
+  const [daerahLogoUrl, setDaerahLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
@@ -226,6 +229,34 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   useEffect(() => {
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
+
+  // Load daerah logo on mount
+  useEffect(() => {
+    getLogoUrl('daerah', daerahCode).then(url => setDaerahLogoUrl(url));
+  }, [daerahCode]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Sila pilih fail imej sahaja (PNG, JPG, dll).');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Saiz fail melebihi 2MB. Sila pilih fail yang lebih kecil.');
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const url = await uploadLogo(file, 'daerah', daerahCode);
+      setDaerahLogoUrl(url);
+      alert('Logo daerah berjaya dimuat naik!');
+    } catch (err: any) {
+      alert('Gagal muat naik logo: ' + (err.message || 'Ralat tidak diketahui'));
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const handleDeleteAttendance = async (record: any) => {
     const schoolName = record.school?.name || 'sekolah ini';
@@ -428,6 +459,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
+    { id: 'logo', label: 'Logo Daerah', icon: Image, allowed: true },
   ];
 
   const SidebarItem = ({ icon: Icon, label, onClick, isActive, className }: any) => (
@@ -689,6 +721,53 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                         </div>
                       );
                     })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === 'logo' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-white rounded-xl shadow p-6 max-w-lg">
+                  <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                    <Image size={20} className="text-green-600" /> Logo Daerah
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6">
+                    Muat naik logo rasmi daerah anda. Logo ini akan digunakan pada sidebar dan cetakan bagi semua sekolah dalam daerah ini.
+                  </p>
+
+                  {/* Current Logo Preview */}
+                  <div className="mb-6">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Logo Semasa</label>
+                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center bg-slate-50">
+                      {daerahLogoUrl ? (
+                        <img src={daerahLogoUrl} alt="Logo Daerah" className="h-32 w-auto object-contain" />
+                      ) : (
+                        <div className="text-center text-slate-400">
+                          <Image size={48} className="mx-auto mb-2 opacity-30" />
+                          <p className="text-xs">Belum ada logo dimuat naik. Logo default akan digunakan.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload Button */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Muat Naik Logo Baru</label>
+                    <label className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-green-300 rounded-xl cursor-pointer hover:bg-green-50 transition ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {logoUploading ? (
+                        <><RefreshCw size={18} className="animate-spin text-green-600" /> <span className="text-sm font-medium text-green-700">Sedang memuat naik...</span></>
+                      ) : (
+                        <><Upload size={18} className="text-green-600" /> <span className="text-sm font-medium text-green-700">Pilih Fail Imej (PNG/JPG, maks 2MB)</span></>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                        disabled={logoUploading}
+                      />
+                    </label>
                   </div>
                 </div>
               </div>

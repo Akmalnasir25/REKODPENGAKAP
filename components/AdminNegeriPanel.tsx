@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -12,6 +12,7 @@ import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '.
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, addAdmin } from '../services/supabaseApi';
 import { registerAdmin } from '../services/supabaseAuth';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { uploadLogo, getLogoUrl } from '../services/logoService';
 
 interface AdminNegeriPanelProps {
   negeriCode: string;
@@ -32,7 +33,7 @@ interface AdminNegeriPanelProps {
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
   negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit' | 'logo'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -50,7 +51,36 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const [newDistrictAdminFullName, setNewDistrictAdminFullName] = useState('');
   const [newDistrictAdminPhone, setNewDistrictAdminPhone] = useState('');
   const [newDistrictAdminEmail, setNewDistrictAdminEmail] = useState('');
+  const [negeriLogoUrl, setNegeriLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
+  // Load negeri logo on mount
+  useEffect(() => {
+    getLogoUrl('negeri', negeriCode).then(url => setNegeriLogoUrl(url));
+  }, [negeriCode]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Sila pilih fail imej sahaja (PNG, JPG, dll).');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Saiz fail melebihi 2MB. Sila pilih fail yang lebih kecil.');
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const url = await uploadLogo(file, 'negeri', negeriCode);
+      setNegeriLogoUrl(url);
+      alert('Logo negeri berjaya dimuat naik!');
+    } catch (err: any) {
+      alert('Gagal muat naik logo: ' + (err.message || 'Ralat tidak diketahui'));
+    } finally {
+      setLogoUploading(false);
+    }
+  };
   // Filter data untuk negeri ini sahaja
   const filteredData = data.filter(d => d.negeriCode === negeriCode);
   const filteredSchools = schools.filter(s => s.negeriCode === negeriCode);
@@ -291,6 +321,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
+    { id: 'logo', label: 'Logo Negeri', icon: Image, allowed: true },
   ];
 
   const SidebarItem = ({ icon: Icon, label, onClick, isActive, className }: any) => (
@@ -559,6 +590,53 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
             {tab === 'analytics' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
                   <AnalyticsDashboard allData={filteredData} badges={badges} />
+              </div>
+            )}
+
+            {tab === 'logo' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-white rounded-xl shadow p-6 max-w-lg">
+                  <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                    <Image size={20} className="text-purple-600" /> Logo Negeri
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6">
+                    Muat naik logo rasmi negeri anda. Logo ini akan digunakan pada sidebar dan cetakan bagi semua sekolah dalam negeri ini (jika tiada logo daerah).
+                  </p>
+
+                  {/* Current Logo Preview */}
+                  <div className="mb-6">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Logo Semasa</label>
+                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center bg-slate-50">
+                      {negeriLogoUrl ? (
+                        <img src={negeriLogoUrl} alt="Logo Negeri" className="h-32 w-auto object-contain" />
+                      ) : (
+                        <div className="text-center text-slate-400">
+                          <Image size={48} className="mx-auto mb-2 opacity-30" />
+                          <p className="text-xs">Belum ada logo dimuat naik. Logo default akan digunakan.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload Button */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Muat Naik Logo Baru</label>
+                    <label className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-50 transition ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                      {logoUploading ? (
+                        <><RefreshCw size={18} className="animate-spin text-purple-600" /> <span className="text-sm font-medium text-purple-700">Sedang memuat naik...</span></>
+                      ) : (
+                        <><Upload size={18} className="text-purple-600" /> <span className="text-sm font-medium text-purple-700">Pilih Fail Imej (PNG/JPG, maks 2MB)</span></>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                        disabled={logoUploading}
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
         </div>

@@ -6,6 +6,7 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import { generateBadgeInfo } from '../services/geminiService';
 import { BadgeModal } from './BadgeModal';
 import { submitRegistration } from '../services/supabaseApi';
+import { useResolvedLogo } from '../hooks/useResolvedLogo';
 
 interface UserFormProps {
   schools: SchoolType[]; 
@@ -18,11 +19,16 @@ interface UserFormProps {
   userSession?: UserSession;
   onBackToDashboard?: () => void;
   existingData?: SubmissionData[]; // Added for validation
+  logoUrl?: string;
 }
 
 export const UserForm: React.FC<UserFormProps> = ({ 
-    schools, badgeTypes = [], scriptUrl, isRegistrationOpen, onAdminClick, isLoadingData, refreshData, userSession, onBackToDashboard, existingData 
+    schools, badgeTypes = [], scriptUrl, isRegistrationOpen, onAdminClick, isLoadingData, refreshData, userSession, onBackToDashboard, existingData, logoUrl 
 }) => {
+  // Resolve logo from school's negeri/daerah
+  const currentSchool = schools.find(s => s.name === userSession?.schoolName);
+  const resolvedLogo = useResolvedLogo(currentSchool?.negeriCode, currentSchool?.daerahCode);
+  const displayLogo = logoUrl || resolvedLogo;
   // State
   const [leaderInfo, setLeaderInfo] = useState<LeaderInfo>({ 
       schoolName: userSession?.schoolName || '', 
@@ -512,7 +518,7 @@ export const UserForm: React.FC<UserFormProps> = ({
         <div className="max-w-6xl mx-auto relative z-10 flex justify-between items-start">
             <div>
                 <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3 tracking-tight">
-                    <img src={LOGO_URL} alt="Logo" className="h-10 w-auto object-contain drop-shadow-sm"/>
+                    <img src={displayLogo} alt="Logo" className="h-10 w-auto object-contain drop-shadow-sm"/>
                     BORANG PENDAFTARAN
                 </h1>
                 <p className="text-amber-500 text-sm font-mono mt-1 ml-14 uppercase tracking-widest opacity-80">Sistem Pengurusan Keahlian</p>

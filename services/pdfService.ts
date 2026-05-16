@@ -11,6 +11,7 @@ interface PDFReportOptions {
   daerah?: string;
   negeri?: string;
   orientation?: 'portrait' | 'landscape';
+  logoUrl?: string;
 }
 
 /**
@@ -28,22 +29,34 @@ export const generateParticipantReport = (
     school,
     daerah,
     negeri,
-    orientation = 'landscape'
+    orientation = 'landscape',
+    logoUrl
   } = options;
 
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
+  // Logo
+  let headerStartY = 15;
+  if (logoUrl) {
+    try {
+      doc.addImage(logoUrl, 'PNG', 14, 8, 20, 20);
+      headerStartY = 18;
+    } catch (e) {
+      // If logo fails to load, continue without it
+    }
+  }
+
   // Header
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(title, pageWidth / 2, 15, { align: 'center' });
+  doc.text(title, pageWidth / 2, headerStartY, { align: 'center' });
 
   doc.setFontSize(11);
-  doc.text(`TAHUN ${year}`, pageWidth / 2, 22, { align: 'center' });
+  doc.text(`TAHUN ${year}`, pageWidth / 2, headerStartY + 7, { align: 'center' });
 
   // Subtitle info
-  let yPos = 28;
+  let yPos = headerStartY + 13;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   
@@ -140,22 +153,34 @@ export const generateSummaryReport = (
     year = new Date().getFullYear(),
     negeri,
     daerah,
+    logoUrl
   } = options;
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
+  // Logo
+  let headerStartY = 15;
+  if (logoUrl) {
+    try {
+      doc.addImage(logoUrl, 'PNG', 14, 8, 20, 20);
+      headerStartY = 18;
+    } catch (e) {
+      // If logo fails to load, continue without it
+    }
+  }
+
   // Header
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(title, pageWidth / 2, 15, { align: 'center' });
+  doc.text(title, pageWidth / 2, headerStartY, { align: 'center' });
   doc.setFontSize(11);
-  doc.text(`TAHUN ${year}`, pageWidth / 2, 22, { align: 'center' });
+  doc.text(`TAHUN ${year}`, pageWidth / 2, headerStartY + 7, { align: 'center' });
 
   if (negeri || daerah) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text([negeri, daerah].filter(Boolean).join(' - '), pageWidth / 2, 28, { align: 'center' });
+    doc.text([negeri, daerah].filter(Boolean).join(' - '), pageWidth / 2, headerStartY + 13, { align: 'center' });
   }
 
   // Statistics
@@ -187,7 +212,7 @@ export const generateSummaryReport = (
     }
   });
 
-  let yPos = 36;
+  let yPos = (negeri || daerah) ? headerStartY + 20 : headerStartY + 14;
 
   // Summary table
   doc.setFontSize(10);

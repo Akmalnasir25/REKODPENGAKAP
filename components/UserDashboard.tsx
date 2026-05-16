@@ -1,8 +1,9 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
 import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, Sparkles, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
+import { useResolvedLogo } from '../hooks/useResolvedLogo';
 
 const normalizeText = (value?: string | null) => String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
 const getSubmissionYear = (value?: string | null) => {
@@ -89,6 +90,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Bulk delete state
   const [selectedForDelete, setSelectedForDelete] = useState<Set<number>>(new Set());
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+
+  // Resolved logo (daerah > negeri > default)
+  const resolvedLogo = useResolvedLogo(userProfile?.negeriCode, userProfile?.daerahCode);
 
   // Edit participant state
   const [editingRow, setEditingRow] = useState<number | null>(null);
@@ -658,7 +662,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="p-4 border-b border-slate-800 flex flex-col items-center text-center overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800">
-              <img src={LOGO_URL} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
+              <img src={resolvedLogo} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
               {isDesktopSidebarOpen && (
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-xs leading-tight mb-1 uppercase tracking-wide">{user.schoolName}</h2>
@@ -787,7 +791,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 `}</style>
                 <div id="print-header" className="border-b-2 border-black mb-4 pb-2">
                      <div className="flex items-center justify-between mb-4">
-                         <img src={LOGO_URL} className="h-20 w-auto object-contain" alt="Logo" />
+                         <img src={resolvedLogo} className="h-20 w-auto object-contain" alt="Logo" />
                          <div className="text-right">
                              <h1 className="text-2xl font-bold uppercase tracking-wide">SENARAI PENDAFTARAN PENGAKAP</h1>
                              <h2 className="text-xl font-bold uppercase">{user.schoolName}</h2>

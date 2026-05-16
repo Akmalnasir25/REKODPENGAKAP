@@ -303,6 +303,7 @@ export const registerAdmin = async (input: {
   email: string;
   password: string;
   fullName?: string;
+  phone?: string;
   role: 'admin' | 'negeri_admin' | 'daerah_admin' | 'developer';
   negeriCode?: string;
   daerahCode?: string;

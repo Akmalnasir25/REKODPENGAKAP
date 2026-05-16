@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -33,7 +33,7 @@ interface AdminNegeriPanelProps {
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
   negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit' | 'logo'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -321,7 +321,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
-    { id: 'logo', label: 'Logo Negeri', icon: Image, allowed: true },
+    { id: 'profile', label: 'Profil', icon: User, allowed: true },
   ];
 
   const SidebarItem = ({ icon: Icon, label, onClick, isActive, className }: any) => (
@@ -374,14 +374,12 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
           </div>
 
           <div className="p-6 border-b border-slate-800 flex flex-col items-center text-center overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 shadow-lg bg-blue-600 shadow-blue-900/50">
-                  <Shield size={24} className="text-white" />
-              </div>
+              <img src={negeriLogoUrl || LOGO_URL} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
               {isDesktopSidebarOpen && (
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-lg tracking-tight">Panel Admin</h2>
                     <p className="text-[10px] font-mono mt-1 tracking-wider uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
-                        PENTADBIR NEGERI
+                        {negeriName}
                     </p>
                   </div>
               )}
@@ -397,14 +395,6 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                     onClick={() => { setTab(item.id as any); setIsMobileSidebarOpen(false); }}
                   />
               ))}
-              
-              {/* Change Password Button */}
-              <SidebarItem 
-                icon={Key} 
-                label="Tukar Kata Laluan" 
-                onClick={() => { setShowPasswordModal(true); setIsMobileSidebarOpen(false); }}
-                className="mt-4 text-amber-500 hover:text-amber-400 hover:bg-amber-900/20 border border-amber-900/30"
-              />
           </div>
 
           <div className="p-4 border-t border-slate-800 bg-slate-900">
@@ -593,48 +583,93 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
               </div>
             )}
 
-            {tab === 'logo' && (
+            {tab === 'profile' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                <div className="bg-white rounded-xl shadow p-6 max-w-lg">
-                  <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
-                    <Image size={20} className="text-purple-600" /> Logo Negeri
-                  </h2>
-                  <p className="text-sm text-slate-500 mb-6">
-                    Muat naik logo rasmi negeri anda. Logo ini akan digunakan pada sidebar dan cetakan bagi semua sekolah dalam negeri ini (jika tiada logo daerah).
-                  </p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+                  {/* Logo Upload Section */}
+                  <div className="bg-white rounded-xl shadow p-6">
+                    <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                      <Image size={20} className="text-purple-600" /> Logo Negeri
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      Muat naik logo rasmi negeri. Logo ini akan digunakan pada sidebar dan cetakan bagi semua sekolah dalam negeri ini (jika tiada logo daerah).
+                    </p>
 
-                  {/* Current Logo Preview */}
-                  <div className="mb-6">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Logo Semasa</label>
-                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center bg-slate-50">
-                      {negeriLogoUrl ? (
-                        <img src={negeriLogoUrl} alt="Logo Negeri" className="h-32 w-auto object-contain" />
-                      ) : (
-                        <div className="text-center text-slate-400">
-                          <Image size={48} className="mx-auto mb-2 opacity-30" />
-                          <p className="text-xs">Belum ada logo dimuat naik. Logo default akan digunakan.</p>
-                        </div>
-                      )}
+                    {/* Current Logo Preview */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Logo Semasa</label>
+                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center bg-slate-50">
+                        {negeriLogoUrl ? (
+                          <img src={negeriLogoUrl} alt="Logo Negeri" className="h-32 w-auto object-contain" />
+                        ) : (
+                          <div className="text-center text-slate-400">
+                            <Image size={48} className="mx-auto mb-2 opacity-30" />
+                            <p className="text-xs">Belum ada logo dimuat naik. Logo default akan digunakan.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Upload Button */}
+                    <div>
+                      <label className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-50 transition ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        {logoUploading ? (
+                          <><RefreshCw size={18} className="animate-spin text-purple-600" /> <span className="text-sm font-medium text-purple-700">Sedang memuat naik...</span></>
+                        ) : (
+                          <><Upload size={18} className="text-purple-600" /> <span className="text-sm font-medium text-purple-700">Pilih Fail Imej (PNG/JPG, maks 2MB)</span></>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                          disabled={logoUploading}
+                        />
+                      </label>
                     </div>
                   </div>
 
-                  {/* Upload Button */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Muat Naik Logo Baru</label>
-                    <label className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-purple-300 rounded-xl cursor-pointer hover:bg-purple-50 transition ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                      {logoUploading ? (
-                        <><RefreshCw size={18} className="animate-spin text-purple-600" /> <span className="text-sm font-medium text-purple-700">Sedang memuat naik...</span></>
-                      ) : (
-                        <><Upload size={18} className="text-purple-600" /> <span className="text-sm font-medium text-purple-700">Pilih Fail Imej (PNG/JPG, maks 2MB)</span></>
-                      )}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                        disabled={logoUploading}
-                      />
-                    </label>
+                  {/* Change Password Section */}
+                  <div className="bg-white rounded-xl shadow p-6">
+                    <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                      <Key size={20} className="text-purple-600" /> Tukar Kata Laluan
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      Tukar kata laluan akaun admin negeri anda.
+                    </p>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Kata Laluan Baru</label>
+                        <input
+                          type="password"
+                          value={newAdminPassword}
+                          onChange={(e) => setNewAdminPassword(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder="Masukkan kata laluan baru"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Sahkan Kata Laluan</label>
+                        <input
+                          type="password"
+                          value={confirmAdminPassword}
+                          onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          placeholder="Masukkan semula kata laluan"
+                        />
+                      </div>
+                      <button
+                        onClick={handleChangeAdminPassword}
+                        disabled={passwordLoading}
+                        className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {passwordLoading ? (
+                          <><RefreshCw size={16} className="animate-spin" /> Sedang Proses...</>
+                        ) : (
+                          'Simpan Kata Laluan'
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -650,80 +685,6 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
         />
       )}
 
-      {/* Password Change Modal */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Key size={20} className="text-blue-600" />
-                Tukar Kata Laluan Admin Negeri
-              </h3>
-              <button 
-                onClick={() => setShowPasswordModal(false)}
-                className="p-1 hover:bg-slate-100 rounded"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Kata Laluan Baru
-                </label>
-                <input
-                  type="password"
-                  value={newAdminPassword}
-                  onChange={(e) => setNewAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Masukkan kata laluan baru"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Sahkan Kata Laluan
-                </label>
-                <input
-                  type="password"
-                  value={confirmAdminPassword}
-                  onChange={(e) => setConfirmAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Masukkan semula kata laluan"
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setNewAdminPassword('');
-                    setConfirmAdminPassword('');
-                  }}
-                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleChangeAdminPassword}
-                  disabled={passwordLoading}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {passwordLoading ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Sedang Proses...
-                    </>
-                  ) : (
-                    'Simpan'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

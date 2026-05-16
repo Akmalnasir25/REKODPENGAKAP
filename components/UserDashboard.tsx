@@ -92,14 +92,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
   // Resolved logo (daerah > negeri > default)
-  const resolvedLogo = useResolvedLogo(userProfile?.negeriCode, userProfile?.daerahCode);
+  const currentSchoolSettings = schools.find(s => s.name === user.schoolName);
+  const resolvedLogo = useResolvedLogo(
+    userProfile?.negeriCode || currentSchoolSettings?.negeriCode,
+    userProfile?.daerahCode || currentSchoolSettings?.daerahCode
+  );
 
   // Edit participant state
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false); 
 
-  const currentSchoolSettings = schools.find(s => s.name === user.schoolName);
   
   // Get user profile from userProfiles array
   const userProfile = useMemo(() => {

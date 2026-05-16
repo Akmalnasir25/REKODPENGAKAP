@@ -7,6 +7,7 @@ import { AdminMigration } from './AdminMigration';
 import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { DaerahProgramAnalysis } from './DaerahProgramAnalysis';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, addAdmin } from '../services/supabaseApi';
@@ -689,13 +690,33 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                    </div>
                  )}
 
+                 {/* Analisis lengkap daerah & program */}
+                 <DaerahProgramAnalysis
+                   data={negeriData}
+                   schools={negeriSchools}
+                   badges={badges}
+                   daerahList={filteredDaerah}
+                   negeriName={negeriName}
+                   selectedDaerah={selectedDaerahFilter}
+                 />
+
                  <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} onRefresh={refreshData} onDelete={deleteData} />
               </div>
             )}
 
             {tab === 'analytics' && (
-              <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="animate-[fadeIn_0.2s_ease-out] space-y-6">
                   <AnalyticsDashboard allData={filteredData} badges={badges} />
+
+                  {/* Analisis lengkap daerah & program (juga dipaparkan di Analitik) */}
+                  <DaerahProgramAnalysis
+                    data={negeriData}
+                    schools={negeriSchools}
+                    badges={badges}
+                    daerahList={filteredDaerah}
+                    negeriName={negeriName}
+                    selectedDaerah={selectedDaerahFilter}
+                  />
               </div>
             )}
 

@@ -314,7 +314,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </div>
                 <img src={LOGO_URL} alt="Logo Perkhemahan" className="h-32 w-auto object-contain mb-8 drop-shadow-2xl hover:scale-105 transition-transform duration-500"/>
                 <h1 className="text-3xl font-black text-white leading-tight mb-3 tracking-tight text-center">
-                    SISTEM PENGURUSAN BERPUSAT <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">PENGAKAP MALAYSIA</span>
+                    SISTEM PENGURUSAN <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">PENGAKAP MALAYSIA</span>
                 </h1>
                 <p className="text-slate-400 text-sm font-light leading-relaxed max-w-xs mx-auto text-center">Sistem Pendaftaran & Pengurusan Data Keahlian Berpusat.</p>
             </div>

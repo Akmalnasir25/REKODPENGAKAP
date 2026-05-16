@@ -11,4 +11,4 @@ export const LOCAL_STORAGE_KEYS = {
 };
 
 // Logo Configuration
-export const LOGO_URL = "https://www.dropbox.com/scl/fi/k89h4n5x9628z6ojzmsjc/Untitled-design-2.png?rlkey=8o1b8nxpowuj5mfachltdghqr&st=91curw10&raw=1";
+export const LOGO_URL = "/logo-pengakap-baru.png";

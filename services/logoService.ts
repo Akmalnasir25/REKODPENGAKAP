@@ -24,17 +24,21 @@ export const uploadLogo = async (
   const filePath = `${type}/${code}.${fileExt}`;
 
   // Remove old logo if exists (any extension)
-  const { data: existingFiles } = await supabase.storage
-    .from(BUCKET_NAME)
-    .list(type, { search: code });
+  try {
+    const { data: existingFiles } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list(type, { search: code });
 
-  if (existingFiles && existingFiles.length > 0) {
-    const toRemove = existingFiles
-      .filter(f => f.name.startsWith(code))
-      .map(f => `${type}/${f.name}`);
-    if (toRemove.length > 0) {
-      await supabase.storage.from(BUCKET_NAME).remove(toRemove);
+    if (existingFiles && existingFiles.length > 0) {
+      const toRemove = existingFiles
+        .filter(f => f.name.startsWith(code))
+        .map(f => `${type}/${f.name}`);
+      if (toRemove.length > 0) {
+        await supabase.storage.from(BUCKET_NAME).remove(toRemove);
+      }
     }
+  } catch (e) {
+    // Ignore cleanup errors
   }
 
   // Upload new logo
@@ -68,20 +72,25 @@ export const getLogoUrl = async (
 ): Promise<string | null> => {
   if (!code) return null;
 
-  const { data: files } = await supabase.storage
-    .from(BUCKET_NAME)
-    .list(type, { search: code });
+  try {
+    const { data: files, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list(type, { search: code });
 
-  if (!files || files.length === 0) return null;
+    if (error || !files || files.length === 0) return null;
 
-  const logoFile = files.find(f => f.name.startsWith(code));
-  if (!logoFile) return null;
+    const logoFile = files.find(f => f.name.startsWith(code));
+    if (!logoFile) return null;
 
-  const { data: urlData } = supabase.storage
-    .from(BUCKET_NAME)
-    .getPublicUrl(`${type}/${logoFile.name}`);
+    const { data: urlData } = supabase.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(`${type}/${logoFile.name}`);
 
-  return urlData.publicUrl;
+    return urlData.publicUrl;
+  } catch (e) {
+    // Bucket doesn't exist or network error - return null silently
+    return null;
+  }
 };
 
 /**
@@ -94,16 +103,20 @@ export const resolveLogoUrl = async (
   negeriCode?: string,
   daerahCode?: string
 ): Promise<string> => {
-  // Try daerah logo first
-  if (daerahCode) {
-    const daerahLogo = await getLogoUrl('daerah', daerahCode);
-    if (daerahLogo) return daerahLogo;
-  }
+  try {
+    // Try daerah logo first
+    if (daerahCode) {
+      const daerahLogo = await getLogoUrl('daerah', daerahCode);
+      if (daerahLogo) return daerahLogo;
+    }
 
-  // Try negeri logo
-  if (negeriCode) {
-    const negeriLogo = await getLogoUrl('negeri', negeriCode);
-    if (negeriLogo) return negeriLogo;
+    // Try negeri logo
+    if (negeriCode) {
+      const negeriLogo = await getLogoUrl('negeri', negeriCode);
+      if (negeriLogo) return negeriLogo;
+    }
+  } catch (e) {
+    // Any error - fallback to default
   }
 
   // Fallback to default
@@ -117,16 +130,20 @@ export const deleteLogo = async (
   type: 'negeri' | 'daerah',
   code: string
 ): Promise<void> => {
-  const { data: files } = await supabase.storage
-    .from(BUCKET_NAME)
-    .list(type, { search: code });
+  try {
+    const { data: files } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list(type, { search: code });
 
-  if (files && files.length > 0) {
-    const toRemove = files
-      .filter(f => f.name.startsWith(code))
-      .map(f => `${type}/${f.name}`);
-    if (toRemove.length > 0) {
-      await supabase.storage.from(BUCKET_NAME).remove(toRemove);
+    if (files && files.length > 0) {
+      const toRemove = files
+        .filter(f => f.name.startsWith(code))
+        .map(f => `${type}/${f.name}`);
+      if (toRemove.length > 0) {
+        await supabase.storage.from(BUCKET_NAME).remove(toRemove);
+      }
     }
+  } catch (e) {
+    // Ignore errors
   }
 };

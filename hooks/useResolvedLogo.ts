@@ -13,9 +13,13 @@ export const useResolvedLogo = (negeriCode?: string, daerahCode?: string): strin
 
   useEffect(() => {
     let cancelled = false;
-    resolveLogoUrl(negeriCode, daerahCode).then(url => {
-      if (!cancelled) setLogo(url);
-    });
+    resolveLogoUrl(negeriCode, daerahCode)
+      .then(url => {
+        if (!cancelled) setLogo(url);
+      })
+      .catch(() => {
+        if (!cancelled) setLogo(LOGO_URL);
+      });
     return () => { cancelled = true; };
   }, [negeriCode, daerahCode]);
 

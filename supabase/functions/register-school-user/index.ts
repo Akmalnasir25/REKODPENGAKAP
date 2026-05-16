@@ -126,7 +126,7 @@ serve(async (req) => {
       .update({
         is_claimed: true,
         claimed_by: userId,
-        claimed_          email: email.trim(),
+        claimed_email: email.trim(),
         claimed_at: new Date().toISOString(),
       })
       .eq("id", school.id)

@@ -77,7 +77,7 @@ serve(async (req) => {
 
     // 5. Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
+      email: email.trim(),
       password: password,
       email_confirm: true, // Auto-confirm email
       user_metadata: {
@@ -108,7 +108,7 @@ serve(async (req) => {
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
       .update({
-        email: email.trim().toLowerCase(),
+        email: email.trim(),
         full_name: fullName || null,
         role: "school_user",
         school_id: school.id,
@@ -126,7 +126,7 @@ serve(async (req) => {
       .update({
         is_claimed: true,
         claimed_by: userId,
-        claimed_email: email.trim().toLowerCase(),
+        claimed_          email: email.trim(),
         claimed_at: new Date().toISOString(),
       })
       .eq("id", school.id)
@@ -160,7 +160,7 @@ serve(async (req) => {
         message: "Akaun sekolah berjaya didaftarkan. Sila log masuk.",
         user: {
           id: userId,
-          email: email.trim().toLowerCase(),
+          email: email.trim(),
           schoolName: school.name,
           schoolCode: school.school_code,
         },

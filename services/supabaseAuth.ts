@@ -74,7 +74,7 @@ export const loginAdminSupabase = async (
 ): Promise<{ status: 'success' | 'error'; message?: string; admin?: any }> => {
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: input.email.trim().toLowerCase(),
+      email: input.email.trim(),
       password: input.password,
     });
 
@@ -158,7 +158,7 @@ export const loginAdminSupabase = async (
 export const loginUser = async (input: LoginInput): Promise<AuthResult> => {
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: input.email.trim().toLowerCase(),
+      email: input.email.trim(),
       password: input.password,
     });
 
@@ -281,7 +281,7 @@ export const changePassword = async (newPassword: string): Promise<AuthResult> =
 
 export const resetPassword = async (email: string): Promise<AuthResult> => {
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/#/reset-password`,
     });
 

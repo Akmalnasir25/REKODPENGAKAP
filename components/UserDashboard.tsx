@@ -91,23 +91,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [selectedForDelete, setSelectedForDelete] = useState<Set<number>>(new Set());
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
 
-  // Resolved logo (daerah > negeri > default)
-  const currentSchoolSettings = schools.find(s => s.name === user.schoolName);
-  const resolvedLogo = useResolvedLogo(
-    userProfile?.negeriCode || currentSchoolSettings?.negeriCode,
-    userProfile?.daerahCode || currentSchoolSettings?.daerahCode
-  );
-
   // Edit participant state
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editFormData, setEditFormData] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false); 
 
+  const currentSchoolSettings = schools.find(s => s.name === user.schoolName);
   
   // Get user profile from userProfiles array
   const userProfile = useMemo(() => {
     return userProfiles.find(p => p.schoolCode.toUpperCase() === user.schoolCode.toUpperCase());
   }, [userProfiles, user.schoolCode]);
+
+  // Resolved logo (daerah > negeri > default)
+  const resolvedLogo = useResolvedLogo(
+    userProfile?.negeriCode || currentSchoolSettings?.negeriCode,
+    userProfile?.daerahCode || currentSchoolSettings?.daerahCode
+  );
   
   // Granular Permissions (Fallback to allowEdit logic for legacy)
   const allowStudents = currentSchoolSettings?.allowStudents ?? currentSchoolSettings?.allowEdit ?? false;

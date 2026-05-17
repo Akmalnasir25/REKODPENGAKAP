@@ -484,9 +484,15 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
     const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
     const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
 
+    console.log('[unlockSchoolBadge] Input:', { schoolName, badgeNameWithYear, parsedBadge: badgeName, parsedYear: year });
+
     const school = await getSchoolByCodeOrName(undefined, schoolName);
+    if (!school) return { status: 'error', message: `Sekolah '${schoolName}' tidak dijumpai dalam database.` };
+
     const badge = await getBadgeByName(badgeName);
-    if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
+    if (!badge) return { status: 'error', message: `Badge '${badgeName}' tidak dijumpai dalam database.` };
+
+    console.log('[unlockSchoolBadge] Found:', { schoolId: school.id, badgeId: badge.id, year });
 
     // Cuba UPDATE dulu (row sudah wujud kerana nampak dalam UI)
     const { data: updateData, error: updateError } = await supabase
@@ -497,21 +503,27 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
       .eq('year', year || currentYear())
       .select();
 
+    console.log('[unlockSchoolBadge] UPDATE result:', { updateData, updateError });
+
     if (updateError) throw updateError;
 
     // Jika UPDATE tak affect mana-mana row, cuba UPSERT sebagai fallback
     if (!updateData || updateData.length === 0) {
-      const { error: upsertError } = await supabase
+      console.log('[unlockSchoolBadge] UPDATE 0 rows, trying UPSERT fallback...');
+      const { data: upsertData, error: upsertError } = await supabase
         .from('school_badge_status')
         .upsert(
           { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
           { onConflict: 'school_id,badge_id,year' }
-        );
+        )
+        .select();
+      console.log('[unlockSchoolBadge] UPSERT result:', { upsertData, upsertError });
       if (upsertError) throw upsertError;
     }
 
     return { status: 'success' };
   } catch (error: any) {
+    console.error('[unlockSchoolBadge] ERROR:', error);
     return { status: 'error', message: error.message || 'Gagal unlock badge.' };
   }
 };

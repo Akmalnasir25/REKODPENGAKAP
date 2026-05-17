@@ -5,7 +5,7 @@ import { Badge } from '../types';
 import { bulkSubmitRegistration } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
-type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
+type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI';
 
 type ParsedRecord = {
   rowNumber: number;
@@ -33,9 +33,9 @@ interface BulkImportModalProps {
   onSuccess: () => void;
 }
 
-const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Kaum', 'No Telefon', 'Peranan', 'Kategori', 'Catatan'];
+const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Kaum', 'No Telefon', 'Peranan', 'Kategori', 'Catatan / Email'];
 const categoryOptions = ['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'];
-const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI', 'PENERIMA RAMBU'];
+const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI'];
 const raceOptions = ['MELAYU', 'CINA', 'INDIA', 'BUMIPUTERA SABAH', 'BUMIPUTERA SARAWAK', 'ORANG ASLI', 'LAIN-LAIN'];
 const normalize = (value: any) => String(value || '').trim();
 const compact = (value: any) => normalize(value).replace(/\s+/g, ' ');
@@ -53,7 +53,7 @@ const normalizeRole = (value: any, fallback: BulkRole): BulkRole | string => {
   if (['PEMIMPIN', 'LEADER'].includes(raw)) return 'PEMIMPIN';
   if (['PENOLONG PEMIMPIN', 'PENOLONG', 'ASSISTANT', 'ASSISTANT LEADER'].includes(raw)) return 'PENOLONG PEMIMPIN';
   if (['PENGUJI', 'EXAMINER'].includes(raw)) return 'PENGUJI';
-  if (['PENERIMA RAMBU', 'RAMBU'].includes(raw)) return 'PENERIMA RAMBU';
+  if (['PENERIMA RAMBU', 'RAMBU'].includes(raw)) return 'PESERTA';
   return normalize(value);
 };
 const isValidIc = (value: string) => /^\d{6}-?\d{2}-?\d{4}$/.test(value);
@@ -158,7 +158,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const phoneNumber = compact(row['No Telefon']);
       const role = normalizeRole(row['Peranan'], selectedRole);
       const category = compact(row['Kategori']) || 'Perdana';
-      const remarks = compact(row['Catatan']);
+      const remarks = compact(row['Catatan / Email'] || row['Catatan']);
       const errors: string[] = [];
       const warnings: string[] = [];
 
@@ -256,7 +256,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             <input type="number" value={selectedYear} onChange={e => { setSelectedYear(Number(e.target.value)); setRecords([]); }} className="p-3 border rounded-lg text-sm" />
             <select value={selectedRole} onChange={e => setSelectedRole(e.target.value as BulkRole)} className="p-3 border rounded-lg text-sm">
               <option value="PESERTA">Peserta</option>
-              <option value="PENERIMA RAMBU">Penerima Rambu</option>
               <option value="PEMIMPIN">Pemimpin</option>
               <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
               <option value="PENGUJI">Penguji</option>

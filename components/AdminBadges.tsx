@@ -1,9 +1,9 @@
 
 
 import React, { useState } from 'react';
-import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline } from '../services/supabaseApi';
+import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName } from '../services/supabaseApi';
 import { Badge } from '../types';
 
 interface AdminBadgesProps {
@@ -17,6 +17,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [loading, setLoading] = useState(false);
   const [togglingBadge, setTogglingBadge] = useState<string | null>(null);
   const [updatingDate, setUpdatingDate] = useState<string | null>(null);
+  const [editingBadge, setEditingBadge] = useState<string | null>(null);
+  const [editBadgeValue, setEditBadgeValue] = useState('');
+  const [savingBadgeName, setSavingBadgeName] = useState<string | null>(null);
 
   // Ensure badges is always an array
   const safeBadges = Array.isArray(badges) ? badges : [];
@@ -84,14 +87,39 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
       setUpdatingDate(badgeName);
       try {
           await updateBadgeDeadline(scriptUrl, badgeName, date);
-          // Optional: onRefresh() if you want to sync perfectly, 
-          // but input holds value so maybe not needed immediately to avoid UI jump
           onRefresh();
       } catch (e) {
           alert("Gagal mengemaskini tarikh.");
       } finally {
           setUpdatingDate(null);
       }
+  };
+
+  const handleEditBadgeName = (badge: Badge) => {
+    setEditingBadge(badge.name);
+    setEditBadgeValue(badge.name);
+  };
+
+  const handleSaveBadgeName = async (oldName: string) => {
+    const newName = editBadgeValue.trim();
+    if (!newName) { alert('Nama lencana tidak boleh kosong.'); return; }
+    if (newName === oldName) { setEditingBadge(null); return; }
+    if (safeBadges.some(b => b.name === newName)) { alert('Nama lencana ini sudah wujud.'); return; }
+    setSavingBadgeName(oldName);
+    try {
+      const res = await updateBadgeName(scriptUrl, oldName, newName);
+      if (res.status === 'success') {
+        setEditingBadge(null);
+        setEditBadgeValue('');
+        onRefresh();
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan server.');
+    } finally {
+      setSavingBadgeName(null);
+    }
   };
 
   return (
@@ -130,7 +158,47 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                 <span className={`px-2 py-1 rounded text-xs font-bold ${b.isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                     {b.isOpen ? 'BUKA' : 'TUTUP'}
                 </span>
-                <span className={`font-medium ${b.isOpen ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{b.name}</span>
+                {editingBadge === b.name ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={editBadgeValue}
+                      onChange={(e) => setEditBadgeValue(e.target.value)}
+                      className="border border-purple-300 rounded px-2 py-1 text-sm font-medium w-48 focus:ring-1 focus:ring-purple-500 outline-none"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveBadgeName(b.name);
+                        if (e.key === 'Escape') setEditingBadge(null);
+                      }}
+                    />
+                    <button
+                      onClick={() => handleSaveBadgeName(b.name)}
+                      disabled={savingBadgeName === b.name}
+                      className="p-1 text-green-600 hover:bg-green-100 rounded transition"
+                      title="Simpan"
+                    >
+                      {savingBadgeName === b.name ? <LoadingSpinner size="sm" color="border-green-600" /> : <Check size={16} />}
+                    </button>
+                    <button
+                      onClick={() => setEditingBadge(null)}
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                      title="Batal"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium ${b.isOpen ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{b.name}</span>
+                    <button
+                      onClick={() => handleEditBadgeName(b)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-100 rounded transition"
+                      title="Edit Nama"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                )}
             </div>
             
             <div className="flex items-center gap-4">

@@ -652,6 +652,16 @@ export const deleteBadgeType = async (_url: string, badgeName: string, _csrfToke
   }
 };
 
+export const updateBadgeName = async (_url: string, oldName: string, newName: string, _csrfToken?: string): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase.from('badges').update({ name: newName.trim() }).eq('name', oldName.trim());
+    if (error) throw error;
+    return { status: 'success', message: 'Nama lencana berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini nama lencana.' };
+  }
+};
+
 export const toggleRegistration = async (_url: string, statusOrBadge: boolean | string, badgeNameOrNothing?: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
     let isOpen: boolean;

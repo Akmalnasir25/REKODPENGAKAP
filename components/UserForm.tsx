@@ -42,24 +42,23 @@ export const UserForm: React.FC<UserFormProps> = ({
   });
   
   // Registration Data
-  const [activeTab, setActiveTab] = useState<'participants' | 'assistants' | 'examiners'>('participants');
+  type PersonRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI';
   
   let participantIdCounter = 0;
-  const createEmptyParticipant = (): Participant => ({ 
+  const createEmptyParticipant = (role: PersonRole = 'PESERTA'): Participant & { role: PersonRole } => ({ 
       id: Date.now() + (++participantIdCounter), 
       name: '', 
       gender: 'Lelaki', 
       race: 'Melayu',
-      membershipId: '', 
-      icNumber: '', 
+      membershipId: '',
+      icNumber: '',
       phoneNumber: '',
       category: 'Perdana',
-      remarks: '' 
-  });
+      remarks: '',
+      role,
+  } as any);
 
-  const [participants, setParticipants] = useState<Participant[]>([createEmptyParticipant()]);
-  const [assistants, setAssistants] = useState<Participant[]>([]);
-  const [examiners, setExaminers] = useState<Participant[]>([]);
+  const [allPeople, setAllPeople] = useState<(Participant & { role: PersonRole })[]>([createEmptyParticipant('PESERTA')]);
   
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -137,19 +136,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       }
   }, [userSession]);
 
-  // EFFECT 4: Handle Tab Access (no loop - find first allowed tab)
-  useEffect(() => {
-      const tabPermissions: Record<string, boolean> = {
-          participants: allowStudents,
-          assistants: allowAssistants,
-          examiners: allowExaminers
-      };
-      if (!tabPermissions[activeTab]) {
-          const firstAllowed = Object.entries(tabPermissions).find(([_, allowed]) => allowed);
-          if (firstAllowed) setActiveTab(firstAllowed[0] as any);
-          // If none allowed, the "all permissions revoked" screen will show
-      }
-  }, [allowStudents, allowAssistants, allowExaminers]);
+  // EFFECT 4: (removed - no more tabs)
 
 
   // If closed globally
@@ -209,42 +196,6 @@ export const UserForm: React.FC<UserFormProps> = ({
     }
   };
 
-  const addPerson = (list: Participant[], setList: React.Dispatch<React.SetStateAction<Participant[]>>) => {
-      setList([...list, createEmptyParticipant()]);
-  };
-
-  const removePerson = (id: number, list: Participant[], setList: React.Dispatch<React.SetStateAction<Participant[]>>, minItems = 0) => {
-      if(list.length > minItems) {
-          setList(list.filter(p => p.id !== id));
-      }
-  };
-
-  const updatePerson = (id: number, field: keyof Participant, value: string, list: Participant[], setList: React.Dispatch<React.SetStateAction<Participant[]>>) => {
-      setList(list.map(p => {
-          if (p.id !== id) return p;
-
-          const updates: any = { [field]: value };
-
-          // AUTOMATIC GENDER DETECTION FROM IC
-          if (field === 'icNumber') {
-              // Remove non-numeric characters
-              const cleanIC = value.replace(/[^0-9]/g, '');
-              
-              // Only process if we have digits
-              if (cleanIC.length > 0) {
-                  const lastDigit = parseInt(cleanIC.slice(-1));
-                  
-                  // Check if last digit is Odd (Lelaki) or Even (Perempuan)
-                  if (!isNaN(lastDigit)) {
-                      updates.gender = lastDigit % 2 === 0 ? 'Perempuan' : 'Lelaki';
-                  }
-              }
-          }
-
-          return { ...p, ...updates };
-      }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scriptUrl) { alert("URL Database belum diset."); return; }
@@ -266,16 +217,12 @@ export const UserForm: React.FC<UserFormProps> = ({
     // --- NEW VALIDATION LOGIC START ---
     
     // 1. Consolidate entries that have content
-    const allEntries = [
-        ...participants.map(p => ({...p, listName: 'Peserta'})),
-        ...assistants.map(p => ({...p, listName: 'Pemimpin/Penolong Pemimpin'})),
-        ...examiners.map(p => ({...p, listName: 'Penguji'}))
-    ].filter(p => p.name.trim() !== '' || (p.icNumber && p.icNumber.trim() !== ''));
+    const allEntries = allPeople.filter(p => p.name.trim() !== '' || (p.icNumber && p.icNumber.trim() !== ''));
 
     // Check Local IC Duplicates
     const icSet = new Set<string>();
     for (const p of allEntries) {
-        if (p.icNumber && p.icNumber.trim().length > 4) { // Ignore short/empty ICs
+        if (p.icNumber && p.icNumber.trim().length > 4) {
             const cleanIC = p.icNumber.trim().replace(/-/g, '');
             if (icSet.has(cleanIC)) {
                 alert(`Ralat: No. KP ${p.icNumber} (Nama: ${p.name}) berulang dalam borang ini.\nSila semak semula senarai anda.`);
@@ -326,6 +273,10 @@ export const UserForm: React.FC<UserFormProps> = ({
 
     setSubmitting(true);
     try {
+        // Split allPeople by role
+        const participants = allPeople.filter(p => (p as any).role === 'PESERTA' && p.name.trim());
+        const assistants = allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN') && p.name.trim());
+        const examiners = allPeople.filter(p => (p as any).role === 'PENGUJI' && p.name.trim());
         const result = await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
         if (result.status === 'error') {
             alert("Ralat: " + (result.message || 'Gagal menyimpan data.'));
@@ -343,150 +294,12 @@ export const UserForm: React.FC<UserFormProps> = ({
 
   const handleReset = () => {
     setSubmitted(false);
-    // Only reset badgeType, keep school, principal and leader info (Auto-Fill requirement)
     setLeaderInfo(prev => ({ 
         ...prev,
         badgeType: '' 
     }));
-    setParticipants([createEmptyParticipant()]);
-    setAssistants([]);
-    setExaminers([]);
-    setActiveTab('participants');
+    setAllPeople([createEmptyParticipant('PESERTA')]);
   };
-
-  const renderPersonInputs = (
-      person: Participant, 
-      index: number, 
-      list: Participant[], 
-      setList: React.Dispatch<React.SetStateAction<Participant[]>>,
-      minItems = 0,
-      requireMembershipId = false,
-      showParticipantCategory = false
-  ) => (
-    <div key={person.id} className="bg-white p-4 md:p-6 rounded-xl border border-gray-200 relative hover:shadow-lg transition mb-4 shadow-sm group">
-        <div className="absolute -left-2 -top-2 bg-blue-900 text-white w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold shadow-md z-10">{index+1}</div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-x-4 gap-y-4 mt-2">
-            
-            {/* NAME FIELD */}
-            <div className="sm:col-span-12 lg:col-span-4">
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Nama Penuh</label>
-                <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm uppercase focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
-                    placeholder="Nama Penuh Peserta" 
-                    value={person.name} 
-                    onChange={e=>updatePerson(person.id,'name',e.target.value, list, setList)}
-                />
-            </div>
-
-            {/* IC NUMBER */}
-            <div className="sm:col-span-6 lg:col-span-3">
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">No. Kad Pengenalan</label>
-                <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
-                    placeholder="000000-00-0000" 
-                    value={person.icNumber} 
-                    onChange={e=>updatePerson(person.id,'icNumber',e.target.value, list, setList)}
-                />
-            </div>
-            
-            {/* GENDER & RACE */}
-            <div className="grid grid-cols-2 gap-4 sm:col-span-6 lg:col-span-5">
-                <div>
-                    <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Jantina (Auto)</label>
-                    <select 
-                        className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-gray-100 text-gray-600 outline-none cursor-not-allowed font-bold shadow-sm" 
-                        value={person.gender} 
-                        disabled={true} 
-                    >
-                        <option>Lelaki</option>
-                        <option>Perempuan</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kaum</label>
-                    <select 
-                        className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm" 
-                        value={person.race} 
-                        onChange={e=>updatePerson(person.id,'race',e.target.value, list, setList)}
-                    >
-                        <option>Melayu</option>
-                        <option>Cina</option>
-                        <option>India</option>
-                        <option>Bumiputera Sabah</option>
-                        <option>Bumiputera Sarawak</option>
-                        <option>Orang Asli</option>
-                        <option>Lain-lain</option>
-                    </select>
-                </div>
-            </div>
-            
-            {/* PHONE */}
-            <div className="sm:col-span-6 lg:col-span-3">
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">No. Telefon</label>
-                <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
-                    placeholder="01X-XXXXXXX" 
-                    value={person.phoneNumber} 
-                    onChange={e=>updatePerson(person.id,'phoneNumber',e.target.value, list, setList)}
-                />
-            </div>
-
-            {/* MEMBERSHIP ID */}
-            <div className="sm:col-span-6 lg:col-span-3">
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">
-                    No. Keahlian {!requireMembershipId && <span className="text-gray-400 font-normal normal-case text-[10px]">(Tidak Wajib)</span>}
-                </label>
-                <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm uppercase focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
-                    placeholder="ATA 0001" 
-                    value={person.membershipId} 
-                    onChange={e=>updatePerson(person.id,'membershipId',e.target.value, list, setList)}
-                />
-            </div>
-            {showParticipantCategory && (
-                <div className="sm:col-span-6 lg:col-span-3">
-                    <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori Peserta</label>
-                    <select
-                        className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
-                        value={person.category || 'Perdana'}
-                        onChange={e=>updatePerson(person.id,'category' as keyof Participant,e.target.value, list, setList)}
-                    >
-                        <option>Perdana</option>
-                        <option>Udara</option>
-                        <option>Laut</option>
-                        <option>PPKI</option>
-                        <option>PPKI Udara</option>
-                    </select>
-                </div>
-            )}
-            
-            {/* REMARKS */}
-            <div className={`${showParticipantCategory ? 'sm:col-span-5 lg:col-span-2' : 'sm:col-span-11 lg:col-span-5'}`}>
-                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Catatan</label>
-                <input 
-                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
-                    placeholder="Nyatakan jika ada (Cth: Alahan)" 
-                    value={person.remarks} 
-                    onChange={e=>updatePerson(person.id,'remarks',e.target.value, list, setList)}
-                />
-            </div>
-            
-            {/* DELETE BUTTON */}
-            <div className="sm:col-span-1 flex justify-end items-end">
-                <button 
-                    type="button" 
-                    onClick={()=>removePerson(person.id, list, setList, minItems)} 
-                    className="text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 p-2.5 rounded-lg transition w-full sm:w-auto flex justify-center items-center" 
-                    title="Padam Peserta Ini"
-                >
-                    <Trash2 size={20}/>
-                </button>
-            </div>
-        </div>
-    </div>
-  );
 
   if (submitted) {
     return (
@@ -619,82 +432,188 @@ export const UserForm: React.FC<UserFormProps> = ({
             </div>
 
             <div className="bg-white rounded-xl shadow-md border-l-4 border-blue-900 overflow-hidden">
-                <div className="flex border-b overflow-x-auto">
-                    <button 
-                        type="button"
-                        onClick={() => { if(allowStudents) setActiveTab('participants'); }}
-                        disabled={!allowStudents}
-                        className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 transition whitespace-nowrap 
-                            ${activeTab === 'participants' ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-900' : 'text-gray-500 hover:bg-gray-50'}
-                            ${!allowStudents ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        {allowStudents ? <Users size={16} /> : <Lock size={16}/>} Peserta ({participants.length})
-                    </button>
-                    <button 
-                        type="button"
-                        onClick={() => { if(allowAssistants) setActiveTab('assistants'); }}
-                        disabled={!allowAssistants}
-                        className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 transition whitespace-nowrap 
-                            ${activeTab === 'assistants' ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-900' : 'text-gray-500 hover:bg-gray-50'}
-                            ${!allowAssistants ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        {allowAssistants ? <Users size={16} /> : <Lock size={16}/>} Pemimpin/Penolong Pemimpin ({assistants.length})
-                    </button>
-                    <button 
-                        type="button"
-                        onClick={() => { if(allowExaminers) setActiveTab('examiners'); }}
-                        disabled={!allowExaminers}
-                        className={`flex-1 py-4 px-4 text-sm font-bold flex items-center justify-center gap-2 transition whitespace-nowrap 
-                            ${activeTab === 'examiners' ? 'bg-blue-50 text-blue-900 border-b-2 border-blue-900' : 'text-gray-500 hover:bg-gray-50'}
-                            ${!allowExaminers ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                    >
-                        {allowExaminers ? <GraduationCap size={16} /> : <Lock size={16}/>} Penguji ({examiners.length})
-                    </button>
-                </div>
-                
                 <div className="p-4 md:p-6 bg-slate-50">
-                    {activeTab === 'participants' && allowStudents && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700">Senarai Peserta</h3>
-                            </div>
-                            {participants.map((p, i) => renderPersonInputs(p, i, participants, setParticipants, 1, true, true))}
-                            <button type="button" onClick={() => addPerson(participants, setParticipants)} className="mt-4 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
-                                <Plus size={20}/> Tambah Peserta
-                            </button>
-                        </div>
-                    )}
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-gray-700 flex items-center gap-2">
+                            <Users size={18} /> Senarai Pendaftaran ({allPeople.filter(p => p.name.trim()).length} orang)
+                        </h3>
+                    </div>
 
-                    {activeTab === 'assistants' && allowAssistants && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700">Senarai Pemimpin/Penolong Pemimpin</h3>
-                            </div>
-                            {assistants.map((p, i) => renderPersonInputs(p, i, assistants, setAssistants, 2, true))}
-                            <button type="button" onClick={() => addPerson(assistants, setAssistants)} className="mt-4 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
-                                <Plus size={20}/> Tambah Pemimpin/Penolong Pemimpin
-                            </button>
-                        </div>
-                    )}
+                    {allPeople.map((person, index) => (
+                      <div key={person.id} className="bg-white p-4 md:p-6 rounded-xl border border-gray-200 relative hover:shadow-lg transition mb-4 shadow-sm group">
+                        <div className="absolute -left-2 -top-2 bg-blue-900 text-white w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold shadow-md z-10">{index+1}</div>
+                        
+                        {/* Delete button */}
+                        {allPeople.length > 1 && (
+                          <button 
+                            type="button" 
+                            onClick={() => setAllPeople(allPeople.filter(p => p.id !== person.id))}
+                            className="absolute top-2 right-2 text-gray-300 hover:text-red-500 transition p-1 rounded-full hover:bg-red-50"
+                            title="Padam"
+                          >
+                            <Trash2 size={16}/>
+                          </button>
+                        )}
 
-                    {activeTab === 'examiners' && allowExaminers && (
-                        <div>
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="font-bold text-gray-700">Senarai Penguji</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-x-4 gap-y-4 mt-2">
+                            
+                            {/* ROLE DROPDOWN */}
+                            <div className="sm:col-span-12 lg:col-span-3">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Peranan</label>
+                                <select
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm font-bold"
+                                    value={(person as any).role || 'PESERTA'}
+                                    onChange={e => {
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, role: e.target.value as any } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                >
+                                    <option value="PESERTA" disabled={!allowStudents}>Peserta</option>
+                                    <option value="PEMIMPIN" disabled={!allowAssistants}>Pemimpin</option>
+                                    <option value="PENOLONG PEMIMPIN" disabled={!allowAssistants}>Penolong Pemimpin</option>
+                                    <option value="PENGUJI" disabled={!allowExaminers}>Penguji</option>
+                                </select>
                             </div>
-                            {examiners.length === 0 ? (
-                                <p className="text-gray-400 text-center py-4 text-sm italic">Tiada Penguji didaftarkan.</p>
-                            ) : (
-                                examiners.map((p, i) => renderPersonInputs(p, i, examiners, setExaminers, 0, false))
+
+                            {/* NAME FIELD */}
+                            <div className="sm:col-span-12 lg:col-span-4">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Nama Penuh</label>
+                                <input 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm uppercase focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
+                                    placeholder="Nama Penuh" 
+                                    value={person.name} 
+                                    onChange={e => {
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, name: e.target.value } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                />
+                            </div>
+
+                            {/* IC NUMBER */}
+                            <div className="sm:col-span-6 lg:col-span-2">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">No. KP</label>
+                                <input 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
+                                    placeholder="000000-00-0000" 
+                                    value={person.icNumber} 
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      // Auto-detect gender from IC
+                                      let gender = person.gender;
+                                      const cleanIC = val.replace(/-/g, '');
+                                      if (cleanIC.length >= 12) {
+                                        const lastDigit = parseInt(cleanIC[cleanIC.length - 1]);
+                                        gender = lastDigit % 2 === 0 ? 'Perempuan' : 'Lelaki';
+                                      }
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, icNumber: val, gender } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                />
+                            </div>
+                            
+                            {/* GENDER */}
+                            <div className="sm:col-span-3 lg:col-span-1">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Jantina</label>
+                                <select 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-gray-100 text-gray-600 outline-none cursor-not-allowed font-bold shadow-sm" 
+                                    value={person.gender} 
+                                    disabled={true} 
+                                >
+                                    <option>Lelaki</option>
+                                    <option>Perempuan</option>
+                                </select>
+                            </div>
+
+                            {/* RACE */}
+                            <div className="sm:col-span-3 lg:col-span-2">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kaum</label>
+                                <select 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm" 
+                                    value={person.race} 
+                                    onChange={e => {
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, race: e.target.value } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                >
+                                    <option>Melayu</option>
+                                    <option>Cina</option>
+                                    <option>India</option>
+                                    <option>Bumiputera Sabah</option>
+                                    <option>Bumiputera Sarawak</option>
+                                    <option>Orang Asli</option>
+                                    <option>Lain-lain</option>
+                                </select>
+                            </div>
+                            
+                            {/* PHONE */}
+                            <div className="sm:col-span-4 lg:col-span-2">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">No. Telefon</label>
+                                <input 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
+                                    placeholder="01X-XXXXXXX" 
+                                    value={person.phoneNumber} 
+                                    onChange={e => {
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, phoneNumber: e.target.value } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                />
+                            </div>
+
+                            {/* MEMBERSHIP ID */}
+                            <div className="sm:col-span-4 lg:col-span-2">
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">No. Keahlian</label>
+                                <input 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm uppercase focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
+                                    placeholder="ATA 0001" 
+                                    value={person.membershipId} 
+                                    onChange={e => {
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, membershipId: e.target.value } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                />
+                            </div>
+
+                            {/* CATEGORY (only for PESERTA) */}
+                            {(person as any).role === 'PESERTA' && (
+                              <div className="sm:col-span-4 lg:col-span-2">
+                                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori</label>
+                                  <select
+                                      className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                                      value={person.category || 'Perdana'}
+                                      onChange={e => {
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, category: e.target.value } : p);
+                                        setAllPeople(updated);
+                                      }}
+                                  >
+                                      <option>Perdana</option>
+                                      <option>Udara</option>
+                                      <option>Laut</option>
+                                      <option>PPKI</option>
+                                      <option>PPKI Udara</option>
+                                  </select>
+                              </div>
                             )}
-                            <button type="button" onClick={() => addPerson(examiners, setExaminers)} className="mt-4 w-full py-3 border-2 border-dashed border-green-300 rounded-lg text-green-600 font-bold hover:bg-green-50 flex justify-center gap-2 transition">
-                                <Plus size={20}/> Tambah Penguji
-                            </button>
+                            
+                            {/* REMARKS / EMAIL */}
+                            <div className={`${(person as any).role === 'PESERTA' ? 'sm:col-span-12 lg:col-span-4' : 'sm:col-span-12 lg:col-span-6'}`}>
+                                <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Catatan / Email</label>
+                                <input 
+                                    className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 
+                                    placeholder="Cth: email@guru.com / Alahan" 
+                                    value={person.remarks} 
+                                    onChange={e => {
+                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, remarks: e.target.value } : p);
+                                      setAllPeople(updated);
+                                    }}
+                                />
+                            </div>
                         </div>
-                    )}
+                      </div>
+                    ))}
+
+                    <button type="button" onClick={() => setAllPeople([...allPeople, createEmptyParticipant('PESERTA')])} className="mt-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
+                        <Plus size={20}/> Tambah Orang
+                    </button>
                 </div>
             </div>
 

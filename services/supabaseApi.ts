@@ -487,11 +487,29 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
     const school = await getSchoolByCodeOrName(undefined, schoolName);
     const badge = await getBadgeByName(badgeName);
     if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    const { error } = await supabase.from('school_badge_status').upsert(
-      { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
-      { onConflict: 'school_id,badge_id,year' }
-    );
-    if (error) throw error;
+
+    // Cuba UPDATE dulu (row sudah wujud kerana nampak dalam UI)
+    const { data: updateData, error: updateError } = await supabase
+      .from('school_badge_status')
+      .update({ status: 'reopened' })
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('year', year || currentYear())
+      .select();
+
+    if (updateError) throw updateError;
+
+    // Jika UPDATE tak affect mana-mana row, cuba UPSERT sebagai fallback
+    if (!updateData || updateData.length === 0) {
+      const { error: upsertError } = await supabase
+        .from('school_badge_status')
+        .upsert(
+          { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
+          { onConflict: 'school_id,badge_id,year' }
+        );
+      if (upsertError) throw upsertError;
+    }
+
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal unlock badge.' };

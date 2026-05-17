@@ -612,7 +612,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                     ))}
 
                     <button type="button" onClick={() => setAllPeople([...allPeople, createEmptyParticipant('PESERTA')])} className="mt-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
-                        <Plus size={20}/> Tambah Orang
+                        <Plus size={20}/> Tambah Peserta
                     </button>
                 </div>
             </div>

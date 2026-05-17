@@ -232,14 +232,36 @@ const createSubmissionWithPeople = async (
     .single();
   if (subError) throw subError;
 
+  const formatIcNumber = (ic: string | undefined): string | null => {
+    if (!ic) return null;
+    const digits = ic.replace(/\D/g, '');
+    if (digits.length === 12) return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
+    return ic.trim() || null;
+  };
+
+  const formatPhoneNumber = (phone: string | undefined): string | null => {
+    if (!phone) return null;
+    let cleaned = phone.trim();
+    if (!cleaned) return null;
+    // Buang +6 atau 6 di depan dulu untuk normalize
+    cleaned = cleaned.replace(/^\+6/, '').replace(/^6(?=0)/, '');
+    // Tambah +6 di depan jika bermula dengan 0
+    if (cleaned.startsWith('0')) {
+      cleaned = '+6' + cleaned;
+    } else if (!cleaned.startsWith('+')) {
+      cleaned = '+6' + cleaned;
+    }
+    return cleaned;
+  };
+
   const rows = people.filter(p => p.name?.trim()).map(p => ({
     submission_id: submission.id,
     name: normalize(p.name),
     gender: p.gender || null,
     race: p.race || null,
     membership_id: normalize(p.membershipId),
-    ic_number: p.icNumber || null,
-    phone_number: p.phoneNumber || null,
+    ic_number: formatIcNumber(p.icNumber),
+    phone_number: formatPhoneNumber(p.phoneNumber),
     role: (p as any).role || 'PESERTA',
     category: p.category || null,
     remarks: p.remarks || null,

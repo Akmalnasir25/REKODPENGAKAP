@@ -703,7 +703,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                             <th className="px-4 py-3 text-center w-20 text-blue-600">Peserta (L)</th>
                             <th className="px-4 py-3 text-center w-20 text-pink-600">Peserta (P)</th>
                             <th className="px-4 py-3 text-center w-24 bg-teal-50 text-teal-700">Jum. Peserta</th>
-                            <th className="px-4 py-3 text-center w-24 bg-amber-50 text-amber-700">Penerima Rambu</th>
                             <th className="px-4 py-3 text-center w-20 text-indigo-600">Pemimpin</th>
                             <th className="px-4 py-3 text-center w-20 text-green-600">Penguji</th>
                             <th className="px-4 py-3 text-center w-24 bg-blue-100/50">Jumlah Besar</th>
@@ -725,7 +724,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                 <td className="px-4 py-2 text-center text-gray-600 font-semibold">{stat.male}</td>
                                 <td className="px-4 py-2 text-center text-gray-600 font-semibold">{stat.female}</td>
                                 <td className="px-4 py-2 text-center text-teal-600 font-bold bg-teal-50/50">{stat.students}</td>
-                                <td className="px-4 py-2 text-center text-amber-600 font-bold bg-amber-50/50">{stat.rambu > 0 ? stat.rambu : '-'}</td>
                                 <td className="px-4 py-2 text-center text-indigo-600 font-bold bg-indigo-50/50">{stat.leaders}</td>
                                 <td className="px-4 py-2 text-center text-green-600 font-bold bg-green-50/50">{stat.examiners}</td>
                                 <td className="px-4 py-2 text-center font-bold bg-gray-50 text-gray-900">{stat.total}</td>
@@ -733,7 +731,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                         ))}
                         {schoolStats.length === 0 && (
                         <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-gray-400 italic">
+                            <td colSpan={7} className="px-4 py-8 text-center text-gray-400 italic">
                             Tiada rekod statistik untuk paparan ini.
                             </td>
                         </tr>
@@ -746,7 +744,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                 <td className="px-4 py-3 text-center text-blue-200">{totals.male}</td>
                                 <td className="px-4 py-3 text-center text-pink-200">{totals.female}</td>
                                 <td className="px-4 py-3 text-center text-teal-300">{totals.students}</td>
-                                <td className="px-4 py-3 text-center text-amber-300">{totals.rambu}</td>
                                 <td className="px-4 py-3 text-center text-indigo-200">{totals.leaders}</td>
                                 <td className="px-4 py-3 text-center text-green-200">{totals.examiners}</td>
                                 <td className="px-4 py-3 text-center bg-gray-900 text-yellow-400 text-base">{totals.total}</td>

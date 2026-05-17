@@ -49,30 +49,60 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const allAllowed = schools.length > 0 && schools.every(s => s.allowStudents && s.allowAssistants && s.allowExaminers);
 
   const handleAdd = async () => {
-    // 1. Split and Normalize Input
-    const rawSchoolNames = newSchoolName.split('\n')
-      .map(name => name.toUpperCase().trim())
-      .filter(name => name.length > 0);
+    // 1. Split and Normalize Input — format: NAMA SEKOLAH | KOD SEKOLAH
+    const rawLines = newSchoolName.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
 
-    if (rawSchoolNames.length === 0) return;
+    if (rawLines.length === 0) return;
 
-    // 2. Remove Internal Duplicates (Input list itself)
-    const uniqueInputSchools: string[] = Array.from(new Set(rawSchoolNames));
+    // Parse each line: "NAMA SEKOLAH | KOD SEKOLAH"
+    const parsedSchools: { name: string; schoolCode: string }[] = [];
+    const invalidLines: string[] = [];
 
-    const existingSchoolNames = schools.map(s => s.name.toUpperCase().trim());
-    const uniqueSchoolsToSend: string[] = [];
-    const duplicateSchools: string[] = [];
-
-    // 3. Filter against Database
-    uniqueInputSchools.forEach(name => {
-      if (existingSchoolNames.includes(name)) {
-        duplicateSchools.push(name);
+    rawLines.forEach(line => {
+      const parts = line.split('|').map(p => p.trim().toUpperCase());
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        parsedSchools.push({ name: parts[0], schoolCode: parts[1] });
+      } else if (parts.length === 1 && parts[0]) {
+        // Fallback: jika tiada separator, guna nama sebagai kod juga (backward compat)
+        parsedSchools.push({ name: parts[0], schoolCode: parts[0] });
       } else {
-        uniqueSchoolsToSend.push(name);
+        invalidLines.push(line);
       }
     });
 
-    if (uniqueSchoolsToSend.length === 0) {
+    if (invalidLines.length > 0) {
+      alert(`Format tidak sah pada baris berikut:\n${invalidLines.join('\n')}\n\nFormat betul: NAMA SEKOLAH | KOD SEKOLAH`);
+      return;
+    }
+
+    if (parsedSchools.length === 0) return;
+
+    // 2. Remove Internal Duplicates (by name)
+    const seen = new Set<string>();
+    const uniqueSchools: { name: string; schoolCode: string }[] = [];
+    parsedSchools.forEach(s => {
+      if (!seen.has(s.name)) {
+        seen.add(s.name);
+        uniqueSchools.push(s);
+      }
+    });
+
+    const existingSchoolNames = schools.map(s => s.name.toUpperCase().trim());
+    const schoolsToSend: { name: string; schoolCode: string }[] = [];
+    const duplicateSchools: string[] = [];
+
+    // 3. Filter against Database
+    uniqueSchools.forEach(s => {
+      if (existingSchoolNames.includes(s.name)) {
+        duplicateSchools.push(s.name);
+      } else {
+        schoolsToSend.push(s);
+      }
+    });
+
+    if (schoolsToSend.length === 0) {
       alert(`Semua nama yang dimasukkan sudah wujud:\n${duplicateSchools.join(', ')}`);
       setNewSchoolName('');
       return;
@@ -80,9 +110,9 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
 
     setLoading(true);
     try {
-        await addSchoolBatch(scriptUrl, uniqueSchoolsToSend, negeriCode, daerahCode);
+        await addSchoolBatch(scriptUrl, schoolsToSend, negeriCode, daerahCode);
         
-        let finalMessage = `${uniqueSchoolsToSend.length} sekolah berjaya dihantar.`;
+        let finalMessage = `${schoolsToSend.length} sekolah berjaya dihantar.`;
         if (duplicateSchools.length > 0) {
             finalMessage += ` (${duplicateSchools.length} diabaikan kerana duplikasi.)`;
         }
@@ -309,12 +339,17 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
       </div>
 
       <div className="space-y-3 mb-6">
-        <textarea
-          className="w-full p-3 border rounded-lg uppercase h-24 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
-          placeholder="MASUKKAN NAMA SEKOLAH (Satu setiap baris)"
-          value={newSchoolName}
-          onChange={e => setNewSchoolName(e.target.value)}
-        ></textarea>
+        <div>
+          <textarea
+            className="w-full p-3 border rounded-lg uppercase h-28 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium font-mono"
+            placeholder={"NAMA SEKOLAH | KOD SEKOLAH\nContoh:\nSK TAMAN MELAWATI | ABA1234\nSMK SERI PUTERI | ABA5678"}
+            value={newSchoolName}
+            onChange={e => setNewSchoolName(e.target.value)}
+          ></textarea>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            Format: <span className="font-bold text-gray-700">NAMA SEKOLAH | KOD SEKOLAH</span> (satu setiap baris). Kod sekolah akan digunakan oleh guru untuk mendaftar akaun.
+          </p>
+        </div>
         <button 
           onClick={handleAdd} 
           disabled={!newSchoolName || loading} 

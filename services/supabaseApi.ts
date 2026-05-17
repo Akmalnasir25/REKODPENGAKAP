@@ -382,11 +382,16 @@ export const addSchool = async (_url: string, schoolData: { name?: string; schoo
   }
 };
 
-export const addSchoolBatch = async (_url: string, schools: string[], negeriCode?: string, daerahCode?: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const addSchoolBatch = async (_url: string, schools: string[] | { name: string; schoolCode: string }[], negeriCode?: string, daerahCode?: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
     const negeriId = negeriCode ? await getNegeriId(negeriCode) : null;
     const daerahId = daerahCode ? await getDaerahId(daerahCode) : null;
-    const rows = schools.map(name => ({ name: normalize(name), school_code: normalize(name), negeri_id: negeriId, daerah_id: daerahId, is_active: true }));
+    const rows = schools.map(item => {
+      if (typeof item === 'string') {
+        return { name: normalize(item), school_code: normalize(item), negeri_id: negeriId, daerah_id: daerahId, is_active: true };
+      }
+      return { name: normalize(item.name), school_code: normalize(item.schoolCode), negeri_id: negeriId, daerah_id: daerahId, is_active: true };
+    });
     const { error } = await supabase.from('schools').insert(rows);
     if (error) throw error;
     return { status: 'success', message: `${schools.length} sekolah berjaya ditambah.` };

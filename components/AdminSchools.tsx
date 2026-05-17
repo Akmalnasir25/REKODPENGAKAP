@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch } from '../services/supabaseApi';
+import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
 import { School, Badge } from '../types';
 
@@ -28,6 +28,9 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
   const [schoolSearch, setSchoolSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState<'all' | 'registered' | 'unregistered'>('all');
+  const [editingSchoolCode, setEditingSchoolCode] = useState<string | null>(null);
+  const [editSchoolCodeValue, setEditSchoolCodeValue] = useState('');
+  const [savingSchoolCode, setSavingSchoolCode] = useState<string | null>(null);
 
   const registeredAccountCount = schools.filter(s => s.isClaimed).length;
   const unregisteredAccountCount = schools.length - registeredAccountCount;
@@ -142,6 +145,39 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
     } finally {
         setLoading(false);
     }
+  };
+
+  const handleEditSchoolCode = (school: School) => {
+    setEditingSchoolCode(school.name);
+    setEditSchoolCodeValue(school.schoolCode || '');
+  };
+
+  const handleSaveSchoolCode = async (schoolName: string) => {
+    const newCode = editSchoolCodeValue.trim().toUpperCase();
+    if (!newCode) {
+      alert('Kod sekolah tidak boleh kosong.');
+      return;
+    }
+    setSavingSchoolCode(schoolName);
+    try {
+      const result = await updateSchoolCode(schoolName, newCode);
+      if (result.status === 'success') {
+        setEditingSchoolCode(null);
+        setEditSchoolCodeValue('');
+        onRefresh();
+      } else {
+        alert('Gagal kemaskini: ' + result.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan server.');
+    } finally {
+      setSavingSchoolCode(null);
+    }
+  };
+
+  const handleCancelEditSchoolCode = () => {
+    setEditingSchoolCode(null);
+    setEditSchoolCodeValue('');
   };
 
   const handleResetClaim = async (school: School) => {
@@ -511,6 +547,49 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                             </div>
                             <div>
                                 <span className="font-bold text-gray-800 block">{s.name}</span>
+                                {/* Kod Sekolah - Inline Edit */}
+                                {editingSchoolCode === s.name ? (
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <input
+                                      type="text"
+                                      value={editSchoolCodeValue}
+                                      onChange={(e) => setEditSchoolCodeValue(e.target.value.toUpperCase())}
+                                      className="border border-blue-300 rounded px-2 py-0.5 text-[11px] font-mono uppercase w-32 focus:ring-1 focus:ring-blue-500 outline-none"
+                                      placeholder="KOD SEKOLAH"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveSchoolCode(s.name);
+                                        if (e.key === 'Escape') handleCancelEditSchoolCode();
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => handleSaveSchoolCode(s.name)}
+                                      disabled={savingSchoolCode === s.name}
+                                      className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded hover:bg-blue-700 disabled:bg-gray-300"
+                                    >
+                                      {savingSchoolCode === s.name ? '...' : 'Simpan'}
+                                    </button>
+                                    <button
+                                      onClick={handleCancelEditSchoolCode}
+                                      className="text-[10px] font-bold text-gray-500 hover:text-red-600 px-1"
+                                    >
+                                      Batal
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                      Kod: {s.schoolCode || <span className="text-red-400 italic">TIADA</span>}
+                                    </span>
+                                    <button
+                                      onClick={() => handleEditSchoolCode(s)}
+                                      className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-semibold"
+                                      title="Edit Kod Sekolah"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                )}
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isAllEnabled ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                                     {isAllEnabled ? 'AKSES PENUH' : 'AKSES TERHAD'}
                                 </span>

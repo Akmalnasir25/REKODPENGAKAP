@@ -410,6 +410,19 @@ export const deleteSchool = async (_url: string, schoolCodeOrName: string, _csrf
   }
 };
 
+export const updateSchoolCode = async (schoolName: string, newSchoolCode: string): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase
+      .from('schools')
+      .update({ school_code: normalize(newSchoolCode) })
+      .eq('name', normalize(schoolName));
+    if (error) throw error;
+    return { status: 'success', message: 'Kod sekolah berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini kod sekolah.' };
+  }
+};
+
 export const updateSchoolPermission = async (_url: string, schoolName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'all', value: boolean, _csrfToken?: string): Promise<ApiResponse> => {
   try {
     let updateData: Record<string, boolean> = {};

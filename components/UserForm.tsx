@@ -328,7 +328,7 @@ export const UserForm: React.FC<UserFormProps> = ({
     try {
         const result = await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
         if (result.status === 'error') {
-            alert("Ralat: " + (result.message || 'Gagal menghantar pendaftaran.'));
+            alert("Ralat: " + (result.message || 'Gagal menyimpan data.'));
         } else {
             setSubmitted(true);
             window.scrollTo(0, 0);
@@ -491,18 +491,21 @@ export const UserForm: React.FC<UserFormProps> = ({
   if (submitted) {
     return (
       <div className="max-w-3xl mx-auto p-4 mt-8 animate-[fadeIn_0.5s_ease-out]">
-        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl border-t-8 border-blue-900 text-center">
-            <CheckCircle className="w-16 h-16 text-blue-900 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-800">Berjaya Dihantar!</h2>
-            <p className="text-blue-900 font-bold text-lg mt-2">{leaderInfo.schoolName}</p>
-            <p className="text-gray-500 mb-6 font-medium bg-gray-100 inline-block px-3 py-1 rounded-full text-sm mt-2">{leaderInfo.badgeType}</p>
+        <div className="bg-white p-6 md:p-8 rounded-2xl shadow-xl border-t-8 border-emerald-700 text-center">
+            <CheckCircle className="w-16 h-16 text-emerald-700 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-800">Data Berjaya Disimpan!</h2>
+            <p className="text-emerald-700 font-bold text-lg mt-2">{leaderInfo.schoolName}</p>
+            <p className="text-gray-500 mb-4 font-medium bg-gray-100 inline-block px-3 py-1 rounded-full text-sm mt-2">{leaderInfo.badgeType}</p>
+            <p className="text-sm text-gray-600 mb-6 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              Data telah disimpan sebagai draf. Sila ke <span className="font-bold">Dashboard</span> dan klik <span className="font-bold">"Hantar Pendaftaran"</span> pada program yang berkenaan untuk menghantar kepada admin.
+            </p>
             
             <div className="space-y-3">
-                <button onClick={handleReset} className="w-full bg-blue-900 text-white py-3 rounded-lg font-bold hover:bg-blue-800 shadow flex justify-center gap-2 transition">
-                    <Plus size={20}/> Daftar Peserta Lain
+                <button onClick={handleReset} className="w-full bg-emerald-700 text-white py-3 rounded-lg font-bold hover:bg-emerald-600 shadow flex justify-center gap-2 transition">
+                    <Plus size={20}/> Tambah Lagi Data
                 </button>
                 {onBackToDashboard && (
-                    <button onClick={onBackToDashboard} className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex justify-center gap-2 transition">
+                    <button onClick={onBackToDashboard} className="w-full bg-blue-900 text-white py-3 rounded-lg font-bold hover:bg-blue-800 flex justify-center gap-2 transition">
                         <ArrowLeft size={20}/> Kembali ke Dashboard
                     </button>
                 )}
@@ -699,10 +702,13 @@ export const UserForm: React.FC<UserFormProps> = ({
                 <button 
                     type="submit" 
                     disabled={submitting} 
-                    className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg flex justify-center gap-2 transition active:scale-[0.98] ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-900 hover:bg-blue-800'}`}
+                    className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg flex justify-center gap-2 transition active:scale-[0.98] ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-600'}`}
                 >
-                    {submitting ? 'Menghantar...' : <><Save size={24}/> Hantar Pendaftaran</>}
+                    {submitting ? 'Menyimpan...' : <><Save size={24}/> Simpan Data</>}
                 </button>
+                <p className="text-center text-xs text-gray-500 mt-2">
+                  Data akan disimpan sebagai draf. Sila hantar pendaftaran dari Dashboard untuk pengesahan admin.
+                </p>
                 <div className="flex flex-col items-center justify-center gap-1.5 text-[10px] text-gray-400 font-semibold mt-6 border-t border-gray-200 pt-4 w-full">
                     <span className="uppercase tracking-[0.2em] font-sans">Design By Akmal Nasir<sup className="ml-0.5">&trade;</sup></span>
                     <div className="flex items-center gap-2">

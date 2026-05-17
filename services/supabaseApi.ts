@@ -193,7 +193,8 @@ const createSubmissionWithPeople = async (
   leaderInfo: LeaderInfo,
   people: Array<Participant & { role?: string }>,
   customDate?: string,
-  source: 'manual' | 'bulk_import' | 'migration' = 'manual'
+  source: 'manual' | 'bulk_import' | 'migration' = 'manual',
+  submissionStatus: 'draft' | 'submitted' = 'draft'
 ) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
@@ -223,7 +224,7 @@ const createSubmissionWithPeople = async (
       submission_year: year,
       submitted_at: submittedAt,
       submitted_by: user?.id || null,
-      status: 'submitted',
+      status: submissionStatus,
       source,
       remarks: leaderInfo.groupNumber ? `No Kumpulan: ${leaderInfo.groupNumber}` : null,
     })
@@ -259,15 +260,18 @@ const createSubmissionWithPeople = async (
     updated_by: user?.id || null,
   }, { onConflict: 'school_id' });
 
-  await supabase.from('school_badge_status').upsert({
-    school_id: school.id,
-    badge_id: badge.id,
-    year,
-    status: 'submitted',
-    submitted_at: submittedAt,
-  }, { onConflict: 'school_id,badge_id,year' });
+  // Hanya upsert school_badge_status jika bukan draft
+  if (submissionStatus !== 'draft') {
+    await supabase.from('school_badge_status').upsert({
+      school_id: school.id,
+      badge_id: badge.id,
+      year,
+      status: 'submitted',
+      submitted_at: submittedAt,
+    }, { onConflict: 'school_id,badge_id,year' });
+  }
 
-  return { status: 'success', message: 'Pendaftaran berjaya disimpan ke Supabase.' };
+  return { status: 'success', message: submissionStatus === 'draft' ? 'Data berjaya disimpan sebagai draf.' : 'Pendaftaran berjaya dihantar.' };
 };
 
 export const submitRegistration = async (
@@ -277,7 +281,8 @@ export const submitRegistration = async (
   assistants: Participant[] = [],
   examiners: Participant[] = [],
   customDate?: string,
-  _csrfToken?: string
+  _csrfToken?: string,
+  submissionStatus: 'draft' | 'submitted' = 'draft'
 ): Promise<ApiResponse> => {
   try {
     const allPeople = [
@@ -285,7 +290,7 @@ export const submitRegistration = async (
       ...assistants.map(p => ({ ...p, role: 'PENOLONG PEMIMPIN' })),
       ...examiners.map(p => ({ ...p, role: 'PENGUJI' })),
     ];
-    const result = await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual');
+    const result = await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual', submissionStatus);
     return result as ApiResponse;
   } catch (error: any) {
     console.error('submitRegistration Supabase error:', error);
@@ -469,6 +474,15 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
     
     const badge = await getBadgeByName(badgeName);
     if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
+
+    // Tukar semua submission draft → submitted untuk sekolah + badge + tahun ini
+    await supabase
+      .from('submissions')
+      .update({ status: 'submitted' })
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('submission_year', year || currentYear())
+      .eq('status', 'draft');
     
     const { error } = await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'submitted', submitted_at: new Date().toISOString() }, { onConflict: 'school_id,badge_id,year' });
     if (error) throw error;

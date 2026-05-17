@@ -32,10 +32,10 @@ const getBadgeByName = async (badgeName: string) => {
 };
 
 const getSchoolByCodeOrName = async (schoolCode?: string, schoolName?: string) => {
-  let query = supabase.from('schools').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)');
+  let query = supabase.from('schools').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)').eq('is_active', true);
   if (schoolCode) query = query.eq('school_code', normalize(schoolCode));
   else query = query.eq('name', normalize(schoolName));
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await query.limit(1).maybeSingle();
   if (error) throw error;
   return data;
 };

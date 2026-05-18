@@ -247,7 +247,8 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
       const schoolsMap: Record<string, ParsedRow[]> = {};
       parsedData.forEach(row => {
           const sName = row.schoolName === 'TIDAK DINYATAKAN' ? 'DATA_IMPORT_MANUAL' : row.schoolName;
-          const key = sName + '|' + row.schoolCode;
+          // Group by school NAME only (ignore code differences within same file)
+          const key = sName;
           if (!schoolsMap[key]) schoolsMap[key] = [];
           schoolsMap[key].push(row);
       });
@@ -258,6 +259,16 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
           const rows = schoolsMap[key];
           const first = rows[0];
           const actualSchoolName = first.schoolName === 'TIDAK DINYATAKAN' ? 'DATA_IMPORT_MANUAL' : first.schoolName;
+
+          // Ambil kod sekolah yang paling kerap muncul (majority vote)
+          const codeCounts: Record<string, number> = {};
+          rows.forEach(r => {
+              const code = r.schoolCode?.trim();
+              if (code && code !== 'XXX') {
+                  codeCounts[code] = (codeCounts[code] || 0) + 1;
+              }
+          });
+          const bestCode = Object.entries(codeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || first.schoolCode;
 
           const students: Participant[] = [];
           const assistants: Participant[] = [];
@@ -292,7 +303,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
           const leaderInfo: LeaderInfo = {
               schoolName: actualSchoolName,
-              schoolCode: first.schoolCode,
+              schoolCode: bestCode,
               groupNumber: first.groupNumber || '',
               principalName: 'DATA IMPORT',
               principalPhone: '',

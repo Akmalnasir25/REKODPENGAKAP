@@ -70,14 +70,29 @@ export const fetchCloudData = async (
 ): Promise<ApiResponse> => {
   try {
     let schoolsQuery = supabase.from('schools').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)').eq('is_active', true).order('name');
-    let submissionsQuery = supabase.from('submission_people').select(`
-      *,
-      submission:submissions(
-        id, submission_year, submitted_at, status, remarks,
-        school:schools(id, name, school_code, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
-        badge:badges(id, name)
-      )
-    `).eq('is_deleted', false).order('created_at', { ascending: false });
+    // Paginated fetch to overcome Supabase 1000-row default limit
+    const fetchAllSubmissionPeople = async () => {
+      const pageSize = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase.from('submission_people').select(`
+          *,
+          submission:submissions(
+            id, submission_year, submitted_at, status, remarks,
+            school:schools(id, name, school_code, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
+            badge:badges(id, name)
+          )
+        `).eq('is_deleted', false).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+        if (error) return { data: null, error };
+        allData = allData.concat(data || []);
+        hasMore = (data || []).length === pageSize;
+        from += pageSize;
+      }
+      return { data: allData, error: null };
+    };
+    const peopleRes = await fetchAllSubmissionPeople();
 
     if (role === 'negeri' && negeriCode) {
       const negeriId = await getNegeriId(negeriCode);
@@ -88,19 +103,19 @@ export const fetchCloudData = async (
       if (daerahId) schoolsQuery = schoolsQuery.eq('daerah_id', daerahId);
     }
 
-    const [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, peopleRes, statusRes] = await Promise.all([
+    const [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, statusRes] = await Promise.all([
       schoolsQuery,
       supabase.from('badges').select('*').order('name'),
       supabase.from('negeri').select('*').order('name'),
       supabase.from('daerah').select('*, negeri:negeri_id(code,name)').order('name'),
       supabase.from('school_profiles').select('*, school:school_id(school_code,name,group_number)').order('updated_at', { ascending: false }),
-      submissionsQuery,
       supabase.from('school_badge_status').select('*, school:school_id(school_code,name), badge:badge_id(name)').order('updated_at', { ascending: false }),
     ]);
 
-    for (const res of [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, peopleRes, statusRes]) {
+    for (const res of [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, statusRes]) {
       if (res.error) throw res.error;
     }
+    if (peopleRes.error) throw peopleRes.error;
 
     const allowedSchoolCodes = new Set((schoolsRes.data || []).map((s: any) => s.school_code));
 
@@ -159,6 +174,10 @@ export const fetchCloudData = async (
         studentPhone: p.phone_number || '',
         role: p.role || 'PESERTA',
         category: p.category || '',
+        unit: p.unit || '',
+        makanan: p.makanan || '',
+        masalahKesihatan: p.masalah_kesihatan || '',
+        masalahKesihatanLain: p.masalah_kesihatan_lain || '',
         remarks: p.remarks || p.submission?.remarks || '',
       }));
 
@@ -263,7 +282,11 @@ const createSubmissionWithPeople = async (
     ic_number: formatIcNumber(p.icNumber),
     phone_number: formatPhoneNumber(p.phoneNumber),
     role: (p as any).role || 'PESERTA',
-    category: p.category || null,
+    category: (p as any).kategori || null,
+    unit: (p as any).unit || null,
+    makanan: (p as any).makanan || null,
+    masalah_kesihatan: (p as any).masalahKesihatan || null,
+    masalah_kesihatan_lain: (p as any).masalahKesihatanLain || null,
     remarks: p.remarks || null,
   }));
 
@@ -328,7 +351,7 @@ export const bulkSubmitRegistration = async (
     badgeType: string;
     year: number;
     role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
-    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; remarks?: string; }>;
+    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string; }>;
   },
   _csrfToken?: string
 ): Promise<ApiResponse> => {
@@ -351,7 +374,11 @@ export const bulkSubmitRegistration = async (
       gender: r.gender,
       race: r.race,
       phoneNumber: r.phoneNumber || '',
-      category: r.category || 'Perdana',
+      kategori: r.category || 'Pengakap Muda',
+      unit: r.unit || 'Perdana',
+      makanan: r.makanan || 'Biasa',
+      masalahKesihatan: r.masalahKesihatan || 'Tiada',
+      masalahKesihatanLain: r.masalahKesihatanLain || '',
       remarks: r.remarks || '',
       role: r.role || payload.role,
     }));
@@ -982,7 +1009,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -996,6 +1023,10 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber || null;
     if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
     if (updates.category !== undefined) updateData.category = updates.category || null;
+    if (updates.unit !== undefined) updateData.unit = updates.unit || null;
+    if (updates.makanan !== undefined) updateData.makanan = updates.makanan || null;
+    if (updates.masalahKesihatan !== undefined) updateData.masalah_kesihatan = updates.masalahKesihatan || null;
+    if (updates.masalahKesihatanLain !== undefined) updateData.masalah_kesihatan_lain = updates.masalahKesihatanLain || null;
     if (updates.remarks !== undefined) updateData.remarks = updates.remarks || null;
 
     let query = supabase.from('submission_people').update(updateData);

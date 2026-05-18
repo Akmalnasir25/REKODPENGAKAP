@@ -53,7 +53,11 @@ export const UserForm: React.FC<UserFormProps> = ({
       membershipId: '',
       icNumber: '',
       phoneNumber: '',
-      category: 'Perdana',
+      kategori: 'Pengakap Muda',
+      unit: 'Perdana',
+      makanan: 'Biasa',
+      masalahKesihatan: 'Tiada',
+      masalahKesihatanLain: '',
       remarks: '',
       role,
   } as any);
@@ -575,13 +579,31 @@ export const UserForm: React.FC<UserFormProps> = ({
 
                             {/* CATEGORY (only for PESERTA) */}
                             {(person as any).role === 'PESERTA' && (
+                              <>
                               <div className="sm:col-span-4 lg:col-span-2">
                                   <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori</label>
                                   <select
                                       className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
-                                      value={person.category || 'Perdana'}
+                                      value={person.kategori || 'Pengakap Muda'}
                                       onChange={e => {
-                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, category: e.target.value } : p);
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, kategori: e.target.value } : p);
+                                        setAllPeople(updated);
+                                      }}
+                                  >
+                                      <option>Pengakap Kanak-kanak</option>
+                                      <option>Pengakap Muda</option>
+                                      <option>Pengakap Remaja</option>
+                                      <option>Kelana</option>
+                                  </select>
+                              </div>
+
+                              <div className="sm:col-span-4 lg:col-span-2">
+                                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Unit</label>
+                                  <select
+                                      className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                                      value={person.unit || 'Perdana'}
+                                      onChange={e => {
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, unit: e.target.value } : p);
                                         setAllPeople(updated);
                                       }}
                                   >
@@ -592,10 +614,62 @@ export const UserForm: React.FC<UserFormProps> = ({
                                       <option>PPKI Udara</option>
                                   </select>
                               </div>
+
+                              <div className="sm:col-span-4 lg:col-span-2">
+                                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Makanan</label>
+                                  <select
+                                      className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                                      value={person.makanan || 'Biasa'}
+                                      onChange={e => {
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, makanan: e.target.value } : p);
+                                        setAllPeople(updated);
+                                      }}
+                                  >
+                                      <option>Biasa</option>
+                                      <option>Vegetarian</option>
+                                  </select>
+                              </div>
+
+                              <div className="sm:col-span-6 lg:col-span-3">
+                                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Masalah Kesihatan</label>
+                                  <select
+                                      className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                                      value={person.masalahKesihatan || 'Tiada'}
+                                      onChange={e => {
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, masalahKesihatan: e.target.value, masalahKesihatanLain: e.target.value !== 'Lain-lain' ? '' : (p as any).masalahKesihatanLain } : p);
+                                        setAllPeople(updated);
+                                      }}
+                                  >
+                                      <option>Tiada</option>
+                                      <option>Alahan</option>
+                                      <option>Asma</option>
+                                      <option>Gastrik</option>
+                                      <option>Penyakit Jantung</option>
+                                      <option>Migrain</option>
+                                      <option>Penyakit Kronik</option>
+                                      <option>Lain-lain</option>
+                                  </select>
+                              </div>
+
+                              {(person as any).masalahKesihatan === 'Lain-lain' && (
+                                <div className="sm:col-span-6 lg:col-span-3">
+                                    <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Nyatakan Penyakit</label>
+                                    <input
+                                        className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm"
+                                        placeholder="Nyatakan penyakit..."
+                                        value={(person as any).masalahKesihatanLain || ''}
+                                        onChange={e => {
+                                          const updated = allPeople.map(p => p.id === person.id ? { ...p, masalahKesihatanLain: e.target.value } : p);
+                                          setAllPeople(updated);
+                                        }}
+                                    />
+                                </div>
+                              )}
+                              </>
                             )}
                             
                             {/* REMARKS / EMAIL */}
-                            <div className={`${(person as any).role === 'PESERTA' ? 'sm:col-span-12 lg:col-span-4' : 'sm:col-span-12 lg:col-span-6'}`}>
+                            <div className="sm:col-span-12 lg:col-span-4">
                                 <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Catatan / Email</label>
                                 <input 
                                     className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm" 

@@ -20,7 +20,8 @@ interface ParsedRow {
     race: string;
     icNumber: string;
     phone: string;
-    category: string; // Normalized
+    category: string; // Normalized role (PESERTA/PEMIMPIN/etc)
+    kategori: string; // Kategori peserta (Pengakap Kanak-kanak/Muda/Remaja/Kelana)
     membershipId: string;
     
     // Display Fields
@@ -32,13 +33,29 @@ interface ParsedRow {
 const normalizeRole = (raw: any): string => {
     const r = String(raw || '').trim().toUpperCase();
     
-    if (r === 'PKK') return 'PESERTA';
+    if (r === 'PKK' || r === 'PENGAKAP KANAK-KANAK') return 'PESERTA';
+    if (r === 'PM' || r === 'PENGAKAP MUDA') return 'PESERTA';
+    if (r === 'PR' || r === 'PENGAKAP REMAJA') return 'PESERTA';
+    if (r === 'KELANA') return 'PESERTA';
     if (r === 'PEN. PEMIMPIN' || r === 'PEN PEMIMPIN' || r === 'PEN.PEMIMPIN' || r === 'PENOLONG') return 'PENOLONG PEMIMPIN';
     
     if (r.includes('PENGUJI')) return 'PENGUJI';
     if (r.includes('PEMIMPIN') && !r.includes('PENOLONG')) return 'PEMIMPIN';
     
     return 'PESERTA'; // Default
+};
+
+// Helper: Extract kategori from raw value
+const extractKategori = (raw: any): string => {
+    const r = String(raw || '').trim().toUpperCase();
+    
+    if (r === 'PKK' || r === 'PENGAKAP KANAK-KANAK') return 'Pengakap Kanak-kanak';
+    if (r === 'PM' || r === 'PENGAKAP MUDA') return 'Pengakap Muda';
+    if (r === 'PR' || r === 'PENGAKAP REMAJA') return 'Pengakap Remaja';
+    if (r === 'KELANA') return 'Kelana';
+    
+    // Jika bukan kategori peserta (PEMIMPIN, PENGUJI dll), return kosong
+    return '';
 };
 
 export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRefresh }) => {
@@ -104,6 +121,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
               name: nameVal || '[TIADA NAMA]',
               icNumber: colMap.ic > -1 && row[colMap.ic] ? String(row[colMap.ic]).trim() : '',
               category: normalizeRole(rawCategory),
+              kategori: extractKategori(rawCategory),
               schoolName: colMap.school > -1 && row[colMap.school] ? String(row[colMap.school]).toUpperCase().trim() : 'TIDAK DINYATAKAN',
               schoolCode: colMap.code > -1 && row[colMap.code] ? String(row[colMap.code]).toUpperCase().trim() : 'XXX',
               phone: colMap.phone > -1 && row[colMap.phone] ? String(row[colMap.phone]) : '',
@@ -254,10 +272,11 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                   id: Date.now() + Math.random(),
                   name: r.name,
                   gender: r.gender,
-                  race: r.race, // Ensure this maps correctly from ParsedRow
+                  race: r.race,
                   membershipId: r.membershipId,
                   icNumber: r.icNumber,
                   phoneNumber: r.phone,
+                  kategori: r.kategori || 'Pengakap Muda',
                   remarks: 'IMPORT_EXCEL'
               };
 
@@ -473,6 +492,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                                  <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[100px]">SISTEM: KAUM</th>
                                  <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[100px]">SISTEM: ID AHLI</th>
                                  <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[100px]">SISTEM: PERANAN</th>
+                                 <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[140px]">SISTEM: KATEGORI</th>
 
                                  {/* RAW EXCEL COLUMNS */}
                                  {excelHeaders.map((h, i) => (
@@ -492,6 +512,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                                      <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800">{row.race}</td>
                                      <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800 font-mono">{row.membershipId}</td>
                                      <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800 font-bold">{row.category}</td>
+                                     <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800">{row.kategori || '-'}</td>
 
                                      {/* RAW DATA CELLS */}
                                      {excelHeaders.map((_, cIndex) => (

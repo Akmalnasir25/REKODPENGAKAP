@@ -458,6 +458,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       phoneNumber: item.studentPhone || '',
       role: item.role || 'PESERTA',
       category: item.category || '',
+      unit: item.unit || '',
+      makanan: item.makanan || '',
+      masalahKesihatan: item.masalahKesihatan || '',
+      masalahKesihatanLain: item.masalahKesihatanLain || '',
       remarks: item.remarks || '',
     });
   };
@@ -1174,6 +1178,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <th className="px-4 py-3">No. Keahlian</th>
                                     <th className="px-4 py-3">Peranan</th>
                                     <th className="px-4 py-3">Kategori</th>
+                                    <th className="px-4 py-3">Unit</th>
+                                    <th className="px-4 py-3">Makanan</th>
+                                    <th className="px-4 py-3">Kesihatan</th>
                                     <th className="px-4 py-3 text-right">Tindakan</th>
                                 </tr>
                             </thead>
@@ -1211,12 +1218,44 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                           <td className="px-4 py-2">
                                             <select className="w-full p-1 border rounded text-xs" value={editFormData.category} onChange={e => setEditFormData(p => ({...p, category: e.target.value}))}>
                                               <option value="">-</option>
+                                              <option value="Pengakap Kanak-kanak">Pengakap Kanak-kanak</option>
+                                              <option value="Pengakap Muda">Pengakap Muda</option>
+                                              <option value="Pengakap Remaja">Pengakap Remaja</option>
+                                              <option value="Kelana">Kelana</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.unit} onChange={e => setEditFormData(p => ({...p, unit: e.target.value}))}>
+                                              <option value="">-</option>
                                               <option value="Perdana">Perdana</option>
                                               <option value="Udara">Udara</option>
                                               <option value="Laut">Laut</option>
                                               <option value="PPKI">PPKI</option>
                                               <option value="PPKI Udara">PPKI Udara</option>
                                             </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.makanan} onChange={e => setEditFormData(p => ({...p, makanan: e.target.value}))}>
+                                              <option value="">-</option>
+                                              <option value="Biasa">Biasa</option>
+                                              <option value="Vegetarian">Vegetarian</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.masalahKesihatan} onChange={e => setEditFormData(p => ({...p, masalahKesihatan: e.target.value, masalahKesihatanLain: e.target.value !== 'Lain-lain' ? '' : editFormData.masalahKesihatanLain}))}>
+                                              <option value="">-</option>
+                                              <option value="Tiada">Tiada</option>
+                                              <option value="Alahan">Alahan</option>
+                                              <option value="Asma">Asma</option>
+                                              <option value="Gastrik">Gastrik</option>
+                                              <option value="Penyakit Jantung">Penyakit Jantung</option>
+                                              <option value="Migrain">Migrain</option>
+                                              <option value="Penyakit Kronik">Penyakit Kronik</option>
+                                              <option value="Lain-lain">Lain-lain</option>
+                                            </select>
+                                            {editFormData.masalahKesihatan === 'Lain-lain' && (
+                                              <input className="w-full p-1 border rounded text-xs mt-1" placeholder="Nyatakan..." value={editFormData.masalahKesihatanLain} onChange={e => setEditFormData(p => ({...p, masalahKesihatanLain: e.target.value}))} />
+                                            )}
                                           </td>
                                           <td className="px-4 py-2 text-right">
                                             <div className="flex items-center justify-end gap-1">
@@ -1261,6 +1300,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         </td>
                                         <td className="px-4 py-3 text-xs font-semibold uppercase">{item.role || 'Peserta'}</td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.category || '-'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.unit || '-'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.makanan || '-'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.masalahKesihatan === 'Lain-lain' ? `Lain-lain: ${item.masalahKesihatanLain || ''}` : (item.masalahKesihatan || '-')}</td>
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-1">
                                               {canModifyRecord(item) && !isMigrated && (
@@ -1271,7 +1313,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         </td>
                                     </tr>
                                 )})}
-                                {filteredData.length === 0 && <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
+                                {filteredData.length === 0 && <tr><td colSpan={11} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
                             </tbody>
                         </table>
                     </div>

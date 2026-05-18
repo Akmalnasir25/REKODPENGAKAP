@@ -8,7 +8,11 @@ export interface Participant {
   membershipId: string;
   icNumber: string;
   phoneNumber: string; 
-  category?: 'Perdana' | 'Udara' | 'Laut' | 'PPKI' | 'PPKI Udara';
+  kategori?: 'Pengakap Kanak-kanak' | 'Pengakap Muda' | 'Pengakap Remaja' | 'Kelana';
+  unit?: 'Perdana' | 'Udara' | 'Laut' | 'PPKI' | 'PPKI Udara';
+  makanan?: 'Biasa' | 'Vegetarian';
+  masalahKesihatan?: 'Alahan' | 'Asma' | 'Gastrik' | 'Penyakit Jantung' | 'Migrain' | 'Penyakit Kronik' | 'Lain-lain' | 'Tiada';
+  masalahKesihatanLain?: string;
   remarks: string;
 }
 
@@ -44,6 +48,10 @@ export interface SubmissionData {
   principalPhone?: string;
   leader?: string;
   category?: string;
+  unit?: string;
+  makanan?: string;
+  masalahKesihatan?: string;
+  masalahKesihatanLain?: string;
   remarks: string;
 }
 

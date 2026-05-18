@@ -53,7 +53,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       membershipId: '',
       icNumber: '',
       phoneNumber: '',
-      kategori: 'Pengakap Muda',
+      kategori: 'Pengakap Kanak-kanak',
       unit: 'Perdana',
       makanan: 'Biasa',
       masalahKesihatan: 'Tiada',
@@ -584,7 +584,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                                   <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori</label>
                                   <select
                                       className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
-                                      value={person.kategori || 'Pengakap Muda'}
+                                      value={person.kategori || 'Pengakap Kanak-kanak'}
                                       onChange={e => {
                                         const updated = allPeople.map(p => p.id === person.id ? { ...p, kategori: e.target.value } : p);
                                         setAllPeople(updated);

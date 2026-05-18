@@ -276,7 +276,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                   membershipId: r.membershipId,
                   icNumber: r.icNumber,
                   phoneNumber: r.phone,
-                  kategori: r.kategori || 'Pengakap Muda',
+                  kategori: r.kategori || 'Pengakap Kanak-kanak',
                   remarks: 'IMPORT_EXCEL'
               };
 

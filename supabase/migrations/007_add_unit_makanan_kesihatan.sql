@@ -23,7 +23,7 @@ UPDATE public.submission_people
 
 -- 4. Set default kategori baru untuk rekod yang category NULL
 UPDATE public.submission_people
-  SET category = 'Pengakap Muda'
+  SET category = 'Pengakap Kanak-kanak'
   WHERE category IS NULL AND role = 'PESERTA';
 
 -- 5. Tambah CHECK constraint baru untuk category

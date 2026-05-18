@@ -374,7 +374,7 @@ export const bulkSubmitRegistration = async (
       gender: r.gender,
       race: r.race,
       phoneNumber: r.phoneNumber || '',
-      kategori: r.category || 'Pengakap Muda',
+      kategori: r.category || 'Pengakap Kanak-kanak',
       unit: r.unit || 'Perdana',
       makanan: r.makanan || 'Biasa',
       masalahKesihatan: r.masalahKesihatan || 'Tiada',

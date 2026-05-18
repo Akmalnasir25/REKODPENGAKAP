@@ -105,7 +105,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         row === 2 ? 'MELAYU' : '',
         row === 2 ? '0123456789' : '',
         row === 2 ? 'PESERTA' : '',
-        row === 2 ? 'Pengakap Muda' : '',
+        row === 2 ? 'Pengakap Kanak-kanak' : '',
         row === 2 ? 'Perdana' : '',
         row === 2 ? 'Biasa' : '',
         row === 2 ? 'Tiada' : '',
@@ -135,7 +135,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       [''],
       ['KATEGORI'],
       [`Tulis salah satu: ${categoryOptions.join(', ')}`],
-      ['Contoh: Pengakap Muda, Pengakap Remaja. Jika kosong, sistem akan anggap Pengakap Muda.'],
+      ['Contoh: Pengakap Muda, Pengakap Remaja. Jika kosong, sistem akan anggap Pengakap Kanak-kanak.'],
       [''],
       ['UNIT'],
       [`Tulis salah satu: ${unitOptions.join(', ')}`],
@@ -180,7 +180,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const race = compact(row['Kaum'] || row['Bangsa']).toUpperCase();
       const phoneNumber = compact(row['No Telefon']);
       const role = normalizeRole(row['Peranan'], selectedRole);
-      const category = compact(row['Kategori']) || 'Pengakap Muda';
+      const category = compact(row['Kategori']) || 'Pengakap Kanak-kanak';
       const unit = compact(row['Unit']) || 'Perdana';
       const makanan = compact(row['Makanan']) || 'Biasa';
       const masalahKesihatan = compact(row['Masalah Kesihatan']) || 'Tiada';

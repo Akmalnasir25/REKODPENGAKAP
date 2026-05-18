@@ -79,6 +79,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
   const [rawSheetData, setRawSheetData] = useState<any[][]>([]);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [fileSchoolName, setFileSchoolName] = useState<string>('');
   
   // Column Mapping State
   const [colMap, setColMap] = useState({
@@ -122,7 +123,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
               icNumber: colMap.ic > -1 && row[colMap.ic] ? String(row[colMap.ic]).trim() : '',
               category: normalizeRole(rawCategory),
               kategori: extractKategori(rawCategory),
-              schoolName: colMap.school > -1 && row[colMap.school] ? String(row[colMap.school]).toUpperCase().trim() : 'TIDAK DINYATAKAN',
+              schoolName: fileSchoolName || (colMap.school > -1 && row[colMap.school] ? String(row[colMap.school]).toUpperCase().trim() : 'TIDAK DINYATAKAN'),
               schoolCode: colMap.code > -1 && row[colMap.code] ? String(row[colMap.code]).toUpperCase().trim() : 'XXX',
               phone: colMap.phone > -1 && row[colMap.phone] ? String(row[colMap.phone]) : '',
               gender: colMap.gender > -1 && row[colMap.gender] ? String(row[colMap.gender]) : 'Lelaki',
@@ -136,7 +137,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
       setParsedData(newParsedRows);
 
-  }, [rawSheetData, colMap]);
+  }, [rawSheetData, colMap, fileSchoolName]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -153,6 +154,10 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
       try {
           const file = files[0]; // Process first file only for simplicity in mapping
+          
+          // Extract school name from filename (format: "NAMA SEKOLAH - LENCANA.xlsx")
+          const fileSchoolName = file.name.replace(/\.xlsx?$/i, '').split(' - ')[0]?.trim().toUpperCase() || '';
+          
           const data = await file.arrayBuffer();
           const workbook = XLSX.read(data);
           const sheetName = workbook.SheetNames[0];
@@ -225,6 +230,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
           setColMap(newMap);
           setRawSheetData(dataRows);
+          setFileSchoolName(fileSchoolName);
           
           alert(`Fail dibaca. Sila semak 'Padanan Lajur' dan jadual di bawah.`);
 
@@ -334,6 +340,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
       setRawSheetData([]);
       setImportLog([]);
       setExcelHeaders([]);
+      setFileSchoolName('');
   };
 
   // Migration Handlers

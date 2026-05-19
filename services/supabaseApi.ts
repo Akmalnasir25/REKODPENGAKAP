@@ -296,15 +296,19 @@ const createSubmissionWithPeople = async (
     if (peopleError) throw peopleError;
   }
 
-  await supabase.from('school_profiles').upsert({
-    school_id: school.id,
-    principal_name: normalize(leaderInfo.principalName),
-    principal_phone: leaderInfo.principalPhone || null,
-    leader_name: normalize(leaderInfo.leaderName),
-    leader_phone: leaderInfo.phone || null,
-    leader_race: leaderInfo.race || null,
-    updated_by: user?.id || null,
-  }, { onConflict: 'school_id' });
+  // Only upsert school_profiles if no profile exists yet (don't overwrite existing profile data)
+  const { data: existingProfile } = await supabase.from('school_profiles').select('id').eq('school_id', school.id).single();
+  if (!existingProfile) {
+    await supabase.from('school_profiles').insert({
+      school_id: school.id,
+      principal_name: normalize(leaderInfo.principalName),
+      principal_phone: leaderInfo.principalPhone || null,
+      leader_name: normalize(leaderInfo.leaderName),
+      leader_phone: leaderInfo.phone || null,
+      leader_race: leaderInfo.race || null,
+      updated_by: user?.id || null,
+    });
+  }
 
   // Hanya upsert school_badge_status jika bukan draft
   if (submissionStatus !== 'draft') {

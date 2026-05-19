@@ -285,6 +285,9 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
           rows.forEach((r) => {
               if (r.name === '[TIADA NAMA]') return;
 
+              const cat = r.category;
+              const isPeserta = cat === 'PESERTA';
+
               const p: Participant = {
                   id: Date.now() + Math.random(),
                   name: r.name,
@@ -293,11 +296,10 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                   membershipId: r.membershipId,
                   icNumber: r.icNumber,
                   phoneNumber: r.phone,
-                  kategori: r.kategori || 'Pengakap Kanak-kanak',
+                  kategori: isPeserta ? (r.kategori || 'Pengakap Kanak-kanak') : undefined,
                   remarks: 'IMPORT_EXCEL'
               };
 
-              const cat = r.category;
               if (cat === 'PENGUJI') examiners.push(p);
               else if (cat === 'PENOLONG PEMIMPIN' || cat === 'PEMIMPIN') {
                   assistants.push(p);

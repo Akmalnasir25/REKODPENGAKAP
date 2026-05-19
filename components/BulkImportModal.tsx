@@ -180,11 +180,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const race = compact(row['Kaum'] || row['Bangsa']).toUpperCase();
       const phoneNumber = compact(row['No Telefon']);
       const role = normalizeRole(row['Peranan'], selectedRole);
-      const category = compact(row['Kategori']) || 'Pengakap Kanak-kanak';
-      const unit = compact(row['Unit']) || 'Perdana';
-      const makanan = compact(row['Makanan']) || 'Biasa';
-      const masalahKesihatan = compact(row['Masalah Kesihatan']) || 'Tiada';
-      const masalahKesihatanLain = compact(row['Nyatakan Penyakit']) || '';
+      const isPeserta = role === 'PESERTA';
+      const category = isPeserta ? (compact(row['Kategori']) || 'Pengakap Kanak-kanak') : '';
+      const unit = isPeserta ? (compact(row['Unit']) || 'Perdana') : '';
+      const makanan = isPeserta ? (compact(row['Makanan']) || 'Biasa') : '';
+      const masalahKesihatan = isPeserta ? (compact(row['Masalah Kesihatan']) || 'Tiada') : '';
+      const masalahKesihatanLain = isPeserta ? (compact(row['Nyatakan Penyakit']) || '') : '';
       const remarks = compact(row['Catatan / Email'] || row['Catatan']);
       const errors: string[] = [];
       const warnings: string[] = [];
@@ -198,11 +199,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       if (!gender) errors.push('Jantina wajib diisi.');
       else if (!['Lelaki', 'Perempuan'].includes(gender)) errors.push('Jantina mesti Lelaki atau Perempuan.');
       if (!race) errors.push('Kaum wajib diisi.');
-      if (!categoryOptions.includes(category)) errors.push('Kategori mesti Pengakap Kanak-kanak, Pengakap Muda, Pengakap Remaja atau Kelana.');
-      if (!unitOptions.includes(unit)) errors.push('Unit mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
-      if (!makananOptions.includes(makanan)) errors.push('Makanan mesti Biasa atau Vegetarian.');
-      if (!masalahKesihatanOptions.includes(masalahKesihatan)) errors.push('Masalah Kesihatan tidak sah.');
-      if (masalahKesihatan === 'Lain-lain' && !masalahKesihatanLain) errors.push('Sila nyatakan penyakit jika pilih Lain-lain.');
+      if (isPeserta && !categoryOptions.includes(category)) errors.push('Kategori mesti Pengakap Kanak-kanak, Pengakap Muda, Pengakap Remaja atau Kelana.');
+      if (isPeserta && !unitOptions.includes(unit)) errors.push('Unit mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
+      if (isPeserta && !makananOptions.includes(makanan)) errors.push('Makanan mesti Biasa atau Vegetarian.');
+      if (isPeserta && !masalahKesihatanOptions.includes(masalahKesihatan)) errors.push('Masalah Kesihatan tidak sah.');
+      if (isPeserta && masalahKesihatan === 'Lain-lain' && !masalahKesihatanLain) errors.push('Sila nyatakan penyakit jika pilih Lain-lain.');
       if (!roleOptions.includes(role as BulkRole)) errors.push('Peranan tidak sah.');
 
       const icKey = `${icNumber}_${selectedBadge}_${selectedYear}`;

@@ -366,22 +366,26 @@ export const bulkSubmitRegistration = async (
       phone: '',
       badgeType: payload.badgeType,
     };
-    const people = payload.records.map((r, idx) => ({
-      id: idx + 1,
-      name: r.student,
-      icNumber: r.icNumber,
-      membershipId: r.membershipId,
-      gender: r.gender,
-      race: r.race,
-      phoneNumber: r.phoneNumber || '',
-      kategori: r.category || 'Pengakap Kanak-kanak',
-      unit: r.unit || 'Perdana',
-      makanan: r.makanan || 'Biasa',
-      masalahKesihatan: r.masalahKesihatan || 'Tiada',
-      masalahKesihatanLain: r.masalahKesihatanLain || '',
-      remarks: r.remarks || '',
-      role: r.role || payload.role,
-    }));
+    const people = payload.records.map((r, idx) => {
+      const role = r.role || payload.role;
+      const isPeserta = role === 'PESERTA';
+      return {
+        id: idx + 1,
+        name: r.student,
+        icNumber: r.icNumber,
+        membershipId: r.membershipId,
+        gender: r.gender,
+        race: r.race,
+        phoneNumber: r.phoneNumber || '',
+        kategori: isPeserta ? (r.category || 'Pengakap Kanak-kanak') : '',
+        unit: isPeserta ? (r.unit || 'Perdana') : '',
+        makanan: isPeserta ? (r.makanan || 'Biasa') : '',
+        masalahKesihatan: isPeserta ? (r.masalahKesihatan || 'Tiada') : '',
+        masalahKesihatanLain: isPeserta ? (r.masalahKesihatanLain || '') : '',
+        remarks: r.remarks || '',
+        role,
+      };
+    });
     return await createSubmissionWithPeople(leaderInfo, people, `${payload.year}-01-01`, 'bulk_import') as ApiResponse;
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal import bulk.' };

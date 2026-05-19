@@ -836,13 +836,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                         <span className="text-xs text-gray-400 ml-auto">{showMakananDetail ? '▲ Tutup' : '▼ Klik untuk detail'}</span>
                     </h3>
                     <div className="space-y-3">
-                        {makananStats.summary.map(stat => (
-                            <div key={stat.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <span className="font-medium text-gray-700">{stat.name}</span>
-                                <span className={`font-bold px-3 py-1 rounded-full text-sm ${stat.name === 'Vegetarian' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{stat.count} orang</span>
+                        {makananStats.summary.filter(stat => stat.name === 'Vegetarian').map(stat => (
+                            <div key={stat.name} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                <span className="font-medium text-green-700">Vegetarian</span>
+                                <span className="font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">{stat.count} orang</span>
                             </div>
                         ))}
-                        {makananStats.summary.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
+                        {makananStats.summary.filter(stat => stat.name === 'Vegetarian').length === 0 && <p className="text-green-600 text-sm font-medium">Tiada peserta vegetarian</p>}
                     </div>
                 </div>
 

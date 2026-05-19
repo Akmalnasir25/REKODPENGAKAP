@@ -185,6 +185,7 @@ export const fetchCloudData = async (
       schoolCode: p.school?.school_code || '',
       schoolName: p.school?.name || '',
       groupNumber: p.school?.group_number || '',
+      phone: p.phone || '',
       principalName: p.principal_name || '',
       principalPhone: p.principal_phone || '',
       leaderName: p.leader_name || '',
@@ -625,6 +626,7 @@ export const updateUserProfile = async (_url: string, schoolCode: string, profil
     }
     const { error: profileUpdateError } = await supabase.from('school_profiles').upsert({
       school_id: school.id,
+      phone: profileData.phone || null,
       principal_name: profileData.principalName || null,
       principal_phone: profileData.principalPhone || null,
       leader_name: profileData.leaderName || null,

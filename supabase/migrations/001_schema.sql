@@ -94,6 +94,7 @@ create index idx_profiles_daerah on public.profiles(daerah_id);
 create table public.school_profiles (
   id uuid primary key default uuid_generate_v4(),
   school_id uuid not null unique references public.schools(id) on delete cascade,
+  phone text,
   principal_name text,
   principal_phone text,
   leader_name text,

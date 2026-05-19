@@ -8,7 +8,7 @@ import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { DaerahProgramAnalysis } from './DaerahProgramAnalysis';
-import { SubmissionData, Badge, School as SchoolType } from '../types';
+import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, addAdmin } from '../services/supabaseApi';
 import { registerAdmin } from '../services/supabaseAuth';
@@ -26,13 +26,14 @@ interface AdminNegeriPanelProps {
   schools: SchoolType[];
   badges: Badge[]; 
   daerahList: any[];
+  userProfiles?: UserProfile[];
   isRegistrationOpen: boolean; 
   refreshData: () => void;
   deleteData: (item: SubmissionData) => void;
 }
 
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
-  negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, isRegistrationOpen, refreshData, deleteData 
+  negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
   const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
@@ -700,7 +701,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                    selectedDaerah={selectedDaerahFilter}
                  />
 
-                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} onRefresh={refreshData} onDelete={deleteData} />
+                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} userProfiles={userProfiles} onRefresh={refreshData} onDelete={deleteData} />
               </div>
             )}
 

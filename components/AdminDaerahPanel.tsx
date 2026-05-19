@@ -7,7 +7,7 @@ import { AdminMigration } from './AdminMigration';
 import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
-import { SubmissionData, Badge, School as SchoolType } from '../types';
+import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
 import { QRAttendanceScanner } from './ui/QRVerification';
@@ -192,13 +192,14 @@ interface AdminDaerahPanelProps {
   data: SubmissionData[];
   schools: SchoolType[];
   badges: Badge[]; 
+  userProfiles?: UserProfile[];
   isRegistrationOpen: boolean; 
   refreshData: () => void;
   deleteData: (item: SubmissionData) => void;
 }
 
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
-  daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, isRegistrationOpen, refreshData, deleteData 
+  daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
   const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
@@ -622,7 +623,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
 
             {tab === 'dashboard' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} onRefresh={refreshData} onDelete={deleteData} />
+                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} userProfiles={userProfiles} onRefresh={refreshData} onDelete={deleteData} />
               </div>
             )}
 

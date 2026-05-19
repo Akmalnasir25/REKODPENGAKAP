@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { SubmissionData, School, Badge } from '../types';
+import { SubmissionData, School, Badge, UserProfile } from '../types';
 import { BrainCircuit, RefreshCw, BarChart3, Database, Trash2, Sparkles, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { analyzeData } from '../services/geminiService';
@@ -11,8 +11,9 @@ import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
-  schools: School[]; // Added schools prop to check locked status
+  schools: School[];
   badges?: Badge[];
+  userProfiles?: UserProfile[];
   onRefresh: () => void;
   onDelete: (item: SubmissionData) => void;
 }
@@ -31,7 +32,7 @@ const safeGetYear = (value: unknown): number | null => {
   return date ? date.getFullYear() : null;
 };
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, onRefresh, onDelete }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
@@ -999,8 +1000,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                     </td>
                                     {activeTab === 'principals' && (
                                         <td className="px-4 py-3">
-                                            <div className="text-xs font-bold">{item.principalName}</div>
-                                            <WhatsAppLink phone={item.principalPhone} />
+                                            <div className="text-xs font-bold">{userProfiles.find(p => p.schoolCode?.toUpperCase() === item.schoolCode?.toUpperCase())?.principalName || item.principalName || '-'}</div>
+                                            <WhatsAppLink phone={userProfiles.find(p => p.schoolCode?.toUpperCase() === item.schoolCode?.toUpperCase())?.principalPhone || item.principalPhone} />
                                         </td>
                                     )}
                                     <td className="px-4 py-3 text-right">

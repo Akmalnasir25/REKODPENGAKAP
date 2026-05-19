@@ -653,6 +653,7 @@ function AppContent() {
                             schools={schoolsList}
                             badges={badges}
                             daerahList={daerahList}
+                            userProfiles={userProfiles}
                             isRegistrationOpen={isRegistrationOpen}
                             refreshData={() => handleFetchData(scriptUrl)}
                             deleteData={handleDeleteData}
@@ -671,6 +672,7 @@ function AppContent() {
                             data={dashboardData}
                             schools={schoolsList}
                             badges={badges}
+                            userProfiles={userProfiles}
                             isRegistrationOpen={isRegistrationOpen}
                             refreshData={() => handleFetchData(scriptUrl)}
                             deleteData={handleDeleteData}

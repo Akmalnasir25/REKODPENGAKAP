@@ -299,6 +299,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
   // Makanan Statistics (Students Only)
   const makananStats = useMemo(() => {
     const stats: Record<string, number> = {};
+    const details: Array<{ name: string; school: string; makanan: string; badge: string }> = [];
     const dataToProcess = selectedBadgeFilter 
         ? yearData.filter(d => d.badge === selectedBadgeFilter)
         : yearData;
@@ -308,12 +309,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
         if (role === 'PESERTA' || role === 'PENERIMA RAMBU') {
             const makanan = (item.makanan || 'Biasa').trim();
             stats[makanan] = (stats[makanan] || 0) + 1;
+            details.push({
+                name: item.student || '',
+                school: item.school || '',
+                makanan,
+                badge: item.badge || ''
+            });
         }
     });
 
-    return Object.entries(stats)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
+    return {
+        summary: Object.entries(stats)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count),
+        details: details.sort((a, b) => a.school.localeCompare(b.school))
+    };
   }, [yearData, selectedBadgeFilter]);
 
   // Masalah Kesihatan Statistics (Students Only)
@@ -820,13 +830,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                         <span className="text-lg">🍽️</span> Rumusan Makanan Peserta
                     </h3>
                     <div className="space-y-3">
-                        {makananStats.map(stat => (
+                        {makananStats.summary.map(stat => (
                             <div key={stat.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <span className="font-medium text-gray-700">{stat.name}</span>
                                 <span className="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-full text-sm">{stat.count} orang</span>
                             </div>
                         ))}
-                        {makananStats.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
+                        {makananStats.summary.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
                     </div>
                 </div>
 
@@ -846,6 +856,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                     </div>
                 </div>
             </div>
+
+            {/* Detail Senarai Makanan Peserta */}
+            {makananStats.details.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow mb-6">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">🍽️</span> Senarai Detail Makanan Peserta ({makananStats.details.length} orang)
+                    </h3>
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-blue-50 text-blue-800 uppercase text-xs sticky top-0">
+                                <tr>
+                                    <th className="px-4 py-3 text-left">Bil</th>
+                                    <th className="px-4 py-3 text-left">Nama Peserta</th>
+                                    <th className="px-4 py-3 text-left">Sekolah</th>
+                                    <th className="px-4 py-3 text-left">Program</th>
+                                    <th className="px-4 py-3 text-left">Makanan</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {makananStats.details.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-blue-50/50">
+                                        <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
+                                        <td className="px-4 py-2 font-bold text-gray-800 uppercase">{item.name}</td>
+                                        <td className="px-4 py-2 text-gray-600">{item.school}</td>
+                                        <td className="px-4 py-2"><span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold">{item.badge}</span></td>
+                                        <td className="px-4 py-2 font-semibold"><span className={`px-2 py-1 rounded text-xs font-bold ${item.makanan === 'Vegetarian' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{item.makanan}</span></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* Detail Peserta Dengan Masalah Kesihatan */}
             {kesihatanStats.details.length > 0 && (

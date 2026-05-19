@@ -296,6 +296,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
         .sort((a, b) => b.count - a.count);
   }, [yearData, selectedBadgeFilter]);
 
+  // Makanan Statistics (Students Only)
+  const makananStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    const dataToProcess = selectedBadgeFilter 
+        ? yearData.filter(d => d.badge === selectedBadgeFilter)
+        : yearData;
+
+    dataToProcess.forEach(item => {
+        const role = (item.role || 'PESERTA').toUpperCase();
+        if (role === 'PESERTA' || role === 'PENERIMA RAMBU') {
+            const makanan = (item.makanan || 'Biasa').trim();
+            stats[makanan] = (stats[makanan] || 0) + 1;
+        }
+    });
+
+    return Object.entries(stats)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+  }, [yearData, selectedBadgeFilter]);
+
+  // Masalah Kesihatan Statistics (Students Only)
+  const kesihatanStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    const details: Array<{ name: string; school: string; penyakit: string; badge: string }> = [];
+    const dataToProcess = selectedBadgeFilter 
+        ? yearData.filter(d => d.badge === selectedBadgeFilter)
+        : yearData;
+
+    dataToProcess.forEach(item => {
+        const role = (item.role || 'PESERTA').toUpperCase();
+        if (role === 'PESERTA' || role === 'PENERIMA RAMBU') {
+            const kesihatan = (item.masalahKesihatan || 'Tiada').trim();
+            stats[kesihatan] = (stats[kesihatan] || 0) + 1;
+            
+            // Collect details for those with health issues
+            if (kesihatan !== 'Tiada' && kesihatan !== '') {
+                details.push({
+                    name: item.student || '',
+                    school: item.school || '',
+                    penyakit: kesihatan === 'Lain-lain' ? `Lain-lain: ${item.masalahKesihatanLain || '-'}` : kesihatan,
+                    badge: item.badge || ''
+                });
+            }
+        }
+    });
+
+    return {
+        summary: Object.entries(stats)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count),
+        details: details.sort((a, b) => a.school.localeCompare(b.school))
+    };
+  }, [yearData, selectedBadgeFilter]);
+
   // Detailed Filter (Base for most tabs)
   const baseFilteredData = useMemo(() => {
     let result = yearData;
@@ -757,7 +811,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
 
         {/* ADVANCED ANALYTICS CHARTS */}
         {activeTab !== 'archive' && displayedData.length > 0 && (
+            <>
+            {/* RUMUSAN MAKANAN & KESIHATAN */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Makanan */}
+                <div className="bg-white p-6 rounded-xl shadow">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">🍽️</span> Rumusan Makanan Peserta
+                    </h3>
+                    <div className="space-y-3">
+                        {makananStats.map(stat => (
+                            <div key={stat.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <span className="font-medium text-gray-700">{stat.name}</span>
+                                <span className="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-full text-sm">{stat.count} orang</span>
+                            </div>
+                        ))}
+                        {makananStats.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
+                    </div>
+                </div>
+
+                {/* Masalah Kesihatan Summary */}
+                <div className="bg-white p-6 rounded-xl shadow">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">🏥</span> Rumusan Masalah Kesihatan
+                    </h3>
+                    <div className="space-y-2">
+                        {kesihatanStats.summary.map(stat => (
+                            <div key={stat.name} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                <span className="font-medium text-gray-700 text-sm">{stat.name}</span>
+                                <span className={`font-bold px-3 py-1 rounded-full text-xs ${stat.name === 'Tiada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{stat.count}</span>
+                            </div>
+                        ))}
+                        {kesihatanStats.summary.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
+                    </div>
+                </div>
+            </div>
+
+            {/* Detail Peserta Dengan Masalah Kesihatan */}
+            {kesihatanStats.details.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow mb-6">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">📋</span> Senarai Peserta Dengan Masalah Kesihatan ({kesihatanStats.details.length} orang)
+                    </h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-red-50 text-red-800 uppercase text-xs">
+                                <tr>
+                                    <th className="px-4 py-3 text-left">Bil</th>
+                                    <th className="px-4 py-3 text-left">Nama Peserta</th>
+                                    <th className="px-4 py-3 text-left">Sekolah</th>
+                                    <th className="px-4 py-3 text-left">Program</th>
+                                    <th className="px-4 py-3 text-left">Masalah Kesihatan</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {kesihatanStats.details.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-red-50/50">
+                                        <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
+                                        <td className="px-4 py-2 font-bold text-gray-800 uppercase">{item.name}</td>
+                                        <td className="px-4 py-2 text-gray-600">{item.school}</td>
+                                        <td className="px-4 py-2"><span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold">{item.badge}</span></td>
+                                        <td className="px-4 py-2 font-semibold text-red-700">{item.penyakit}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             <AdvancedAnalytics data={displayedData} year={selectedYear} />
+            </>
         )}
 
         {/* DETAILED DATA TABLE */}

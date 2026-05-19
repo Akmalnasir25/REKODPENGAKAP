@@ -37,6 +37,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('all');
+  const [showMakananDetail, setShowMakananDetail] = useState(false);
+  const [showKesihatanDetail, setShowKesihatanDetail] = useState(false);
   
   // Print State
   const [printMode, setPrintMode] = useState<PrintMode>('none');
@@ -825,44 +827,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
         {/* ADVANCED ANALYTICS CHARTS */}
         {activeTab !== 'archive' && displayedData.length > 0 && (
             <>
-            {/* RUMUSAN MAKANAN & KESIHATAN */}
+            {/* RUMUSAN MAKANAN & KESIHATAN - CLICKABLE */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                {/* Makanan */}
-                <div className="bg-white p-6 rounded-xl shadow">
+                {/* Makanan - Klik untuk lihat detail Vegetarian */}
+                <div className="bg-white p-6 rounded-xl shadow cursor-pointer hover:ring-2 hover:ring-green-400 transition" onClick={() => setShowMakananDetail(prev => !prev)}>
                     <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <span className="text-lg">🍽️</span> Rumusan Makanan Peserta
+                        <span className="text-xs text-gray-400 ml-auto">{showMakananDetail ? '▲ Tutup' : '▼ Klik untuk detail'}</span>
                     </h3>
                     <div className="space-y-3">
                         {makananStats.summary.map(stat => (
                             <div key={stat.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                 <span className="font-medium text-gray-700">{stat.name}</span>
-                                <span className="font-bold text-blue-700 bg-blue-100 px-3 py-1 rounded-full text-sm">{stat.count} orang</span>
+                                <span className={`font-bold px-3 py-1 rounded-full text-sm ${stat.name === 'Vegetarian' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{stat.count} orang</span>
                             </div>
                         ))}
                         {makananStats.summary.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
                     </div>
                 </div>
 
-                {/* Masalah Kesihatan Summary */}
-                <div className="bg-white p-6 rounded-xl shadow">
+                {/* Masalah Kesihatan - Klik untuk lihat detail */}
+                <div className="bg-white p-6 rounded-xl shadow cursor-pointer hover:ring-2 hover:ring-red-400 transition" onClick={() => setShowKesihatanDetail(prev => !prev)}>
                     <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <span className="text-lg">🏥</span> Rumusan Masalah Kesihatan
+                        <span className="text-xs text-gray-400 ml-auto">{showKesihatanDetail ? '▲ Tutup' : '▼ Klik untuk detail'}</span>
                     </h3>
                     <div className="space-y-2">
-                        {kesihatanStats.summary.map(stat => (
+                        {kesihatanStats.summary.filter(stat => stat.name !== 'Tiada').map(stat => (
                             <div key={stat.name} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                                 <span className="font-medium text-gray-700 text-sm">{stat.name}</span>
-                                <span className={`font-bold px-3 py-1 rounded-full text-xs ${stat.name === 'Tiada' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{stat.count}</span>
+                                <span className="font-bold px-3 py-1 rounded-full text-xs bg-red-100 text-red-700">{stat.count}</span>
                             </div>
                         ))}
-                        {kesihatanStats.summary.length === 0 && <p className="text-gray-400 text-sm italic">Tiada data</p>}
+                        {kesihatanStats.summary.filter(stat => stat.name !== 'Tiada').length === 0 && <p className="text-green-600 text-sm font-medium">Semua peserta tiada masalah kesihatan</p>}
                     </div>
                 </div>
             </div>
 
-            {/* Detail Senarai Peserta Vegetarian */}
-            {makananStats.details.length > 0 && (
-                <div className="bg-white p-6 rounded-xl shadow mb-6">
+            {/* Detail Senarai Peserta Vegetarian (toggle) */}
+            {showMakananDetail && makananStats.details.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow mb-6 animate-[fadeIn_0.3s_ease-out]">
                     <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <span className="text-lg">🍽️</span> Senarai Peserta Vegetarian ({makananStats.details.length} orang)
                     </h3>
@@ -891,15 +895,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                 </div>
             )}
 
-            {/* Detail Peserta Dengan Masalah Kesihatan */}
-            {kesihatanStats.details.length > 0 && (
-                <div className="bg-white p-6 rounded-xl shadow mb-6">
+            {/* Detail Peserta Dengan Masalah Kesihatan (toggle) */}
+            {showKesihatanDetail && kesihatanStats.details.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow mb-6 animate-[fadeIn_0.3s_ease-out]">
                     <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
                         <span className="text-lg">📋</span> Senarai Peserta Dengan Masalah Kesihatan ({kesihatanStats.details.length} orang)
                     </h3>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
                         <table className="w-full text-sm">
-                            <thead className="bg-red-50 text-red-800 uppercase text-xs">
+                            <thead className="bg-red-50 text-red-800 uppercase text-xs sticky top-0">
                                 <tr>
                                     <th className="px-4 py-3 text-left">Bil</th>
                                     <th className="px-4 py-3 text-left">Nama Peserta</th>

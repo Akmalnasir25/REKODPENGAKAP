@@ -7,23 +7,17 @@ import { AdminMigration } from './AdminMigration';
 import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { PengesahanTab } from './PengesahanTab';
 import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { uploadLogo, getLogoUrl } from '../services/logoService';
+import { WithdrawalScanner } from './WithdrawalScanner';
+import { WithdrawalsList } from './WithdrawalsList';
 
-interface PengesahanTabProps {
-  daerahCode: string;
-  scriptUrl: string;
-  data: SubmissionData[];
-  schools: SchoolType[];
-  badges: Badge[];
-  onRefresh: () => void;
-}
-
-const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, scriptUrl, data, schools, badges, onRefresh }) => {
+const PengesahanTab_REMOVED: React.FC<any> = ({ daerahCode, scriptUrl, data, schools, badges, onRefresh }: any) => {
   const [submittedList, setSubmittedList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -201,7 +195,7 @@ interface AdminDaerahPanelProps {
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
   daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'withdrawals' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -278,9 +272,22 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     }
   };
 
-  // Filter data untuk daerah ini sahaja
+  // Filter data untuk daerah ini sahaja.
+  // NOTA: peserta program scope=negeri tetap dipaparkan untuk admin daerah pantau,
+  // tetapi mereka tidak boleh edit/sahkan (lihat readOnlyBadges di bawah).
   const filteredData = data.filter(d => d.daerahCode === daerahCode);
   const filteredSchools = schools.filter(s => s.daerahCode === daerahCode);
+
+  // Senarai badge yang readonly untuk admin daerah:
+  // - Program scope=negeri yang TIDAK perlu pengesahan daerah (terus ke negeri)
+  // - Program scope=negeri yang dah disahkan daerah (sebab dah komit, jangan ubah)
+  // Untuk program scope=negeri yang requiresDaerahApproval=true DAN belum disahkan,
+  // daerah boleh edit data peserta
+  const readOnlyBadges = new Set(
+    badges
+      .filter(b => (b.scope || 'daerah') === 'negeri' && !b.requiresDaerahApproval)
+      .map(b => b.name)
+  );
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -458,6 +465,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
+    { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
     { id: 'profile', label: 'Profil', icon: User, allowed: true },
@@ -592,7 +600,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
             
             {tab === 'badges' && (
               <div className="animate-[fadeIn_0.2s_ease-out] print:hidden">
-                 <AdminBadges badges={badges} scriptUrl={scriptUrl} onRefresh={refreshData} />
+                 <AdminBadges badges={badges} scriptUrl={scriptUrl} onRefresh={refreshData} scopeContext={{ type: 'daerah', daerahCode, label: `Daerah ${daerahName}` }} />
               </div>
             )}
 
@@ -623,7 +631,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
 
             {tab === 'dashboard' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} userProfiles={userProfiles} onRefresh={refreshData} onDelete={deleteData} />
+                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} userProfiles={userProfiles} onRefresh={refreshData} onDelete={deleteData} readOnlyBadges={readOnlyBadges} />
               </div>
             )}
 
@@ -639,10 +647,20 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
                     <ScanLine size={20} className="text-green-600" /> Pengesahan Kehadiran QR
                   </h2>
-                  <p className="text-sm text-slate-500 mb-6">
+                  <p className="text-sm text-slate-500 mb-4">
                     Imbas QR code sekolah untuk mengesahkan kehadiran peserta. Selepas scan, jumlah peserta berdaftar akan dipaparkan.
                   </p>
-                  <QRAttendanceScanner 
+
+                  {/* Status Peserta Scanner */}
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-red-800">Kemaskini Status Peserta</p>
+                      <p className="text-xs text-red-600 mt-1">Imbas QR peserta yang perlu pulang awal/tarik diri di tengah program.</p>
+                    </div>
+                    <WithdrawalScanner onWithdrawn={() => refreshData()} />
+                  </div>
+
+                  <QRAttendanceScanner
                     verifierName={adminSession.fullName || adminSession.username}
                     onVerified={async (record) => {
                       const res = await recordAttendanceVerification({
@@ -674,6 +692,17 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                       const uniqueSchools = new Set(todayRecords.map((r: any) => `${r.school?.school_code || ''}|${r.badge?.name || ''}`));
                       const totalSchools = uniqueSchools.size;
                       const totalParticipants = todayRecords.reduce((sum: number, r: any) => sum + (r.participant_count || 0), 0);
+
+                      // Group by badge/program
+                      const byBadge: Record<string, { schools: Set<string>; participants: number }> = {};
+                      for (const r of todayRecords) {
+                        const badgeName = r.badge?.name || 'Tidak Diketahui';
+                        if (!byBadge[badgeName]) byBadge[badgeName] = { schools: new Set(), participants: 0 };
+                        byBadge[badgeName].schools.add(r.school?.school_code || '');
+                        byBadge[badgeName].participants += r.participant_count || 0;
+                      }
+                      const programList = Object.entries(byBadge).sort((a, b) => b[1].participants - a[1].participants);
+
                       return (
                         <div>
                           <div className="grid grid-cols-2 gap-4 mb-4">
@@ -686,6 +715,23 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                               <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
                             </div>
                           </div>
+
+                          {/* Pecahan ikut program */}
+                          <div className="mb-4">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Pecahan ikut Program</p>
+                            <div className="space-y-1">
+                              {programList.map(([badgeName, info], i) => (
+                                <div key={i} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded px-3 py-2">
+                                  <span className="text-xs font-bold text-purple-900">{badgeName}</span>
+                                  <span className="text-xs text-purple-700">
+                                    <strong>{info.schools.size}</strong> sekolah · <strong>{info.participants}</strong> peserta
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Senarai Scan</p>
                           <div className="space-y-2 max-h-60 overflow-y-auto">
                             {todayRecords.map((r: any, i: number) => (
                               <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
@@ -714,6 +760,17 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                     })()}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {tab === 'withdrawals' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <WithdrawalsList
+                  data={data.filter(d => d.daerahCode === daerahCode)}
+                  onRefresh={refreshData}
+                  allowUnwithdraw={true}
+                  scopeLabel={`Daerah ${daerahCode}`}
+                />
               </div>
             )}
 

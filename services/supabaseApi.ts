@@ -105,7 +105,7 @@ export const fetchCloudData = async (
 
     const [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, statusRes] = await Promise.all([
       schoolsQuery,
-      supabase.from('badges').select('*').order('name'),
+      supabase.from('badges').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)').order('name'),
       supabase.from('negeri').select('*').order('name'),
       supabase.from('daerah').select('*, negeri:negeri_id(code,name)').order('name'),
       supabase.from('school_profiles').select('*, school:school_id(school_code,name,group_number)').order('updated_at', { ascending: false }),
@@ -179,6 +179,11 @@ export const fetchCloudData = async (
         masalahKesihatan: p.masalah_kesihatan || '',
         masalahKesihatanLain: p.masalah_kesihatan_lain || '',
         remarks: p.remarks || p.submission?.remarks || '',
+        isWithdrawn: !!p.is_withdrawn,
+        withdrawnAt: p.withdrawn_at || undefined,
+        withdrawalReason: p.withdrawal_reason || undefined,
+        withdrawalNotes: p.withdrawal_notes || undefined,
+        participantId: p.id,
       }));
 
     const userProfiles: UserProfile[] = (profilesRes.data || []).map((p: any) => ({
@@ -200,7 +205,15 @@ export const fetchCloudData = async (
 
     const negeriList: Negeri[] = (negeriRes.data || []).map((n: any) => ({ code: n.code, name: n.name, createdDate: n.created_at }));
     const daerahList: Daerah[] = (daerahRes.data || []).map((d: any) => ({ code: d.code, name: d.name, negeriCode: d.negeri?.code || '', createdDate: d.created_at }));
-    const badges: Badge[] = (badgesRes.data || []).map((b: any) => ({ name: b.name, isOpen: b.is_open, deadline: b.deadline }));
+    const badges: Badge[] = (badgesRes.data || []).map((b: any) => ({
+      name: b.name,
+      isOpen: b.is_open,
+      deadline: b.deadline,
+      scope: b.scope || 'daerah',
+      negeriCode: b.negeri?.code,
+      daerahCode: b.daerah?.code,
+      requiresDaerahApproval: !!b.requires_daerah_approval,
+    }));
 
     return { status: 'success', schools, badges, badgeTypes: badges.map(b => b.name), submissions, userProfiles, negeriList, daerahList, isRegistrationOpen: badges.some(b => b.isOpen) };
   } catch (error: any) {
@@ -691,9 +704,42 @@ export const deleteDaerah = async (_url: string, daerahCode: string, _csrfToken?
   }
 };
 
-export const addBadgeType = async (_url: string, badgeName: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const updateDaerah = async (oldCode: string, newCode: string, newName: string): Promise<ApiResponse> => {
   try {
-    const { error } = await supabase.from('badges').insert({ name: badgeName.trim(), is_open: true });
+    const updates: any = {};
+    const oldNorm = normalize(oldCode);
+    const newCodeNorm = normalize(newCode);
+    if (newCodeNorm && newCodeNorm !== oldNorm) updates.code = newCodeNorm;
+    if (newName && newName.trim()) updates.name = newName.trim();
+    if (Object.keys(updates).length === 0) {
+      return { status: 'success', message: 'Tiada perubahan.' };
+    }
+    const { error } = await supabase.from('daerah').update(updates).eq('code', oldNorm);
+    if (error) throw error;
+    return { status: 'success', message: 'Daerah berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini daerah.' };
+  }
+};
+
+export const addBadgeType = async (
+  _url: string,
+  badgeName: string,
+  _csrfToken?: string,
+  options?: { scope?: 'negeri' | 'daerah'; negeriCode?: string; daerahCode?: string }
+): Promise<ApiResponse> => {
+  try {
+    const insert: any = { name: badgeName.trim(), is_open: true };
+    if (options?.scope) insert.scope = options.scope;
+    if (options?.negeriCode) {
+      const negeriId = await getNegeriId(options.negeriCode);
+      if (negeriId) insert.negeri_id = negeriId;
+    }
+    if (options?.daerahCode) {
+      const daerahId = await getDaerahId(options.daerahCode);
+      if (daerahId) insert.daerah_id = daerahId;
+    }
+    const { error } = await supabase.from('badges').insert(insert);
     if (error) throw error;
     return { status: 'success', message: 'Badge berjaya ditambah.' };
   } catch (error: any) {
@@ -754,6 +800,40 @@ export const updateBadgeDeadline = async (_url: string, badgeName: string, deadl
     return { status: 'success', message: 'Tarikh akhir berjaya dikemaskini.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal kemaskini deadline.' };
+  }
+};
+
+export const updateBadgeRequiresDaerahApproval = async (badgeName: string, requires: boolean): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase.from('badges').update({ requires_daerah_approval: requires }).eq('name', badgeName.trim());
+    if (error) throw error;
+    return { status: 'success', message: 'Tetapan pengesahan daerah dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini.' };
+  }
+};
+
+export const approveDaerahLevel = async (schoolName: string, badgeName: string, year?: number): Promise<ApiResponse> => {
+  try {
+    const targetYear = year || currentYear();
+    const school = await getSchoolByCodeOrName(schoolName);
+    if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
+    const badge = await getBadgeByName(badgeName);
+    if (!badge) return { status: 'error', message: 'Program tidak dijumpai.' };
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('school_badge_status').upsert({
+      school_id: school.id,
+      badge_id: badge.id,
+      year: targetYear,
+      status: 'submitted',
+      daerah_approved: true,
+      daerah_approved_at: new Date().toISOString(),
+      daerah_approved_by: session?.user?.id || null,
+    }, { onConflict: 'school_id,badge_id,year' });
+    if (error) throw error;
+    return { status: 'success', message: 'Pengesahan daerah berjaya.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal pengesahan daerah.' };
   }
 };
 
@@ -842,15 +922,64 @@ export const recordAttendanceVerification = async (record: { schoolCode: string;
   }
 };
 
-export const getAttendanceVerifications = async (year?: number, daerahCode?: string): Promise<any[]> => {
+export const withdrawParticipant = async (
+  participantId: string,
+  reason: string,
+  notes?: string
+): Promise<ApiResponse> => {
   try {
-    let query = supabase.from('attendance_verifications').select('*, school:school_id(name, school_code, daerah:daerah_id(code)), badge:badge_id(name)').order('verified_at', { ascending: false });
+    if (!participantId) return { status: 'error', message: 'ID peserta diperlukan.' };
+    if (!reason || !reason.trim()) return { status: 'error', message: 'Sebab penarikan diperlukan.' };
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase
+      .from('submission_people')
+      .update({
+        is_withdrawn: true,
+        withdrawn_at: new Date().toISOString(),
+        withdrawal_reason: reason.trim(),
+        withdrawal_notes: notes?.trim() || null,
+        withdrawn_by: session?.user?.id || null,
+      })
+      .eq('id', participantId);
+    if (error) throw error;
+    return { status: 'success', message: 'Peserta berjaya ditarik balik.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal tarik balik peserta.' };
+  }
+};
+
+export const unwithdrawParticipant = async (participantId: string): Promise<ApiResponse> => {
+  try {
+    if (!participantId) return { status: 'error', message: 'ID peserta diperlukan.' };
+    const { error } = await supabase
+      .from('submission_people')
+      .update({
+        is_withdrawn: false,
+        withdrawn_at: null,
+        withdrawal_reason: null,
+        withdrawal_notes: null,
+        withdrawn_by: null,
+      })
+      .eq('id', participantId);
+    if (error) throw error;
+    return { status: 'success', message: 'Penarikan diri berjaya dibatalkan.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal batal penarikan.' };
+  }
+};
+
+export const getAttendanceVerifications = async (year?: number, daerahCode?: string, negeriCode?: string): Promise<any[]> => {
+  try {
+    let query = supabase.from('attendance_verifications').select('*, school:school_id(name, school_code, negeri:negeri_id(code), daerah:daerah_id(code)), badge:badge_id(name)').order('verified_at', { ascending: false });
     if (year) query = query.eq('year', year);
     const { data, error } = await query;
     if (error) throw error;
     let results = data || [];
     if (daerahCode) {
       results = results.filter((r: any) => r.school?.daerah?.code === daerahCode);
+    }
+    if (negeriCode) {
+      results = results.filter((r: any) => r.school?.negeri?.code === negeriCode);
     }
     return results;
   } catch (error: any) {
@@ -914,20 +1043,44 @@ export const reopenSchoolBadge = async (_url: string, schoolCodeOrName: string, 
   }
 };
 
-export const getSubmittedSchools = async (daerahCode?: string, year?: number): Promise<any[]> => {
+export const getSubmittedSchools = async (daerahCode?: string, year?: number, negeriCode?: string): Promise<any[]> => {
   try {
     const targetYear = year || currentYear();
     const { data, error } = await supabase
       .from('school_badge_status')
-      .select('*, school:school_id(id, name, school_code, daerah:daerah_id(code)), badge:badge_id(name)')
+      .select('*, school:school_id(id, name, school_code, negeri:negeri_id(code), daerah:daerah_id(code)), badge:badge_id(name, scope, requires_daerah_approval, negeri:negeri_id(code), daerah:daerah_id(code))')
       .eq('status', 'submitted')
       .eq('year', targetYear)
       .not('submitted_at', 'is', null)
       .order('submitted_at', { ascending: false });
     if (error) throw error;
     let results = data || [];
-    if (daerahCode) {
-      results = results.filter((r: any) => r.school?.daerah?.code === daerahCode);
+    // Admin daerah: paparkan program daerah + program negeri yang requires_daerah_approval=true (belum disahkan daerah)
+    if (daerahCode && !negeriCode) {
+      results = results.filter((r: any) => {
+        const badgeScope = r.badge?.scope || 'daerah';
+        if (r.school?.daerah?.code !== daerahCode) return false;
+        if (badgeScope === 'daerah') {
+          if (r.badge?.daerah?.code && r.badge.daerah.code !== daerahCode) return false;
+          return true;
+        }
+        // scope === 'negeri'
+        if (!r.badge?.requires_daerah_approval) return false;
+        if (r.daerah_approved) return false; // dah disahkan daerah, takde dalam senarai pending
+        return true;
+      });
+    }
+    // Admin negeri: program scope=negeri sahaja
+    if (negeriCode && !daerahCode) {
+      results = results.filter((r: any) => {
+        const badgeScope = r.badge?.scope || 'daerah';
+        if (badgeScope !== 'negeri') return false;
+        if (r.school?.negeri?.code !== negeriCode) return false;
+        if (r.badge?.negeri?.code && r.badge.negeri.code !== negeriCode) return false;
+        // Kalau perlu pengesahan daerah, hanya papar yang dah disahkan daerah
+        if (r.badge?.requires_daerah_approval && !r.daerah_approved) return false;
+        return true;
+      });
     }
     return results;
   } catch (error: any) {

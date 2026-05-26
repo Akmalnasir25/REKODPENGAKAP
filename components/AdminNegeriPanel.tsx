@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User, CheckCircle, ScanLine } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -8,12 +8,16 @@ import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { DaerahProgramAnalysis } from './DaerahProgramAnalysis';
+import { PengesahanTab } from './PengesahanTab';
 import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, addAdmin } from '../services/supabaseApi';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, deleteDaerah, updateDaerah, addAdmin, getSubmittedSchools, approveSchoolBadge, reopenSchoolBadge, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification } from '../services/supabaseApi';
 import { registerAdmin } from '../services/supabaseAuth';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { uploadLogo, getLogoUrl } from '../services/logoService';
+import { QRAttendanceScanner } from './ui/QRVerification';
+import { WithdrawalScanner } from './WithdrawalScanner';
+import { WithdrawalsList } from './WithdrawalsList';
 
 interface AdminNegeriPanelProps {
   negeriCode: string;
@@ -35,7 +39,7 @@ interface AdminNegeriPanelProps {
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
   negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'history' | 'audit' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'pengesahan' | 'attendance' | 'withdrawals' | 'history' | 'audit' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   // Filter daerah global utk semua tab data (Rumusan, Analitik, Sekolah, Semakan, Audit)
@@ -57,6 +61,46 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const [newDistrictAdminEmail, setNewDistrictAdminEmail] = useState('');
   const [negeriLogoUrl, setNegeriLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  // Edit daerah state
+  const [editingDaerahCode, setEditingDaerahCode] = useState<string | null>(null);
+  const [editDaerahCode, setEditDaerahCode] = useState('');
+  const [editDaerahName, setEditDaerahName] = useState('');
+  const [savingDaerah, setSavingDaerah] = useState(false);
+  const [deletingDaerahCode, setDeletingDaerahCode] = useState<string | null>(null);
+  // Attendance state
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
+
+  const loadAttendanceRecords = useCallback(async () => {
+    setAttendanceLoading(true);
+    try {
+      const records = await getAttendanceVerifications(new Date().getFullYear(), undefined, negeriCode);
+      setAttendanceRecords(records);
+    } catch (e) {
+      console.error('Failed to load attendance:', e);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, [negeriCode]);
+
+  useEffect(() => {
+    if (tab === 'attendance') loadAttendanceRecords();
+  }, [tab, loadAttendanceRecords]);
+
+  const handleDeleteAttendance = async (record: any) => {
+    if (!confirm(`Padam rekod kehadiran untuk ${record.school?.name || ''} (${record.badge?.name || ''})?`)) return;
+    setDeletingAttendanceId(record.id);
+    try {
+      const res = await deleteAttendanceVerification(record.id);
+      if (res.status === 'success') await loadAttendanceRecords();
+      else alert('Gagal padam: ' + res.message);
+    } catch (e) {
+      alert('Ralat sambungan.');
+    } finally {
+      setDeletingAttendanceId(null);
+    }
+  };
 
   // Load negeri logo on mount
   useEffect(() => {
@@ -122,6 +166,58 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       totalRecords: daerahDataRecords.length,
     };
   }).sort((a, b) => b.pesertaCount - a.pesertaCount);
+
+  const handleEditDaerah = (daerah: any) => {
+    setEditingDaerahCode(daerah.code);
+    setEditDaerahCode(daerah.code);
+    setEditDaerahName(daerah.name);
+  };
+
+  const handleSaveDaerah = async (originalCode: string) => {
+    if (!editDaerahCode.trim() || !editDaerahName.trim()) {
+      alert('Kod dan nama daerah tidak boleh kosong.');
+      return;
+    }
+    setSavingDaerah(true);
+    try {
+      const res = await updateDaerah(originalCode, editDaerahCode, editDaerahName);
+      if (res.status === 'success') {
+        setEditingDaerahCode(null);
+        refreshData();
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan.');
+    } finally {
+      setSavingDaerah(false);
+    }
+  };
+
+  const handleDeleteDaerah = async (daerah: any) => {
+    const schoolsInDaerah = filteredSchools.filter(s => s.daerahCode === daerah.code).length;
+    if (schoolsInDaerah > 0) {
+      alert(`Tidak boleh padam ${daerah.name}. Masih ada ${schoolsInDaerah} sekolah aktif. Pindahkan atau padam sekolah dahulu.`);
+      return;
+    }
+    if (!confirm(`Padam daerah ${daerah.name} (${daerah.code})? Tindakan ini tidak boleh diundur.`)) return;
+    const code = prompt(`Taip "PADAM" untuk pengesahan padam ${daerah.name}.`);
+    if (code !== 'PADAM') { alert('Tindakan dibatalkan.'); return; }
+    setDeletingDaerahCode(daerah.code);
+    try {
+      const res = await deleteDaerah(scriptUrl, daerah.code);
+      if (res.status === 'success') {
+        alert(`Daerah ${daerah.name} berjaya dipadam.`);
+        await refreshData();
+      } else {
+        alert('Gagal padam: ' + res.message);
+      }
+    } catch (e: any) {
+      alert('Ralat sambungan: ' + (e?.message || ''));
+    } finally {
+      setDeletingDaerahCode(null);
+    }
+  };
 
   const handleAddDaerah = async () => {
     if (!newDaerahCode.trim() || !newDaerahName.trim()) {
@@ -357,6 +453,9 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'schools', label: 'Urus Sekolah', icon: School, allowed: true, scoped: true },
     { id: 'admins', label: 'Urus Admin Daerah', icon: Users, allowed: true, scoped: false },
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true, scoped: false },
+    { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true, scoped: false },
+    { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true, scoped: false },
+    { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true, scoped: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true, scoped: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true, scoped: true },
     { id: 'profile', label: 'Profil', icon: User, allowed: true, scoped: false },
@@ -529,15 +628,73 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredDaerah.map((daerah, idx) => (
-                      <div key={idx} className="border rounded-lg p-4 hover:shadow-md transition">
-                        <div className="font-bold text-lg">{daerah.name}</div>
-                        <div className="text-sm text-gray-500">Kod: {daerah.code}</div>
-                        <div className="text-xs text-gray-400 mt-2">
-                          {filteredSchools.filter(s => s.daerahCode === daerah.code).length} sekolah
+                    {filteredDaerah.map((daerah, idx) => {
+                      const isEditing = editingDaerahCode === daerah.code;
+                      const isDeleting = deletingDaerahCode === daerah.code;
+                      const schoolCount = filteredSchools.filter(s => s.daerahCode === daerah.code).length;
+                      return (
+                        <div key={idx} className="border rounded-lg p-4 hover:shadow-md transition group">
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <input
+                                value={editDaerahCode}
+                                onChange={(e) => setEditDaerahCode(e.target.value.toUpperCase())}
+                                placeholder="Kod"
+                                className="w-full border rounded px-2 py-1 text-sm font-mono"
+                              />
+                              <input
+                                value={editDaerahName}
+                                onChange={(e) => setEditDaerahName(e.target.value.toUpperCase())}
+                                placeholder="Nama"
+                                className="w-full border rounded px-2 py-1 text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleSaveDaerah(daerah.code)}
+                                  disabled={savingDaerah}
+                                  className="flex-1 bg-green-600 text-white text-xs font-bold py-1.5 rounded hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  {savingDaerah ? '...' : 'Simpan'}
+                                </button>
+                                <button
+                                  onClick={() => setEditingDaerahCode(null)}
+                                  className="flex-1 bg-gray-200 text-gray-700 text-xs font-bold py-1.5 rounded hover:bg-gray-300"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="font-bold text-lg">{daerah.name}</div>
+                                  <div className="text-sm text-gray-500">Kod: {daerah.code}</div>
+                                  <div className="text-xs text-gray-400 mt-2">{schoolCount} sekolah</div>
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                                  <button
+                                    onClick={() => handleEditDaerah(daerah)}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
+                                    title="Edit Daerah"
+                                  >
+                                    <Settings size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDaerah(daerah)}
+                                    disabled={isDeleting || schoolCount > 0}
+                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
+                                    title={schoolCount > 0 ? `Tak boleh padam (${schoolCount} sekolah aktif)` : 'Padam Daerah'}
+                                  >
+                                    {isDeleting ? <LoadingSpinner size="sm" color="border-red-600" /> : <Trash2 size={14} />}
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -624,7 +781,140 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
             
             {tab === 'badges' && (
               <div className="animate-[fadeIn_0.2s_ease-out] print:hidden">
-                 <AdminBadges badges={badges} scriptUrl={scriptUrl} onRefresh={refreshData} />
+                 <AdminBadges badges={badges} scriptUrl={scriptUrl} onRefresh={refreshData} scopeContext={{ type: 'negeri', negeriCode, label: `Negeri ${negeriName}` }} />
+              </div>
+            )}
+
+            {tab === 'pengesahan' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <PengesahanTab
+                  negeriCode={negeriCode}
+                  scriptUrl={scriptUrl}
+                  data={negeriData}
+                  schools={negeriSchools}
+                  badges={badges}
+                  onRefresh={refreshData}
+                />
+              </div>
+            )}
+
+            {tab === 'attendance' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-white rounded-xl shadow p-6">
+                  <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                    <ScanLine size={20} className="text-green-600" /> Pengesahan Kehadiran QR
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Imbas QR code sekolah untuk mengesahkan kehadiran peserta dalam {negeriName}. Selepas scan, jumlah peserta berdaftar akan dipaparkan.
+                  </p>
+
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-red-800">Kemaskini Status Peserta</p>
+                      <p className="text-xs text-red-600 mt-1">Imbas QR peserta yang perlu pulang awal/tarik diri di tengah program.</p>
+                    </div>
+                    <WithdrawalScanner onWithdrawn={() => refreshData()} />
+                  </div>
+
+                  <QRAttendanceScanner
+                    verifierName={adminSession.fullName || adminSession.username}
+                    onVerified={async (record) => {
+                      const res = await recordAttendanceVerification({
+                        schoolCode: record.schoolCode,
+                        badge: record.badge,
+                        year: record.year,
+                        participantCount: record.totalParticipants,
+                      });
+                      if (res.status !== 'success') alert('Gagal simpan kehadiran ke server: ' + (res.message || 'Ralat tidak diketahui'));
+                      await loadAttendanceRecords();
+                    }}
+                  />
+
+                  <div className="mt-8 border-t pt-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                        <CheckCircle size={16} className="text-green-500" /> Ringkasan Kehadiran Hari Ini
+                      </h3>
+                      <button onClick={loadAttendanceRecords} disabled={attendanceLoading} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition">
+                        <RefreshCw size={14} className={attendanceLoading ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
+                    {(() => {
+                      const todayStr = new Date().toDateString();
+                      const todayRecords = attendanceRecords.filter((r: any) => new Date(r.verified_at).toDateString() === todayStr);
+                      if (attendanceLoading) return <p className="text-xs text-slate-400 italic">Memuatkan rekod kehadiran...</p>;
+                      if (todayRecords.length === 0) return <p className="text-xs text-slate-400 italic">Belum ada kehadiran disahkan hari ini.</p>;
+                      const uniqueSchools = new Set(todayRecords.map((r: any) => `${r.school?.school_code || ''}|${r.badge?.name || ''}`));
+                      const totalSchools = uniqueSchools.size;
+                      const totalParticipants = todayRecords.reduce((sum: number, r: any) => sum + (r.participant_count || 0), 0);
+
+                      // Group by badge/program
+                      const byBadge: Record<string, { schools: Set<string>; participants: number; daerahs: Set<string> }> = {};
+                      for (const r of todayRecords) {
+                        const badgeName = r.badge?.name || 'Tidak Diketahui';
+                        if (!byBadge[badgeName]) byBadge[badgeName] = { schools: new Set(), participants: 0, daerahs: new Set() };
+                        byBadge[badgeName].schools.add(r.school?.school_code || '');
+                        byBadge[badgeName].participants += r.participant_count || 0;
+                        if (r.school?.daerah?.code) byBadge[badgeName].daerahs.add(r.school.daerah.code);
+                      }
+                      const programList = Object.entries(byBadge).sort((a, b) => b[1].participants - a[1].participants);
+
+                      return (
+                        <div>
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="bg-green-50 rounded-lg p-4 text-center">
+                              <p className="text-2xl font-bold text-green-700">{totalSchools}</p>
+                              <p className="text-xs text-green-600 font-medium">Sekolah/Program Hadir</p>
+                            </div>
+                            <div className="bg-blue-50 rounded-lg p-4 text-center">
+                              <p className="text-2xl font-bold text-blue-700">{totalParticipants}</p>
+                              <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
+                            </div>
+                          </div>
+
+                          <div className="mb-4">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Pecahan ikut Program</p>
+                            <div className="space-y-1">
+                              {programList.map(([badgeName, info], i) => (
+                                <div key={i} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded px-3 py-2">
+                                  <span className="text-xs font-bold text-purple-900">{badgeName}</span>
+                                  <span className="text-xs text-purple-700">
+                                    <strong>{info.schools.size}</strong> sekolah · <strong>{info.daerahs.size}</strong> daerah · <strong>{info.participants}</strong> peserta
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Senarai Scan</p>
+                          <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {todayRecords.map((r: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
+                                <div>
+                                  <p className="text-xs font-bold text-slate-800">{r.school?.name || '-'}</p>
+                                  <p className="text-[10px] text-slate-500">{r.badge?.name || '-'} | {r.school?.daerah?.code || '-'} | {r.participant_count || 0} peserta</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] text-green-600 font-mono">
+                                    {new Date(r.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <button
+                                    onClick={() => handleDeleteAttendance(r)}
+                                    disabled={deletingAttendanceId === r.id}
+                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded p-1 transition disabled:opacity-50"
+                                    title="Padam pengesahan kehadiran"
+                                  >
+                                    {deletingAttendanceId === r.id ? <LoadingSpinner size="sm" color="border-red-500" /> : <Trash2 size={12} />}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -718,6 +1008,17 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                     negeriName={negeriName}
                     selectedDaerah={selectedDaerahFilter}
                   />
+              </div>
+            )}
+
+            {tab === 'withdrawals' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <WithdrawalsList
+                  data={filteredData}
+                  onRefresh={refreshData}
+                  allowUnwithdraw={true}
+                  scopeLabel={`Negeri ${negeriName}`}
+                />
               </div>
             )}
 

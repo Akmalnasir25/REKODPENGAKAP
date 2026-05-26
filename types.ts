@@ -53,12 +53,22 @@ export interface SubmissionData {
   masalahKesihatan?: string;
   masalahKesihatanLain?: string;
   remarks: string;
+  // Penarikan diri (withdrawal)
+  isWithdrawn?: boolean;
+  withdrawnAt?: string;
+  withdrawalReason?: string;
+  withdrawalNotes?: string;
+  participantId?: string; // submission_people.id (untuk QR & withdrawal scanner)
 }
 
 export interface Badge {
   name: string;
   isOpen: boolean;
-  deadline?: string; 
+  deadline?: string;
+  scope?: 'negeri' | 'daerah';
+  negeriCode?: string;
+  daerahCode?: string;
+  requiresDaerahApproval?: boolean;
 }
 
 export interface School {

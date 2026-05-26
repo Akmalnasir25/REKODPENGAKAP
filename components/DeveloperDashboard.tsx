@@ -887,6 +887,19 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                   if (!searchable.includes(q)) return false;
                 }
                 return true;
+              }).sort((a, b) => {
+                // Priority: PESERTA -> PEMIMPIN -> PENOLONG PEMIMPIN -> PENGUJI
+                const rank = (role?: string) => {
+                  const r = (role || 'PESERTA').toUpperCase();
+                  if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+                  if (r === 'PEMIMPIN') return 2;
+                  if (r.includes('PENOLONG')) return 3;
+                  if (r === 'PENGUJI') return 4;
+                  return 5;
+                };
+                const ra = rank(a.role), rb = rank(b.role);
+                if (ra !== rb) return ra - rb;
+                return (a.student || '').localeCompare(b.student || '');
               });
 
               const activeFilterCount = [dataFilterNegeri, dataFilterDaerah, dataFilterBadge, dataFilterSchool, dataFilterRole, dataFilterYear, dataFilterGender, dataSearchText].filter(Boolean).length;

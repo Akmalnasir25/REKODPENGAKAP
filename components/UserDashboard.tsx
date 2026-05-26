@@ -21,7 +21,8 @@ import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
-import { SchoolQRGenerator } from './ui/QRVerification';
+import { SchoolQRGenerator, ParticipantQRGenerator } from './ui/QRVerification';
+import { WithdrawalsList } from './WithdrawalsList';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
 
@@ -53,7 +54,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   
   // Views
   const [showHistoryView, setShowHistoryView] = useState(false);
-  const [showArchiveView, setShowArchiveView] = useState(false); 
+  const [showArchiveView, setShowArchiveView] = useState(false);
+  const [showWithdrawalsView, setShowWithdrawalsView] = useState(false);
   const [historyBadgeFilter, setHistoryBadgeFilter] = useState(''); // Filter for history view
   
   // Modals
@@ -173,6 +175,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         (rowSchoolCode && validCodes.includes(rowSchoolCode)) ||
         (rowSchoolName && validNames.includes(rowSchoolName));
 
+      // Tolak peserta yang ditarik balik (withdrawn) dari senarai aktif
+      if ((d as any).isWithdrawn) return false;
+
       return matchesSchool && rowYear === selectedYear;
     });
   }, [allData, user, selectedYear, currentSchoolSettings]);
@@ -213,7 +218,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             (item.studentPhone && String(item.studentPhone).includes(lowerQuery))
         );
     }
-    return data;
+    // Sort: PESERTA -> PEMIMPIN -> PENOLONG PEMIMPIN -> PENGUJI -> lain-lain
+    const rolePriority = (role?: string) => {
+        const r = (role || 'PESERTA').toUpperCase();
+        if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+        if (r === 'PEMIMPIN') return 2;
+        if (r.includes('PENOLONG')) return 3;
+        if (r === 'PENGUJI') return 4;
+        return 5;
+    };
+    return [...data].sort((a, b) => {
+        const ra = rolePriority(a.role);
+        const rb = rolePriority(b.role);
+        if (ra !== rb) return ra - rb;
+        return (a.student || '').localeCompare(b.student || '');
+    });
   }, [myData, searchQuery, selectedBadgeFilter]);
 
   // Compute filtered stats (based on badge filter + search)
@@ -235,13 +254,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const printData = useMemo(() => {
     const data = [...filteredData];
     return data.sort((a, b) => {
-        // Priority: PEMIMPIN (1) -> PENOLONG (2) -> PENGUJI (3) -> PESERTA (4)
+        // Priority: PESERTA (1) -> PEMIMPIN (2) -> PENOLONG (3) -> PENGUJI (4)
         const getRank = (role: string) => {
-            const r = (role || '').toUpperCase();
-            if (r === 'PEMIMPIN') return 1;
-            if (r.includes('PENOLONG')) return 2;
-            if (r === 'PENGUJI') return 3;
-            return 4; // Peserta
+            const r = (role || 'PESERTA').toUpperCase();
+            if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+            if (r === 'PEMIMPIN') return 2;
+            if (r.includes('PENOLONG')) return 3;
+            if (r === 'PENGUJI') return 4;
+            return 5;
         };
         const rankA = getRank(a.role || '');
         const rankB = getRank(b.role || '');
@@ -682,22 +702,29 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <SidebarItem 
                 icon={Home} 
                 label="Utama" 
-                isActive={!showHistoryView && !showArchiveView} 
-                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }} 
+                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView} 
+                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
               />
 
               <SidebarItem 
                 icon={Archive} 
                 label="Arkib Pencapaian" 
                 isActive={showArchiveView}
-                onClick={() => { setShowArchiveView(true); setShowHistoryView(false); setIsMobileSidebarOpen(false); }} 
+                onClick={() => { setShowArchiveView(true); setShowHistoryView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
               />
 
               <SidebarItem 
                 icon={History} 
                 label="Semak Rekod" 
                 isActive={showHistoryView}
-                onClick={() => { setShowHistoryView(true); setShowArchiveView(false); setIsMobileSidebarOpen(false); }} 
+                onClick={() => { setShowHistoryView(true); setShowArchiveView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
+              />
+
+              <SidebarItem
+                icon={AlertTriangle}
+                label="Status Peserta"
+                isActive={showWithdrawalsView}
+                onClick={() => { setShowWithdrawalsView(true); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
               />
 
               <SidebarItem 
@@ -897,7 +924,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             {/* CONTENT VIEWS (SCREEN ONLY) */}
             <div className="print:hidden">
-            {showHistoryView ? (
+            {showWithdrawalsView ? (
+                <WithdrawalsList
+                  data={allData.filter(d => {
+                    const code = String((d as any).schoolCode || '').toUpperCase();
+                    const userCode = String(user.schoolCode || '').toUpperCase();
+                    return code === userCode;
+                  })}
+                  onRefresh={onRefresh}
+                  allowUnwithdraw={false}
+                  scopeLabel={user.schoolName}
+                />
+            ) : showHistoryView ? (
                 // --- HISTORY VIEW (COHORT BLOCKS) ---
                 <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-2 border-b">
@@ -1152,6 +1190,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             />
                             {filteredData.length > 0 && (
                               <SchoolQRGenerator data={filteredData} year={selectedYear} />
+                            )}
+                            {filteredData.length > 0 && (
+                              <ParticipantQRGenerator data={filteredData} year={selectedYear} />
                             )}
                         </div>
                     </div>

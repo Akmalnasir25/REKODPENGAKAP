@@ -16,6 +16,8 @@ interface AdminDashboardProps {
   userProfiles?: UserProfile[];
   onRefresh: () => void;
   onDelete: (item: SubmissionData) => void;
+  // Senarai nama badge yang readonly untuk pengguna ini (cth: admin daerah lihat program negeri)
+  readOnlyBadges?: Set<string>;
 }
 
 type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'examiners' | 'principals' | 'archive';
@@ -32,7 +34,7 @@ const safeGetYear = (value: unknown): number | null => {
   return date ? date.getFullYear() : null;
 };
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete, readOnlyBadges }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
@@ -141,9 +143,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     return Array.from(years).sort((a: number, b: number) => b - a);
   }, [data, currentYear]);
 
-  // Filter by year using the SUBMITTED data
+  // Filter by year using the SUBMITTED data (exclude withdrawn participants)
   const yearData = useMemo(() => {
-      return submittedData.filter(d => safeGetYear(d.date) === selectedYear);
+      return submittedData.filter(d => safeGetYear(d.date) === selectedYear && !(d as any).isWithdrawn);
   }, [submittedData, selectedYear]);
 
   // Available badges for filter dropdown
@@ -407,7 +409,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
           return Array.from(uniqueSchools.values()).sort((a,b) => a.school.localeCompare(b.school));
       }
 
-      return baseFilteredData.filter(item => {
+      const filtered = baseFilteredData.filter(item => {
           const role = (item.role || 'PESERTA').toUpperCase();
           switch(activeTab) {
               case 'students': return role === 'PESERTA' || role === 'PENERIMA RAMBU';
@@ -416,6 +418,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
               case 'examiners': return role === 'PENGUJI';
               default: return true; // 'all'
           }
+      });
+
+      // Sort: PESERTA -> PEMIMPIN -> PENOLONG -> PENGUJI, then by name
+      const rank = (role?: string) => {
+          const r = (role || 'PESERTA').toUpperCase();
+          if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+          if (r === 'PEMIMPIN') return 2;
+          if (r.includes('PENOLONG')) return 3;
+          if (r === 'PENGUJI') return 4;
+          return 5;
+      };
+      return [...filtered].sort((a, b) => {
+          const ra = rank(a.role), rb = rank(b.role);
+          if (ra !== rb) return ra - rb;
+          return (a.student || '').localeCompare(b.student || '');
       });
   }, [baseFilteredData, activeTab]);
 
@@ -1005,13 +1022,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                         </td>
                                     )}
                                     <td className="px-4 py-3 text-right">
-                                        <button 
-                                            onClick={() => onDelete(item)}
-                                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
-                                            title="Padam Rekod"
-                                        >
+                                        {readOnlyBadges?.has(item.badge) ? (
+                                            <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded" title="Program peringkat negeri - hanya boleh dipantau">
+                                                NEGERI
+                                            </span>
+                                        ) : (
+                                            <button 
+                                                onClick={() => onDelete(item)}
+                                                className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
+                                                title="Padam Rekod"
+                                            >
                                             <Trash2 size={16} />
                                         </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

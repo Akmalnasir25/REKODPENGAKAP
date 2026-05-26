@@ -8,7 +8,11 @@ export interface Participant {
   membershipId: string;
   icNumber: string;
   phoneNumber: string; 
-  category?: 'Perdana' | 'Udara' | 'Laut' | 'PPKI' | 'PPKI Udara';
+  kategori?: 'Pengakap Kanak-kanak' | 'Pengakap Muda' | 'Pengakap Remaja' | 'Kelana';
+  unit?: 'Perdana' | 'Udara' | 'Laut' | 'PPKI' | 'PPKI Udara';
+  makanan?: 'Biasa' | 'Vegetarian';
+  masalahKesihatan?: 'Alahan' | 'Asma' | 'Gastrik' | 'Penyakit Jantung' | 'Migrain' | 'Penyakit Kronik' | 'Lain-lain' | 'Tiada';
+  masalahKesihatanLain?: string;
   remarks: string;
 }
 
@@ -44,13 +48,27 @@ export interface SubmissionData {
   principalPhone?: string;
   leader?: string;
   category?: string;
+  unit?: string;
+  makanan?: string;
+  masalahKesihatan?: string;
+  masalahKesihatanLain?: string;
   remarks: string;
+  // Penarikan diri (withdrawal)
+  isWithdrawn?: boolean;
+  withdrawnAt?: string;
+  withdrawalReason?: string;
+  withdrawalNotes?: string;
+  participantId?: string; // submission_people.id (untuk QR & withdrawal scanner)
 }
 
 export interface Badge {
   name: string;
   isOpen: boolean;
-  deadline?: string; 
+  deadline?: string;
+  scope?: 'negeri' | 'daerah';
+  negeriCode?: string;
+  daerahCode?: string;
+  requiresDaerahApproval?: boolean;
 }
 
 export interface School {
@@ -155,6 +173,7 @@ export interface UserSession {
   userId?: string;
   schoolName: string;
   schoolCode: string;
+  schoolId?: string;
   isLoggedIn: boolean;
   groupNumber?: string;
   authToken?: string;

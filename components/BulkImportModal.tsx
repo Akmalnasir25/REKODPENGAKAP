@@ -5,7 +5,7 @@ import { Badge } from '../types';
 import { bulkSubmitRegistration } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
-type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
+type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI';
 
 type ParsedRecord = {
   rowNumber: number;
@@ -17,6 +17,10 @@ type ParsedRecord = {
   phoneNumber: string;
   role: BulkRole;
   category: string;
+  unit: string;
+  makanan: string;
+  masalahKesihatan: string;
+  masalahKesihatanLain: string;
   remarks: string;
   errors: string[];
   warnings: string[];
@@ -33,9 +37,12 @@ interface BulkImportModalProps {
   onSuccess: () => void;
 }
 
-const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Kaum', 'No Telefon', 'Peranan', 'Kategori', 'Catatan'];
-const categoryOptions = ['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'];
-const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI', 'PENERIMA RAMBU'];
+const requiredHeaders = ['Nama', 'No KP', 'No Keahlian / ID', 'Jantina', 'Kaum', 'No Telefon', 'Peranan', 'Kategori', 'Unit', 'Makanan', 'Masalah Kesihatan', 'Nyatakan Penyakit', 'Catatan / Email'];
+const categoryOptions = ['Pengakap Kanak-kanak', 'Pengakap Muda', 'Pengakap Remaja', 'Kelana'];
+const unitOptions = ['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'];
+const makananOptions = ['Biasa', 'Vegetarian'];
+const masalahKesihatanOptions = ['Tiada', 'Alahan', 'Asma', 'Gastrik', 'Penyakit Jantung', 'Migrain', 'Penyakit Kronik', 'Lain-lain'];
+const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI'];
 const raceOptions = ['MELAYU', 'CINA', 'INDIA', 'BUMIPUTERA SABAH', 'BUMIPUTERA SARAWAK', 'ORANG ASLI', 'LAIN-LAIN'];
 const normalize = (value: any) => String(value || '').trim();
 const compact = (value: any) => normalize(value).replace(/\s+/g, ' ');
@@ -53,7 +60,7 @@ const normalizeRole = (value: any, fallback: BulkRole): BulkRole | string => {
   if (['PEMIMPIN', 'LEADER'].includes(raw)) return 'PEMIMPIN';
   if (['PENOLONG PEMIMPIN', 'PENOLONG', 'ASSISTANT', 'ASSISTANT LEADER'].includes(raw)) return 'PENOLONG PEMIMPIN';
   if (['PENGUJI', 'EXAMINER'].includes(raw)) return 'PENGUJI';
-  if (['PENERIMA RAMBU', 'RAMBU'].includes(raw)) return 'PENERIMA RAMBU';
+  if (['PENERIMA RAMBU', 'RAMBU'].includes(raw)) return 'PESERTA';
   return normalize(value);
 };
 const isValidIc = (value: string) => /^\d{6}-?\d{2}-?\d{4}$/.test(value);
@@ -98,13 +105,17 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         row === 2 ? 'MELAYU' : '',
         row === 2 ? '0123456789' : '',
         row === 2 ? 'PESERTA' : '',
+        row === 2 ? 'Pengakap Kanak-kanak' : '',
         row === 2 ? 'Perdana' : '',
+        row === 2 ? 'Biasa' : '',
+        row === 2 ? 'Tiada' : '',
+        '',
         ''
       ]);
     }
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 22 }, { wch: 16 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 25 }, { wch: 30 }];
 
     const instructions = XLSX.utils.aoa_to_sheet([
       ['Panduan Import Pukal'],
@@ -124,7 +135,19 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       [''],
       ['KATEGORI'],
       [`Tulis salah satu: ${categoryOptions.join(', ')}`],
-      ['Contoh: Udara, Laut, PPKI, PPKI Udara. Jika kosong, sistem akan anggap Perdana.'],
+      ['Contoh: Pengakap Muda, Pengakap Remaja. Jika kosong, sistem akan anggap Pengakap Kanak-kanak.'],
+      [''],
+      ['UNIT'],
+      [`Tulis salah satu: ${unitOptions.join(', ')}`],
+      ['Contoh: Perdana, Udara, Laut, PPKI, PPKI Udara. Jika kosong, sistem akan anggap Perdana.'],
+      [''],
+      ['MAKANAN'],
+      [`Tulis salah satu: ${makananOptions.join(', ')}`],
+      ['Jika kosong, sistem akan anggap Biasa.'],
+      [''],
+      ['MASALAH KESIHATAN'],
+      [`Tulis salah satu: ${masalahKesihatanOptions.join(', ')}`],
+      ['Jika pilih Lain-lain, sila isi kolum "Nyatakan Penyakit".'],
       [''],
       ['NO KP'],
       ['Format disyorkan: 120101-08-1234'],
@@ -157,8 +180,13 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const race = compact(row['Kaum'] || row['Bangsa']).toUpperCase();
       const phoneNumber = compact(row['No Telefon']);
       const role = normalizeRole(row['Peranan'], selectedRole);
-      const category = compact(row['Kategori']) || 'Perdana';
-      const remarks = compact(row['Catatan']);
+      const isPeserta = role === 'PESERTA';
+      const category = isPeserta ? (compact(row['Kategori']) || 'Pengakap Kanak-kanak') : '';
+      const unit = isPeserta ? (compact(row['Unit']) || 'Perdana') : '';
+      const makanan = isPeserta ? (compact(row['Makanan']) || 'Biasa') : '';
+      const masalahKesihatan = isPeserta ? (compact(row['Masalah Kesihatan']) || 'Tiada') : '';
+      const masalahKesihatanLain = isPeserta ? (compact(row['Nyatakan Penyakit']) || '') : '';
+      const remarks = compact(row['Catatan / Email'] || row['Catatan']);
       const errors: string[] = [];
       const warnings: string[] = [];
 
@@ -171,7 +199,11 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       if (!gender) errors.push('Jantina wajib diisi.');
       else if (!['Lelaki', 'Perempuan'].includes(gender)) errors.push('Jantina mesti Lelaki atau Perempuan.');
       if (!race) errors.push('Kaum wajib diisi.');
-      if (!categoryOptions.includes(category)) errors.push('Kategori mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
+      if (isPeserta && !categoryOptions.includes(category)) errors.push('Kategori mesti Pengakap Kanak-kanak, Pengakap Muda, Pengakap Remaja atau Kelana.');
+      if (isPeserta && !unitOptions.includes(unit)) errors.push('Unit mesti Perdana, Udara, Laut, PPKI atau PPKI Udara.');
+      if (isPeserta && !makananOptions.includes(makanan)) errors.push('Makanan mesti Biasa atau Vegetarian.');
+      if (isPeserta && !masalahKesihatanOptions.includes(masalahKesihatan)) errors.push('Masalah Kesihatan tidak sah.');
+      if (isPeserta && masalahKesihatan === 'Lain-lain' && !masalahKesihatanLain) errors.push('Sila nyatakan penyakit jika pilih Lain-lain.');
       if (!roleOptions.includes(role as BulkRole)) errors.push('Peranan tidak sah.');
 
       const icKey = `${icNumber}_${selectedBadge}_${selectedYear}`;
@@ -192,7 +224,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const existsId = existingData.some(d => String(d.id || '').toUpperCase() === membershipId && membershipId);
       if (existsId) warnings.push('No Keahlian / ID sudah wujud dalam data sistem. Sila semak.');
 
-      return { rowNumber: index + 2, student, icNumber, membershipId, gender, race, phoneNumber, role: role as BulkRole, category, remarks, errors, warnings };
+      return { rowNumber: index + 2, student, icNumber, membershipId, gender, race, phoneNumber, role: role as BulkRole, category, unit, makanan, masalahKesihatan, masalahKesihatanLain, remarks, errors, warnings };
     });
 
     setRecords(parsed);
@@ -218,6 +250,10 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           phoneNumber: r.phoneNumber,
           role: r.role,
           category: r.category,
+          unit: r.unit,
+          makanan: r.makanan,
+          masalahKesihatan: r.masalahKesihatan,
+          masalahKesihatanLain: r.masalahKesihatanLain,
           remarks: r.remarks
         }))
       });
@@ -256,7 +292,6 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             <input type="number" value={selectedYear} onChange={e => { setSelectedYear(Number(e.target.value)); setRecords([]); }} className="p-3 border rounded-lg text-sm" />
             <select value={selectedRole} onChange={e => setSelectedRole(e.target.value as BulkRole)} className="p-3 border rounded-lg text-sm">
               <option value="PESERTA">Peserta</option>
-              <option value="PENERIMA RAMBU">Penerima Rambu</option>
               <option value="PEMIMPIN">Pemimpin</option>
               <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
               <option value="PENGUJI">Penguji</option>

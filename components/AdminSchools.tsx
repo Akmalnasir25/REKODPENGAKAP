@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch } from '../services/supabaseApi';
+import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
 import { School, Badge } from '../types';
 
@@ -28,6 +28,9 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
   const [schoolSearch, setSchoolSearch] = useState('');
   const [accountFilter, setAccountFilter] = useState<'all' | 'registered' | 'unregistered'>('all');
+  const [editingSchoolCode, setEditingSchoolCode] = useState<string | null>(null);
+  const [editSchoolCodeValue, setEditSchoolCodeValue] = useState('');
+  const [savingSchoolCode, setSavingSchoolCode] = useState<string | null>(null);
 
   const registeredAccountCount = schools.filter(s => s.isClaimed).length;
   const unregisteredAccountCount = schools.length - registeredAccountCount;
@@ -49,30 +52,60 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const allAllowed = schools.length > 0 && schools.every(s => s.allowStudents && s.allowAssistants && s.allowExaminers);
 
   const handleAdd = async () => {
-    // 1. Split and Normalize Input
-    const rawSchoolNames = newSchoolName.split('\n')
-      .map(name => name.toUpperCase().trim())
-      .filter(name => name.length > 0);
+    // 1. Split and Normalize Input — format: NAMA SEKOLAH | KOD SEKOLAH
+    const rawLines = newSchoolName.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
 
-    if (rawSchoolNames.length === 0) return;
+    if (rawLines.length === 0) return;
 
-    // 2. Remove Internal Duplicates (Input list itself)
-    const uniqueInputSchools: string[] = Array.from(new Set(rawSchoolNames));
+    // Parse each line: "NAMA SEKOLAH | KOD SEKOLAH"
+    const parsedSchools: { name: string; schoolCode: string }[] = [];
+    const invalidLines: string[] = [];
 
-    const existingSchoolNames = schools.map(s => s.name.toUpperCase().trim());
-    const uniqueSchoolsToSend: string[] = [];
-    const duplicateSchools: string[] = [];
-
-    // 3. Filter against Database
-    uniqueInputSchools.forEach(name => {
-      if (existingSchoolNames.includes(name)) {
-        duplicateSchools.push(name);
+    rawLines.forEach(line => {
+      const parts = line.split('|').map(p => p.trim().toUpperCase());
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        parsedSchools.push({ name: parts[0], schoolCode: parts[1] });
+      } else if (parts.length === 1 && parts[0]) {
+        // Fallback: jika tiada separator, guna nama sebagai kod juga (backward compat)
+        parsedSchools.push({ name: parts[0], schoolCode: parts[0] });
       } else {
-        uniqueSchoolsToSend.push(name);
+        invalidLines.push(line);
       }
     });
 
-    if (uniqueSchoolsToSend.length === 0) {
+    if (invalidLines.length > 0) {
+      alert(`Format tidak sah pada baris berikut:\n${invalidLines.join('\n')}\n\nFormat betul: NAMA SEKOLAH | KOD SEKOLAH`);
+      return;
+    }
+
+    if (parsedSchools.length === 0) return;
+
+    // 2. Remove Internal Duplicates (by name)
+    const seen = new Set<string>();
+    const uniqueSchools: { name: string; schoolCode: string }[] = [];
+    parsedSchools.forEach(s => {
+      if (!seen.has(s.name)) {
+        seen.add(s.name);
+        uniqueSchools.push(s);
+      }
+    });
+
+    const existingSchoolNames = schools.map(s => s.name.toUpperCase().trim());
+    const schoolsToSend: { name: string; schoolCode: string }[] = [];
+    const duplicateSchools: string[] = [];
+
+    // 3. Filter against Database
+    uniqueSchools.forEach(s => {
+      if (existingSchoolNames.includes(s.name)) {
+        duplicateSchools.push(s.name);
+      } else {
+        schoolsToSend.push(s);
+      }
+    });
+
+    if (schoolsToSend.length === 0) {
       alert(`Semua nama yang dimasukkan sudah wujud:\n${duplicateSchools.join(', ')}`);
       setNewSchoolName('');
       return;
@@ -80,9 +113,9 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
 
     setLoading(true);
     try {
-        await addSchoolBatch(scriptUrl, uniqueSchoolsToSend, negeriCode, daerahCode);
+        await addSchoolBatch(scriptUrl, schoolsToSend, negeriCode, daerahCode);
         
-        let finalMessage = `${uniqueSchoolsToSend.length} sekolah berjaya dihantar.`;
+        let finalMessage = `${schoolsToSend.length} sekolah berjaya dihantar.`;
         if (duplicateSchools.length > 0) {
             finalMessage += ` (${duplicateSchools.length} diabaikan kerana duplikasi.)`;
         }
@@ -112,6 +145,39 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
     } finally {
         setLoading(false);
     }
+  };
+
+  const handleEditSchoolCode = (school: School) => {
+    setEditingSchoolCode(school.name);
+    setEditSchoolCodeValue(school.schoolCode || '');
+  };
+
+  const handleSaveSchoolCode = async (schoolName: string) => {
+    const newCode = editSchoolCodeValue.trim().toUpperCase();
+    if (!newCode) {
+      alert('Kod sekolah tidak boleh kosong.');
+      return;
+    }
+    setSavingSchoolCode(schoolName);
+    try {
+      const result = await updateSchoolCode(schoolName, newCode);
+      if (result.status === 'success') {
+        setEditingSchoolCode(null);
+        setEditSchoolCodeValue('');
+        onRefresh();
+      } else {
+        alert('Gagal kemaskini: ' + result.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan server.');
+    } finally {
+      setSavingSchoolCode(null);
+    }
+  };
+
+  const handleCancelEditSchoolCode = () => {
+    setEditingSchoolCode(null);
+    setEditSchoolCodeValue('');
   };
 
   const handleResetClaim = async (school: School) => {
@@ -309,12 +375,17 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
       </div>
 
       <div className="space-y-3 mb-6">
-        <textarea
-          className="w-full p-3 border rounded-lg uppercase h-24 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
-          placeholder="MASUKKAN NAMA SEKOLAH (Satu setiap baris)"
-          value={newSchoolName}
-          onChange={e => setNewSchoolName(e.target.value)}
-        ></textarea>
+        <div>
+          <textarea
+            className="w-full p-3 border rounded-lg uppercase h-28 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium font-mono"
+            placeholder={"NAMA SEKOLAH | KOD SEKOLAH\nContoh:\nSK TAMAN MELAWATI | ABA1234\nSMK SERI PUTERI | ABA5678"}
+            value={newSchoolName}
+            onChange={e => setNewSchoolName(e.target.value)}
+          ></textarea>
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            Format: <span className="font-bold text-gray-700">NAMA SEKOLAH | KOD SEKOLAH</span> (satu setiap baris). Kod sekolah akan digunakan oleh guru untuk mendaftar akaun.
+          </p>
+        </div>
         <button 
           onClick={handleAdd} 
           disabled={!newSchoolName || loading} 
@@ -476,6 +547,49 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                             </div>
                             <div>
                                 <span className="font-bold text-gray-800 block">{s.name}</span>
+                                {/* Kod Sekolah - Inline Edit */}
+                                {editingSchoolCode === s.name ? (
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <input
+                                      type="text"
+                                      value={editSchoolCodeValue}
+                                      onChange={(e) => setEditSchoolCodeValue(e.target.value.toUpperCase())}
+                                      className="border border-blue-300 rounded px-2 py-0.5 text-[11px] font-mono uppercase w-32 focus:ring-1 focus:ring-blue-500 outline-none"
+                                      placeholder="KOD SEKOLAH"
+                                      autoFocus
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveSchoolCode(s.name);
+                                        if (e.key === 'Escape') handleCancelEditSchoolCode();
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => handleSaveSchoolCode(s.name)}
+                                      disabled={savingSchoolCode === s.name}
+                                      className="text-[10px] font-bold bg-blue-600 text-white px-2 py-0.5 rounded hover:bg-blue-700 disabled:bg-gray-300"
+                                    >
+                                      {savingSchoolCode === s.name ? '...' : 'Simpan'}
+                                    </button>
+                                    <button
+                                      onClick={handleCancelEditSchoolCode}
+                                      className="text-[10px] font-bold text-gray-500 hover:text-red-600 px-1"
+                                    >
+                                      Batal
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                      Kod: {s.schoolCode || <span className="text-red-400 italic">TIADA</span>}
+                                    </span>
+                                    <button
+                                      onClick={() => handleEditSchoolCode(s)}
+                                      className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-semibold"
+                                      title="Edit Kod Sekolah"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                )}
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isAllEnabled ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
                                     {isAllEnabled ? 'AKSES PENUH' : 'AKSES TERHAD'}
                                 </span>

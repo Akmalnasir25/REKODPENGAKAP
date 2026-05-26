@@ -1,8 +1,9 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
 import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, Sparkles, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
+import { useResolvedLogo } from '../hooks/useResolvedLogo';
 
 const normalizeText = (value?: string | null) => String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
 const getSubmissionYear = (value?: string | null) => {
@@ -20,7 +21,8 @@ import { UserProfilePage } from './UserProfilePage';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
-import { SchoolQRGenerator } from './ui/QRVerification';
+import { SchoolQRGenerator, ParticipantQRGenerator } from './ui/QRVerification';
+import { WithdrawalsList } from './WithdrawalsList';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
 
@@ -52,7 +54,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   
   // Views
   const [showHistoryView, setShowHistoryView] = useState(false);
-  const [showArchiveView, setShowArchiveView] = useState(false); 
+  const [showArchiveView, setShowArchiveView] = useState(false);
+  const [showWithdrawalsView, setShowWithdrawalsView] = useState(false);
   const [historyBadgeFilter, setHistoryBadgeFilter] = useState(''); // Filter for history view
   
   // Modals
@@ -101,6 +104,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const userProfile = useMemo(() => {
     return userProfiles.find(p => p.schoolCode.toUpperCase() === user.schoolCode.toUpperCase());
   }, [userProfiles, user.schoolCode]);
+
+  // Resolved logo (daerah > negeri > default)
+  const resolvedLogo = useResolvedLogo(
+    userProfile?.negeriCode || currentSchoolSettings?.negeriCode,
+    userProfile?.daerahCode || currentSchoolSettings?.daerahCode
+  );
   
   // Granular Permissions (Fallback to allowEdit logic for legacy)
   const allowStudents = currentSchoolSettings?.allowStudents ?? currentSchoolSettings?.allowEdit ?? false;
@@ -166,6 +175,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         (rowSchoolCode && validCodes.includes(rowSchoolCode)) ||
         (rowSchoolName && validNames.includes(rowSchoolName));
 
+      // Tolak peserta yang ditarik balik (withdrawn) dari senarai aktif
+      if ((d as any).isWithdrawn) return false;
+
       return matchesSchool && rowYear === selectedYear;
     });
   }, [allData, user, selectedYear, currentSchoolSettings]);
@@ -206,7 +218,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             (item.studentPhone && String(item.studentPhone).includes(lowerQuery))
         );
     }
-    return data;
+    // Sort: PESERTA -> PEMIMPIN -> PENOLONG PEMIMPIN -> PENGUJI -> lain-lain
+    const rolePriority = (role?: string) => {
+        const r = (role || 'PESERTA').toUpperCase();
+        if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+        if (r === 'PEMIMPIN') return 2;
+        if (r.includes('PENOLONG')) return 3;
+        if (r === 'PENGUJI') return 4;
+        return 5;
+    };
+    return [...data].sort((a, b) => {
+        const ra = rolePriority(a.role);
+        const rb = rolePriority(b.role);
+        if (ra !== rb) return ra - rb;
+        return (a.student || '').localeCompare(b.student || '');
+    });
   }, [myData, searchQuery, selectedBadgeFilter]);
 
   // Compute filtered stats (based on badge filter + search)
@@ -228,13 +254,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const printData = useMemo(() => {
     const data = [...filteredData];
     return data.sort((a, b) => {
-        // Priority: PEMIMPIN (1) -> PENOLONG (2) -> PENGUJI (3) -> PESERTA (4)
+        // Priority: PESERTA (1) -> PEMIMPIN (2) -> PENOLONG (3) -> PENGUJI (4)
         const getRank = (role: string) => {
-            const r = (role || '').toUpperCase();
-            if (r === 'PEMIMPIN') return 1;
-            if (r.includes('PENOLONG')) return 2;
-            if (r === 'PENGUJI') return 3;
-            return 4; // Peserta
+            const r = (role || 'PESERTA').toUpperCase();
+            if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+            if (r === 'PEMIMPIN') return 2;
+            if (r.includes('PENOLONG')) return 3;
+            if (r === 'PENGUJI') return 4;
+            return 5;
         };
         const rankA = getRank(a.role || '');
         const rankB = getRank(b.role || '');
@@ -451,6 +478,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       phoneNumber: item.studentPhone || '',
       role: item.role || 'PESERTA',
       category: item.category || '',
+      unit: item.unit || '',
+      makanan: item.makanan || '',
+      masalahKesihatan: item.masalahKesihatan || '',
+      masalahKesihatanLain: item.masalahKesihatanLain || '',
       remarks: item.remarks || '',
     });
   };
@@ -658,7 +689,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="p-4 border-b border-slate-800 flex flex-col items-center text-center overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800">
-              <img src={LOGO_URL} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
+              <img src={resolvedLogo} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
               {isDesktopSidebarOpen && (
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-xs leading-tight mb-1 uppercase tracking-wide">{user.schoolName}</h2>
@@ -671,22 +702,29 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <SidebarItem 
                 icon={Home} 
                 label="Utama" 
-                isActive={!showHistoryView && !showArchiveView} 
-                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }} 
+                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView} 
+                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
               />
 
               <SidebarItem 
                 icon={Archive} 
                 label="Arkib Pencapaian" 
                 isActive={showArchiveView}
-                onClick={() => { setShowArchiveView(true); setShowHistoryView(false); setIsMobileSidebarOpen(false); }} 
+                onClick={() => { setShowArchiveView(true); setShowHistoryView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
               />
 
               <SidebarItem 
                 icon={History} 
                 label="Semak Rekod" 
                 isActive={showHistoryView}
-                onClick={() => { setShowHistoryView(true); setShowArchiveView(false); setIsMobileSidebarOpen(false); }} 
+                onClick={() => { setShowHistoryView(true); setShowArchiveView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
+              />
+
+              <SidebarItem
+                icon={AlertTriangle}
+                label="Status Peserta"
+                isActive={showWithdrawalsView}
+                onClick={() => { setShowWithdrawalsView(true); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
               />
 
               <SidebarItem 
@@ -787,7 +825,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 `}</style>
                 <div id="print-header" className="border-b-2 border-black mb-4 pb-2">
                      <div className="flex items-center justify-between mb-4">
-                         <img src={LOGO_URL} className="h-20 w-auto object-contain" alt="Logo" />
+                         <img src={resolvedLogo} className="h-20 w-auto object-contain" alt="Logo" />
                          <div className="text-right">
                              <h1 className="text-2xl font-bold uppercase tracking-wide">SENARAI PENDAFTARAN PENGAKAP</h1>
                              <h2 className="text-xl font-bold uppercase">{user.schoolName}</h2>
@@ -886,7 +924,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             {/* CONTENT VIEWS (SCREEN ONLY) */}
             <div className="print:hidden">
-            {showHistoryView ? (
+            {showWithdrawalsView ? (
+                <WithdrawalsList
+                  data={allData.filter(d => {
+                    const code = String((d as any).schoolCode || '').toUpperCase();
+                    const userCode = String(user.schoolCode || '').toUpperCase();
+                    return code === userCode;
+                  })}
+                  onRefresh={onRefresh}
+                  allowUnwithdraw={false}
+                  scopeLabel={user.schoolName}
+                />
+            ) : showHistoryView ? (
                 // --- HISTORY VIEW (COHORT BLOCKS) ---
                 <div className="space-y-8 animate-[fadeIn_0.3s_ease-out]">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-2 border-b">
@@ -1142,6 +1191,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             {filteredData.length > 0 && (
                               <SchoolQRGenerator data={filteredData} year={selectedYear} />
                             )}
+                            {filteredData.length > 0 && (
+                              <ParticipantQRGenerator data={filteredData} year={selectedYear} />
+                            )}
                         </div>
                     </div>
                     
@@ -1167,6 +1219,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <th className="px-4 py-3">No. Keahlian</th>
                                     <th className="px-4 py-3">Peranan</th>
                                     <th className="px-4 py-3">Kategori</th>
+                                    <th className="px-4 py-3">Unit</th>
+                                    <th className="px-4 py-3">Makanan</th>
+                                    <th className="px-4 py-3">Kesihatan</th>
                                     <th className="px-4 py-3 text-right">Tindakan</th>
                                 </tr>
                             </thead>
@@ -1204,12 +1259,44 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                           <td className="px-4 py-2">
                                             <select className="w-full p-1 border rounded text-xs" value={editFormData.category} onChange={e => setEditFormData(p => ({...p, category: e.target.value}))}>
                                               <option value="">-</option>
+                                              <option value="Pengakap Kanak-kanak">Pengakap Kanak-kanak</option>
+                                              <option value="Pengakap Muda">Pengakap Muda</option>
+                                              <option value="Pengakap Remaja">Pengakap Remaja</option>
+                                              <option value="Kelana">Kelana</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.unit} onChange={e => setEditFormData(p => ({...p, unit: e.target.value}))}>
+                                              <option value="">-</option>
                                               <option value="Perdana">Perdana</option>
                                               <option value="Udara">Udara</option>
                                               <option value="Laut">Laut</option>
                                               <option value="PPKI">PPKI</option>
                                               <option value="PPKI Udara">PPKI Udara</option>
                                             </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.makanan} onChange={e => setEditFormData(p => ({...p, makanan: e.target.value}))}>
+                                              <option value="">-</option>
+                                              <option value="Biasa">Biasa</option>
+                                              <option value="Vegetarian">Vegetarian</option>
+                                            </select>
+                                          </td>
+                                          <td className="px-4 py-2">
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.masalahKesihatan} onChange={e => setEditFormData(p => ({...p, masalahKesihatan: e.target.value, masalahKesihatanLain: e.target.value !== 'Lain-lain' ? '' : editFormData.masalahKesihatanLain}))}>
+                                              <option value="">-</option>
+                                              <option value="Tiada">Tiada</option>
+                                              <option value="Alahan">Alahan</option>
+                                              <option value="Asma">Asma</option>
+                                              <option value="Gastrik">Gastrik</option>
+                                              <option value="Penyakit Jantung">Penyakit Jantung</option>
+                                              <option value="Migrain">Migrain</option>
+                                              <option value="Penyakit Kronik">Penyakit Kronik</option>
+                                              <option value="Lain-lain">Lain-lain</option>
+                                            </select>
+                                            {editFormData.masalahKesihatan === 'Lain-lain' && (
+                                              <input className="w-full p-1 border rounded text-xs mt-1" placeholder="Nyatakan..." value={editFormData.masalahKesihatanLain} onChange={e => setEditFormData(p => ({...p, masalahKesihatanLain: e.target.value}))} />
+                                            )}
                                           </td>
                                           <td className="px-4 py-2 text-right">
                                             <div className="flex items-center justify-end gap-1">
@@ -1254,6 +1341,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         </td>
                                         <td className="px-4 py-3 text-xs font-semibold uppercase">{item.role || 'Peserta'}</td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.category || '-'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.unit || '-'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.makanan || '-'}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">{item.masalahKesihatan === 'Lain-lain' ? `Lain-lain: ${item.masalahKesihatanLain || ''}` : (item.masalahKesihatan || '-')}</td>
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-1">
                                               {canModifyRecord(item) && !isMigrated && (
@@ -1264,7 +1354,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         </td>
                                     </tr>
                                 )})}
-                                {filteredData.length === 0 && <tr><td colSpan={8} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
+                                {filteredData.length === 0 && <tr><td colSpan={11} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
                             </tbody>
                         </table>
                     </div>

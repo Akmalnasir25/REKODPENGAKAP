@@ -1,25 +1,66 @@
 
 
 import React, { useState } from 'react';
-import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline } from '../services/supabaseApi';
+import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval } from '../services/supabaseApi';
 import { Badge } from '../types';
 
 interface AdminBadgesProps {
   badges: Badge[];
   scriptUrl: string;
   onRefresh: () => void;
+  // Context: bila non-empty, filter dan tag badge baru ke scope ni
+  scopeContext?: {
+    type: 'negeri' | 'daerah';
+    negeriCode?: string;
+    daerahCode?: string;
+    label?: string; // Cth: "Negeri Perak" atau "Daerah Kinta Utara"
+  };
 }
 
-export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl, onRefresh }) => {
+export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl, onRefresh, scopeContext }) => {
   const [newBadge, setNewBadge] = useState('');
   const [loading, setLoading] = useState(false);
   const [togglingBadge, setTogglingBadge] = useState<string | null>(null);
   const [updatingDate, setUpdatingDate] = useState<string | null>(null);
+  const [editingBadge, setEditingBadge] = useState<string | null>(null);
+  const [editBadgeValue, setEditBadgeValue] = useState('');
+  const [savingBadgeName, setSavingBadgeName] = useState<string | null>(null);
+  const [updatingDaerahApproval, setUpdatingDaerahApproval] = useState<string | null>(null);
+
+  const handleToggleDaerahApproval = async (badge: Badge) => {
+    setUpdatingDaerahApproval(badge.name);
+    try {
+      const res = await updateBadgeRequiresDaerahApproval(badge.name, !badge.requiresDaerahApproval);
+      if (res.status === 'success') onRefresh();
+      else alert('Gagal: ' + res.message);
+    } catch (e) {
+      alert('Ralat sambungan.');
+    } finally {
+      setUpdatingDaerahApproval(null);
+    }
+  };
 
   // Ensure badges is always an array
-  const safeBadges = Array.isArray(badges) ? badges : [];
+  const allBadges = Array.isArray(badges) ? badges : [];
+
+  // Apply scope filter: kalau ada scopeContext, hanya papar badge yang berkaitan
+  const safeBadges = scopeContext
+    ? allBadges.filter(b => {
+        const bScope = b.scope || 'daerah';
+        if (scopeContext.type === 'negeri') {
+          // Admin negeri nampak badge negeri yang milik negeri ni (atau tiada negeri set)
+          if (bScope !== 'negeri') return false;
+          if (b.negeriCode && b.negeriCode !== scopeContext.negeriCode) return false;
+          return true;
+        }
+        // Admin daerah nampak badge daerah yang milik daerah ni (atau tiada daerah set)
+        if (bScope !== 'daerah') return false;
+        if (b.daerahCode && b.daerahCode !== scopeContext.daerahCode) return false;
+        return true;
+      })
+    : allBadges;
 
   const handleAdd = async () => {
     if (!newBadge.trim()) return;
@@ -31,7 +72,11 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
 
     setLoading(true);
     try {
-        const response = await addBadgeType(scriptUrl, newBadge);
+        const response = await addBadgeType(scriptUrl, newBadge, undefined, scopeContext ? {
+          scope: scopeContext.type,
+          negeriCode: scopeContext.type === 'negeri' ? scopeContext.negeriCode : undefined,
+          daerahCode: scopeContext.type === 'daerah' ? scopeContext.daerahCode : undefined,
+        } : undefined);
         
         if (response.status === 'success') {
             alert(`Lencana '${newBadge}' berjaya ditambah.`);
@@ -84,8 +129,6 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
       setUpdatingDate(badgeName);
       try {
           await updateBadgeDeadline(scriptUrl, badgeName, date);
-          // Optional: onRefresh() if you want to sync perfectly, 
-          // but input holds value so maybe not needed immediately to avoid UI jump
           onRefresh();
       } catch (e) {
           alert("Gagal mengemaskini tarikh.");
@@ -94,16 +137,57 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
       }
   };
 
+  const handleEditBadgeName = (badge: Badge) => {
+    setEditingBadge(badge.name);
+    setEditBadgeValue(badge.name);
+  };
+
+  const handleSaveBadgeName = async (oldName: string) => {
+    const newName = editBadgeValue.trim();
+    if (!newName) { alert('Nama lencana tidak boleh kosong.'); return; }
+    if (newName === oldName) { setEditingBadge(null); return; }
+    if (safeBadges.some(b => b.name === newName)) { alert('Nama lencana ini sudah wujud.'); return; }
+    setSavingBadgeName(oldName);
+    try {
+      const res = await updateBadgeName(scriptUrl, oldName, newName);
+      if (res.status === 'success') {
+        setEditingBadge(null);
+        setEditBadgeValue('');
+        onRefresh();
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan server.');
+    } finally {
+      setSavingBadgeName(null);
+    }
+  };
+
   return (
     <div className="bg-white p-6 rounded-xl shadow animate-[fadeIn_0.2s_ease-out]">
       <div className="flex justify-between items-center mb-4">
         <h2 className="font-bold text-gray-800 flex items-center gap-2">
             <Medal size={20} className="text-purple-600"/> Senarai Lencana / Kategori ({safeBadges.length})
+            {scopeContext?.label && (
+              <span className="ml-2 text-xs font-semibold bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                {scopeContext.type === 'negeri' ? 'Peringkat Negeri' : 'Peringkat Daerah'}: {scopeContext.label}
+              </span>
+            )}
         </h2>
         <button onClick={onRefresh} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
           <RefreshCw size={20} />
         </button>
       </div>
+
+      {scopeContext && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+          <strong>Skop:</strong> {scopeContext.type === 'negeri'
+            ? `Hanya program peringkat negeri yang anda uruskan dipaparkan. Program baru akan ditugaskan kepada ${scopeContext.label}.`
+            : `Hanya program peringkat daerah yang anda uruskan dipaparkan. Program baru akan ditugaskan kepada ${scopeContext.label}.`
+          }
+        </div>
+      )}
 
       <div className="flex gap-2 mb-6">
         <input
@@ -130,10 +214,64 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                 <span className={`px-2 py-1 rounded text-xs font-bold ${b.isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                     {b.isOpen ? 'BUKA' : 'TUTUP'}
                 </span>
-                <span className={`font-medium ${b.isOpen ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{b.name}</span>
+                {editingBadge === b.name ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={editBadgeValue}
+                      onChange={(e) => setEditBadgeValue(e.target.value)}
+                      className="border border-purple-300 rounded px-2 py-1 text-sm font-medium w-48 focus:ring-1 focus:ring-purple-500 outline-none"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveBadgeName(b.name);
+                        if (e.key === 'Escape') setEditingBadge(null);
+                      }}
+                    />
+                    <button
+                      onClick={() => handleSaveBadgeName(b.name)}
+                      disabled={savingBadgeName === b.name}
+                      className="p-1 text-green-600 hover:bg-green-100 rounded transition"
+                      title="Simpan"
+                    >
+                      {savingBadgeName === b.name ? <LoadingSpinner size="sm" color="border-green-600" /> : <Check size={16} />}
+                    </button>
+                    <button
+                      onClick={() => setEditingBadge(null)}
+                      className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                      title="Batal"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium ${b.isOpen ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{b.name}</span>
+                    <button
+                      onClick={() => handleEditBadgeName(b)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-100 rounded transition"
+                      title="Edit Nama"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                )}
             </div>
             
             <div className="flex items-center gap-4">
+                {scopeContext?.type === 'negeri' && (
+                    <label className="flex items-center gap-2 bg-amber-50 px-2 py-1 rounded border border-amber-200 cursor-pointer hover:bg-amber-100" title="Jika dipilih, daerah perlu sahkan dahulu sebelum negeri sahkan">
+                        <input
+                            type="checkbox"
+                            checked={!!b.requiresDaerahApproval}
+                            onChange={() => handleToggleDaerahApproval(b)}
+                            disabled={updatingDaerahApproval === b.name}
+                            className="rounded"
+                        />
+                        <span className="text-xs font-semibold text-amber-800">
+                            {updatingDaerahApproval === b.name ? '...' : 'Sahkan Daerah Dahulu'}
+                        </span>
+                    </label>
+                )}
                 <div className="flex items-center gap-2 bg-gray-50 p-1 rounded border border-gray-200">
                     <Calendar size={14} className="text-gray-400 ml-1"/>
                     <input 

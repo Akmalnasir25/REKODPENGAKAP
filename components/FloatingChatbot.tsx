@@ -8,6 +8,7 @@ interface FloatingChatbotProps {
   senderEmail: string;
   role: string;
   schoolName?: string;
+  schoolId?: string;
 }
 
 interface Notification {
@@ -22,10 +23,11 @@ interface Notification {
 type Status = 'idle' | 'sending' | 'success' | 'error';
 type Tab = 'chat' | 'notifications';
 
-export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolName }: FloatingChatbotProps) {
+export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolName, schoolId }: FloatingChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('chat');
   const [message, setMessage] = useState('');
+  const [category, setCategory] = useState<'umum' | 'sistem'>('umum');
   const [status, setStatus] = useState<Status>('idle');
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -68,12 +70,15 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
       senderEmail,
       role,
       schoolName,
+      schoolId,
+      category,
       message: message.trim(),
     });
 
     if (success) {
       setStatus('success');
       setMessage('');
+      setCategory('umum'); // Reset ke default
       setTimeout(() => setStatus('idle'), 2500);
     } else {
       setStatus('error');
@@ -183,6 +188,39 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
                 </div>
               ) : (
                 <>
+                  {/* Kategori Selector */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCategory('umum')}
+                      className={`flex-1 py-2 px-3 text-xs font-semibold rounded-lg transition-all ${
+                        category === 'umum'
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      💬 Umum
+                    </button>
+                    <button
+                      onClick={() => setCategory('sistem')}
+                      className={`flex-1 py-2 px-3 text-xs font-semibold rounded-lg transition-all ${
+                        category === 'sistem'
+                          ? 'bg-blue-500 text-white shadow-sm'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      ⚙️ Sistem
+                    </button>
+                  </div>
+
+                  {/* Info kategori */}
+                  <div className="text-xs text-slate-400 px-1">
+                    {category === 'umum' ? (
+                      <span>📍 Mesej akan dihantar ke <b>Admin Daerah & Negeri</b></span>
+                    ) : (
+                      <span>🔧 Mesej akan dihantar ke <b>Developer (Admin Utama)</b></span>
+                    )}
+                  </div>
+
                   <textarea
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-300 min-h-[100px]"
                     placeholder="Taip pertanyaan atau maklum balas anda di sini..."

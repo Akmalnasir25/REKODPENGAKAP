@@ -222,6 +222,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     userId: result.user.id,
                     schoolName: result.user.schoolName,
                     schoolCode: result.user.schoolCode,
+                    schoolId: result.user.schoolId,
                     isLoggedIn: true,
                 });
             } else {
@@ -313,7 +314,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </div>
                 <img src={LOGO_URL} alt="Logo Perkhemahan" className="h-32 w-auto object-contain mb-8 drop-shadow-2xl hover:scale-105 transition-transform duration-500"/>
                 <h1 className="text-3xl font-black text-white leading-tight mb-3 tracking-tight text-center">
-                    PENGAKAP DAERAH <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">KINTA UTARA</span>
+                    SISTEM PENGURUSAN <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">PENGAKAP MALAYSIA</span>
                 </h1>
                 <p className="text-slate-400 text-sm font-light leading-relaxed max-w-xs mx-auto text-center">Sistem Pendaftaran & Pengurusan Data Keahlian Berpusat.</p>
             </div>
@@ -470,23 +471,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Sekolah</label>
                                 <div className="relative">
                                     <SchoolIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                    <input 
-                                        type="text"
-                                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
+                                    <select
+                                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white appearance-none"
                                         value={schoolName}
                                         onChange={(e) => setSchoolName(e.target.value)}
-                                        placeholder="Nama sekolah..."
                                         required
-                                    />
+                                    >
+                                        <option value="">-- Pilih Sekolah --</option>
+                                        {filteredRegistrationSchools.map((school, i) => (
+                                            <option key={school.id || i} value={school.id}>
+                                                {school.name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
                                 {supabaseSchools.length === 0 && (
                                     <p className="text-amber-600 text-xs mt-1">
                                         Tiada senarai sekolah daripada Supabase. Sila semak data schools atau RLS policy.
                                     </p>
                                 )}
-                                {supabaseSchools.length > 0 && schoolName.length > 0 && !authLoading && (
+                                {filteredRegistrationSchools.length === 0 && supabaseSchools.length > 0 && (
                                     <p className="text-amber-600 text-xs mt-1">
-                                        Sekolah ini belum didaftarkan dalam sistem. Pastikan nama sekolah betul.
+                                        Tiada sekolah dijumpai untuk negeri dan daerah yang dipilih.
                                     </p>
                                 )}
                             </div>

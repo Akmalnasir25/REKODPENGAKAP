@@ -206,6 +206,17 @@ function AppContent() {
         // 2. Check User Session
         const { supabase } = await import('./services/supabaseClient');
         const { getProfileWithSchool } = await import('./services/supabaseAuth');
+
+        // Kalau pengguna baru log keluar, jangan auto-restore Supabase session
+        const justLoggedOut = localStorage.getItem('JUST_LOGGED_OUT');
+        if (justLoggedOut) {
+          localStorage.removeItem('JUST_LOGGED_OUT');
+          try { await supabase.auth.signOut(); } catch (_) {}
+          localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION);
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+          localStorage.removeItem(DEVELOPER_SESSION_KEY);
+        }
+
         const { data: { session: supaSession } } = await supabase.auth.getSession();
         const savedAdminSession = localStorage.getItem(ADMIN_SESSION_KEY);
         const savedDeveloperSession = localStorage.getItem(DEVELOPER_SESSION_KEY);
@@ -517,11 +528,15 @@ function AppContent() {
       const actor = userSession?.schoolCode || adminSession?.username || (isDeveloperMode ? 'DEVELOPER' : 'UNKNOWN');
       const role = isDeveloperMode ? 'developer' : adminSession ? adminSession.role : adminRole || 'user';
       logAudit('LOGOUT', actor, role as any, `Log keluar`);
-      
+
       // Sign out from Supabase if logged in
-      const { supabase } = await import('./services/supabaseClient');
-      await supabase.auth.signOut();
-      
+      try {
+        const { supabase } = await import('./services/supabaseClient');
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn('Supabase signOut failed:', e);
+      }
+
       setUserSession(null);
       setAdminRole(null);
       setAdminSession(null);
@@ -530,6 +545,8 @@ function AppContent() {
       localStorage.removeItem(LOCAL_STORAGE_KEYS.SESSION); // Clear Session
       localStorage.removeItem(ADMIN_SESSION_KEY);
       localStorage.removeItem(DEVELOPER_SESSION_KEY);
+      // Set flag supaya init logic tak auto-restore dari Supabase persisted session
+      localStorage.setItem('JUST_LOGGED_OUT', '1');
       clearSessionActivity();
       navigateTo('auth');
   };
@@ -653,6 +670,7 @@ function AppContent() {
                             schools={schoolsList}
                             badges={badges}
                             daerahList={daerahList}
+                            userProfiles={userProfiles}
                             isRegistrationOpen={isRegistrationOpen}
                             refreshData={() => handleFetchData(scriptUrl)}
                             deleteData={handleDeleteData}
@@ -671,6 +689,7 @@ function AppContent() {
                             data={dashboardData}
                             schools={schoolsList}
                             badges={badges}
+                            userProfiles={userProfiles}
                             isRegistrationOpen={isRegistrationOpen}
                             refreshData={() => handleFetchData(scriptUrl)}
                             deleteData={handleDeleteData}
@@ -774,6 +793,42 @@ function AppContent() {
       }
   };
 
+  // Determine current user info for FloatingChatbot
+  const chatbotUser = (() => {
+    if (userSession) {
+      return {
+        userId: supabaseUserId || undefined,
+        senderName: userSession.schoolName || userSession.schoolCode || 'Pengguna',
+        senderEmail: userSession.schoolCode ? `${userSession.schoolCode.toLowerCase()}@sekolah` : '',
+        role: 'school_user',
+        schoolName: userSession.schoolName,
+        schoolId: userSession.schoolId,
+      };
+    }
+    if (adminSession) {
+      return {
+        userId: supabaseUserId || undefined,
+        senderName: adminSession.fullName || adminSession.username || 'Admin',
+        senderEmail: (adminSession as any).email || adminSession.username || '',
+        role: adminSession.role === 'negeri' ? 'negeri_admin' : 'daerah_admin',
+        schoolName: undefined,
+        schoolId: undefined,
+      };
+    }
+    if (isDeveloperMode) {
+      const devSession = (() => { try { return JSON.parse(localStorage.getItem('DEVELOPER_SESSION_DATA') || '{}'); } catch { return {}; } })();
+      return {
+        userId: supabaseUserId || undefined,
+        senderName: devSession.fullName || devSession.username || 'Developer',
+        senderEmail: devSession.email || devSession.username || '',
+        role: 'developer',
+        schoolName: undefined,
+        schoolId: undefined,
+      };
+    }
+    return null;
+  })();
+
   return (
     <>
       {connectionError && (
@@ -785,6 +840,18 @@ function AppContent() {
       <div className={connectionError ? "mt-8" : ""}>
         {renderContent()}
       </div>
+
+      {/* Floating Chatbot dengan tab Chat + Notifikasi */}
+      {chatbotUser && (
+        <FloatingChatbot
+          userId={chatbotUser.userId}
+          senderName={chatbotUser.senderName}
+          senderEmail={chatbotUser.senderEmail}
+          role={chatbotUser.role}
+          schoolName={chatbotUser.schoolName}
+          schoolId={chatbotUser.schoolId}
+        />
+      )}
     </>
   );
 }

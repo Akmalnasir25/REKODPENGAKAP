@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { SubmissionData, School, Badge } from '../types';
+import { SubmissionData, School, Badge, UserProfile } from '../types';
 import { BrainCircuit, RefreshCw, BarChart3, Database, Trash2, Sparkles, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { analyzeData } from '../services/geminiService';
@@ -11,10 +11,13 @@ import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
-  schools: School[]; // Added schools prop to check locked status
+  schools: School[];
   badges?: Badge[];
+  userProfiles?: UserProfile[];
   onRefresh: () => void;
   onDelete: (item: SubmissionData) => void;
+  // Senarai nama badge yang readonly untuk pengguna ini (cth: admin daerah lihat program negeri)
+  readOnlyBadges?: Set<string>;
 }
 
 type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'examiners' | 'principals' | 'archive';
@@ -31,12 +34,14 @@ const safeGetYear = (value: unknown): number | null => {
   return date ? date.getFullYear() : null;
 };
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, onRefresh, onDelete }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete, readOnlyBadges }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('all');
+  const [showMakananDetail, setShowMakananDetail] = useState(false);
+  const [showKesihatanDetail, setShowKesihatanDetail] = useState(false);
   
   // Print State
   const [printMode, setPrintMode] = useState<PrintMode>('none');
@@ -138,9 +143,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
     return Array.from(years).sort((a: number, b: number) => b - a);
   }, [data, currentYear]);
 
-  // Filter by year using the SUBMITTED data
+  // Filter by year using the SUBMITTED data (exclude withdrawn participants)
   const yearData = useMemo(() => {
-      return submittedData.filter(d => safeGetYear(d.date) === selectedYear);
+      return submittedData.filter(d => safeGetYear(d.date) === selectedYear && !(d as any).isWithdrawn);
   }, [submittedData, selectedYear]);
 
   // Available badges for filter dropdown
@@ -296,6 +301,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
         .sort((a, b) => b.count - a.count);
   }, [yearData, selectedBadgeFilter]);
 
+  // Makanan Statistics (Students Only - Vegetarian sahaja)
+  const makananStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    const details: Array<{ name: string; school: string; makanan: string; badge: string }> = [];
+    const dataToProcess = selectedBadgeFilter 
+        ? yearData.filter(d => d.badge === selectedBadgeFilter)
+        : yearData;
+
+    dataToProcess.forEach(item => {
+        const role = (item.role || 'PESERTA').toUpperCase();
+        if (role === 'PESERTA' || role === 'PENERIMA RAMBU') {
+            const makanan = (item.makanan || 'Biasa').trim();
+            stats[makanan] = (stats[makanan] || 0) + 1;
+            // Hanya simpan detail untuk Vegetarian
+            if (makanan === 'Vegetarian') {
+                details.push({
+                    name: item.student || '',
+                    school: item.school || '',
+                    makanan,
+                    badge: item.badge || ''
+                });
+            }
+        }
+    });
+
+    return {
+        summary: Object.entries(stats)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count),
+        details: details.sort((a, b) => a.school.localeCompare(b.school))
+    };
+  }, [yearData, selectedBadgeFilter]);
+
+  // Masalah Kesihatan Statistics (Students Only)
+  const kesihatanStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    const details: Array<{ name: string; school: string; penyakit: string; badge: string }> = [];
+    const dataToProcess = selectedBadgeFilter 
+        ? yearData.filter(d => d.badge === selectedBadgeFilter)
+        : yearData;
+
+    dataToProcess.forEach(item => {
+        const role = (item.role || 'PESERTA').toUpperCase();
+        if (role === 'PESERTA' || role === 'PENERIMA RAMBU') {
+            const kesihatan = (item.masalahKesihatan || 'Tiada').trim();
+            stats[kesihatan] = (stats[kesihatan] || 0) + 1;
+            
+            // Collect details for those with health issues
+            if (kesihatan !== 'Tiada' && kesihatan !== '') {
+                details.push({
+                    name: item.student || '',
+                    school: item.school || '',
+                    penyakit: kesihatan === 'Lain-lain' ? `Lain-lain: ${item.masalahKesihatanLain || '-'}` : kesihatan,
+                    badge: item.badge || ''
+                });
+            }
+        }
+    });
+
+    return {
+        summary: Object.entries(stats)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count),
+        details: details.sort((a, b) => a.school.localeCompare(b.school))
+    };
+  }, [yearData, selectedBadgeFilter]);
+
   // Detailed Filter (Base for most tabs)
   const baseFilteredData = useMemo(() => {
     let result = yearData;
@@ -337,7 +409,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
           return Array.from(uniqueSchools.values()).sort((a,b) => a.school.localeCompare(b.school));
       }
 
-      return baseFilteredData.filter(item => {
+      const filtered = baseFilteredData.filter(item => {
           const role = (item.role || 'PESERTA').toUpperCase();
           switch(activeTab) {
               case 'students': return role === 'PESERTA' || role === 'PENERIMA RAMBU';
@@ -346,6 +418,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
               case 'examiners': return role === 'PENGUJI';
               default: return true; // 'all'
           }
+      });
+
+      // Sort: PESERTA -> PEMIMPIN -> PENOLONG -> PENGUJI, then by name
+      const rank = (role?: string) => {
+          const r = (role || 'PESERTA').toUpperCase();
+          if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
+          if (r === 'PEMIMPIN') return 2;
+          if (r.includes('PENOLONG')) return 3;
+          if (r === 'PENGUJI') return 4;
+          return 5;
+      };
+      return [...filtered].sort((a, b) => {
+          const ra = rank(a.role), rb = rank(b.role);
+          if (ra !== rb) return ra - rb;
+          return (a.student || '').localeCompare(b.student || '');
       });
   }, [baseFilteredData, activeTab]);
 
@@ -703,7 +790,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                             <th className="px-4 py-3 text-center w-20 text-blue-600">Peserta (L)</th>
                             <th className="px-4 py-3 text-center w-20 text-pink-600">Peserta (P)</th>
                             <th className="px-4 py-3 text-center w-24 bg-teal-50 text-teal-700">Jum. Peserta</th>
-                            <th className="px-4 py-3 text-center w-24 bg-amber-50 text-amber-700">Penerima Rambu</th>
                             <th className="px-4 py-3 text-center w-20 text-indigo-600">Pemimpin</th>
                             <th className="px-4 py-3 text-center w-20 text-green-600">Penguji</th>
                             <th className="px-4 py-3 text-center w-24 bg-blue-100/50">Jumlah Besar</th>
@@ -725,7 +811,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                 <td className="px-4 py-2 text-center text-gray-600 font-semibold">{stat.male}</td>
                                 <td className="px-4 py-2 text-center text-gray-600 font-semibold">{stat.female}</td>
                                 <td className="px-4 py-2 text-center text-teal-600 font-bold bg-teal-50/50">{stat.students}</td>
-                                <td className="px-4 py-2 text-center text-amber-600 font-bold bg-amber-50/50">{stat.rambu > 0 ? stat.rambu : '-'}</td>
                                 <td className="px-4 py-2 text-center text-indigo-600 font-bold bg-indigo-50/50">{stat.leaders}</td>
                                 <td className="px-4 py-2 text-center text-green-600 font-bold bg-green-50/50">{stat.examiners}</td>
                                 <td className="px-4 py-2 text-center font-bold bg-gray-50 text-gray-900">{stat.total}</td>
@@ -733,7 +818,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                         ))}
                         {schoolStats.length === 0 && (
                         <tr>
-                            <td colSpan={8} className="px-4 py-8 text-center text-gray-400 italic">
+                            <td colSpan={7} className="px-4 py-8 text-center text-gray-400 italic">
                             Tiada rekod statistik untuk paparan ini.
                             </td>
                         </tr>
@@ -746,7 +831,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                 <td className="px-4 py-3 text-center text-blue-200">{totals.male}</td>
                                 <td className="px-4 py-3 text-center text-pink-200">{totals.female}</td>
                                 <td className="px-4 py-3 text-center text-teal-300">{totals.students}</td>
-                                <td className="px-4 py-3 text-center text-amber-300">{totals.rambu}</td>
                                 <td className="px-4 py-3 text-center text-indigo-200">{totals.leaders}</td>
                                 <td className="px-4 py-3 text-center text-green-200">{totals.examiners}</td>
                                 <td className="px-4 py-3 text-center bg-gray-900 text-yellow-400 text-base">{totals.total}</td>
@@ -760,7 +844,110 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
 
         {/* ADVANCED ANALYTICS CHARTS */}
         {activeTab !== 'archive' && displayedData.length > 0 && (
+            <>
+            {/* RUMUSAN MAKANAN & KESIHATAN - CLICKABLE */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Makanan - Klik untuk lihat detail Vegetarian */}
+                <div className="bg-white p-6 rounded-xl shadow cursor-pointer hover:ring-2 hover:ring-green-400 transition" onClick={() => setShowMakananDetail(prev => !prev)}>
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">🍽️</span> Rumusan Makanan Peserta
+                        <span className="text-xs text-gray-400 ml-auto">{showMakananDetail ? '▲ Tutup' : '▼ Klik untuk detail'}</span>
+                    </h3>
+                    <div className="space-y-3">
+                        {makananStats.summary.filter(stat => stat.name === 'Vegetarian').map(stat => (
+                            <div key={stat.name} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                <span className="font-medium text-green-700">Vegetarian</span>
+                                <span className="font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">{stat.count} orang</span>
+                            </div>
+                        ))}
+                        {makananStats.summary.filter(stat => stat.name === 'Vegetarian').length === 0 && <p className="text-green-600 text-sm font-medium">Tiada peserta vegetarian</p>}
+                    </div>
+                </div>
+
+                {/* Masalah Kesihatan - Klik untuk lihat detail */}
+                <div className="bg-white p-6 rounded-xl shadow cursor-pointer hover:ring-2 hover:ring-red-400 transition" onClick={() => setShowKesihatanDetail(prev => !prev)}>
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">🏥</span> Rumusan Masalah Kesihatan
+                        <span className="text-xs text-gray-400 ml-auto">{showKesihatanDetail ? '▲ Tutup' : '▼ Klik untuk detail'}</span>
+                    </h3>
+                    <div className="space-y-2">
+                        {kesihatanStats.summary.filter(stat => stat.name !== 'Tiada').map(stat => (
+                            <div key={stat.name} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                <span className="font-medium text-gray-700 text-sm">{stat.name}</span>
+                                <span className="font-bold px-3 py-1 rounded-full text-xs bg-red-100 text-red-700">{stat.count}</span>
+                            </div>
+                        ))}
+                        {kesihatanStats.summary.filter(stat => stat.name !== 'Tiada').length === 0 && <p className="text-green-600 text-sm font-medium">Semua peserta tiada masalah kesihatan</p>}
+                    </div>
+                </div>
+            </div>
+
+            {/* Detail Senarai Peserta Vegetarian (toggle) */}
+            {showMakananDetail && makananStats.details.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow mb-6 animate-[fadeIn_0.3s_ease-out]">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">🍽️</span> Senarai Peserta Vegetarian ({makananStats.details.length} orang)
+                    </h3>
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-green-50 text-green-800 uppercase text-xs sticky top-0">
+                                <tr>
+                                    <th className="px-4 py-3 text-left">Bil</th>
+                                    <th className="px-4 py-3 text-left">Nama Peserta</th>
+                                    <th className="px-4 py-3 text-left">Sekolah</th>
+                                    <th className="px-4 py-3 text-left">Program</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {makananStats.details.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-green-50/50">
+                                        <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
+                                        <td className="px-4 py-2 font-bold text-gray-800 uppercase">{item.name}</td>
+                                        <td className="px-4 py-2 text-gray-600">{item.school}</td>
+                                        <td className="px-4 py-2"><span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold">{item.badge}</span></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Detail Peserta Dengan Masalah Kesihatan (toggle) */}
+            {showKesihatanDetail && kesihatanStats.details.length > 0 && (
+                <div className="bg-white p-6 rounded-xl shadow mb-6 animate-[fadeIn_0.3s_ease-out]">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span className="text-lg">📋</span> Senarai Peserta Dengan Masalah Kesihatan ({kesihatanStats.details.length} orang)
+                    </h3>
+                    <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-red-50 text-red-800 uppercase text-xs sticky top-0">
+                                <tr>
+                                    <th className="px-4 py-3 text-left">Bil</th>
+                                    <th className="px-4 py-3 text-left">Nama Peserta</th>
+                                    <th className="px-4 py-3 text-left">Sekolah</th>
+                                    <th className="px-4 py-3 text-left">Program</th>
+                                    <th className="px-4 py-3 text-left">Masalah Kesihatan</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {kesihatanStats.details.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-red-50/50">
+                                        <td className="px-4 py-2 text-gray-500">{idx + 1}</td>
+                                        <td className="px-4 py-2 font-bold text-gray-800 uppercase">{item.name}</td>
+                                        <td className="px-4 py-2 text-gray-600">{item.school}</td>
+                                        <td className="px-4 py-2"><span className="bg-gray-100 px-2 py-0.5 rounded text-xs font-bold">{item.badge}</span></td>
+                                        <td className="px-4 py-2 font-semibold text-red-700">{item.penyakit}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             <AdvancedAnalytics data={displayedData} year={selectedYear} />
+            </>
         )}
 
         {/* DETAILED DATA TABLE */}
@@ -830,18 +1017,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, o
                                     </td>
                                     {activeTab === 'principals' && (
                                         <td className="px-4 py-3">
-                                            <div className="text-xs font-bold">{item.principalName}</div>
-                                            <WhatsAppLink phone={item.principalPhone} />
+                                            <div className="text-xs font-bold">{userProfiles.find(p => p.schoolCode?.toUpperCase() === item.schoolCode?.toUpperCase())?.principalName || item.principalName || '-'}</div>
+                                            <WhatsAppLink phone={userProfiles.find(p => p.schoolCode?.toUpperCase() === item.schoolCode?.toUpperCase())?.principalPhone || item.principalPhone} />
                                         </td>
                                     )}
                                     <td className="px-4 py-3 text-right">
-                                        <button 
-                                            onClick={() => onDelete(item)}
-                                            className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
-                                            title="Padam Rekod"
-                                        >
+                                        {readOnlyBadges?.has(item.badge) ? (
+                                            <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded" title="Program peringkat negeri - hanya boleh dipantau">
+                                                NEGERI
+                                            </span>
+                                        ) : (
+                                            <button 
+                                                onClick={() => onDelete(item)}
+                                                className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
+                                                title="Padam Rekod"
+                                            >
                                             <Trash2 size={16} />
                                         </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

@@ -20,7 +20,8 @@ interface ParsedRow {
     race: string;
     icNumber: string;
     phone: string;
-    category: string; // Normalized
+    category: string; // Normalized role (PESERTA/PEMIMPIN/etc)
+    kategori: string; // Kategori peserta (Pengakap Kanak-kanak/Muda/Remaja/Kelana)
     membershipId: string;
     
     // Display Fields
@@ -32,13 +33,29 @@ interface ParsedRow {
 const normalizeRole = (raw: any): string => {
     const r = String(raw || '').trim().toUpperCase();
     
-    if (r === 'PKK') return 'PESERTA';
+    if (r === 'PKK' || r === 'PENGAKAP KANAK-KANAK') return 'PESERTA';
+    if (r === 'PM' || r === 'PENGAKAP MUDA') return 'PESERTA';
+    if (r === 'PR' || r === 'PENGAKAP REMAJA') return 'PESERTA';
+    if (r === 'KELANA') return 'PESERTA';
     if (r === 'PEN. PEMIMPIN' || r === 'PEN PEMIMPIN' || r === 'PEN.PEMIMPIN' || r === 'PENOLONG') return 'PENOLONG PEMIMPIN';
     
     if (r.includes('PENGUJI')) return 'PENGUJI';
     if (r.includes('PEMIMPIN') && !r.includes('PENOLONG')) return 'PEMIMPIN';
     
     return 'PESERTA'; // Default
+};
+
+// Helper: Extract kategori from raw value
+const extractKategori = (raw: any): string => {
+    const r = String(raw || '').trim().toUpperCase();
+    
+    if (r === 'PKK' || r === 'PENGAKAP KANAK-KANAK') return 'Pengakap Kanak-kanak';
+    if (r === 'PM' || r === 'PENGAKAP MUDA') return 'Pengakap Muda';
+    if (r === 'PR' || r === 'PENGAKAP REMAJA') return 'Pengakap Remaja';
+    if (r === 'KELANA') return 'Kelana';
+    
+    // Jika bukan kategori peserta (PEMIMPIN, PENGUJI dll), return kosong
+    return '';
 };
 
 export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRefresh }) => {
@@ -62,6 +79,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
   const [rawSheetData, setRawSheetData] = useState<any[][]>([]);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
+  const [fileSchoolName, setFileSchoolName] = useState<string>('');
   
   // Column Mapping State
   const [colMap, setColMap] = useState({
@@ -104,7 +122,8 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
               name: nameVal || '[TIADA NAMA]',
               icNumber: colMap.ic > -1 && row[colMap.ic] ? String(row[colMap.ic]).trim() : '',
               category: normalizeRole(rawCategory),
-              schoolName: colMap.school > -1 && row[colMap.school] ? String(row[colMap.school]).toUpperCase().trim() : 'TIDAK DINYATAKAN',
+              kategori: extractKategori(rawCategory),
+              schoolName: fileSchoolName || (colMap.school > -1 && row[colMap.school] ? String(row[colMap.school]).toUpperCase().trim() : 'TIDAK DINYATAKAN'),
               schoolCode: colMap.code > -1 && row[colMap.code] ? String(row[colMap.code]).toUpperCase().trim() : 'XXX',
               phone: colMap.phone > -1 && row[colMap.phone] ? String(row[colMap.phone]) : '',
               gender: colMap.gender > -1 && row[colMap.gender] ? String(row[colMap.gender]) : 'Lelaki',
@@ -118,7 +137,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
       setParsedData(newParsedRows);
 
-  }, [rawSheetData, colMap]);
+  }, [rawSheetData, colMap, fileSchoolName]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
@@ -135,6 +154,10 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
       try {
           const file = files[0]; // Process first file only for simplicity in mapping
+          
+          // Extract school name from filename (format: "NAMA SEKOLAH - LENCANA.xlsx")
+          const fileSchoolName = file.name.replace(/\.xlsx?$/i, '').split(' - ')[0]?.trim().toUpperCase() || '';
+          
           const data = await file.arrayBuffer();
           const workbook = XLSX.read(data);
           const sheetName = workbook.SheetNames[0];
@@ -207,6 +230,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
           setColMap(newMap);
           setRawSheetData(dataRows);
+          setFileSchoolName(fileSchoolName);
           
           alert(`Fail dibaca. Sila semak 'Padanan Lajur' dan jadual di bawah.`);
 
@@ -229,7 +253,8 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
       const schoolsMap: Record<string, ParsedRow[]> = {};
       parsedData.forEach(row => {
           const sName = row.schoolName === 'TIDAK DINYATAKAN' ? 'DATA_IMPORT_MANUAL' : row.schoolName;
-          const key = sName + '|' + row.schoolCode;
+          // Group by school NAME only (ignore code differences within same file)
+          const key = sName;
           if (!schoolsMap[key]) schoolsMap[key] = [];
           schoolsMap[key].push(row);
       });
@@ -241,6 +266,16 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
           const first = rows[0];
           const actualSchoolName = first.schoolName === 'TIDAK DINYATAKAN' ? 'DATA_IMPORT_MANUAL' : first.schoolName;
 
+          // Ambil kod sekolah yang paling kerap muncul (majority vote)
+          const codeCounts: Record<string, number> = {};
+          rows.forEach(r => {
+              const code = r.schoolCode?.trim();
+              if (code && code !== 'XXX') {
+                  codeCounts[code] = (codeCounts[code] || 0) + 1;
+              }
+          });
+          const bestCode = Object.entries(codeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || first.schoolCode;
+
           const students: Participant[] = [];
           const assistants: Participant[] = [];
           const examiners: Participant[] = [];
@@ -250,18 +285,21 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
           rows.forEach((r) => {
               if (r.name === '[TIADA NAMA]') return;
 
+              const cat = r.category;
+              const isPeserta = cat === 'PESERTA';
+
               const p: Participant = {
                   id: Date.now() + Math.random(),
                   name: r.name,
                   gender: r.gender,
-                  race: r.race, // Ensure this maps correctly from ParsedRow
+                  race: r.race,
                   membershipId: r.membershipId,
                   icNumber: r.icNumber,
                   phoneNumber: r.phone,
+                  kategori: isPeserta ? (r.kategori || 'Pengakap Kanak-kanak') : undefined,
                   remarks: 'IMPORT_EXCEL'
               };
 
-              const cat = r.category;
               if (cat === 'PENGUJI') examiners.push(p);
               else if (cat === 'PENOLONG PEMIMPIN' || cat === 'PEMIMPIN') {
                   assistants.push(p);
@@ -273,7 +311,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
 
           const leaderInfo: LeaderInfo = {
               schoolName: actualSchoolName,
-              schoolCode: first.schoolCode,
+              schoolCode: bestCode,
               groupNumber: first.groupNumber || '',
               principalName: 'DATA IMPORT',
               principalPhone: '',
@@ -304,6 +342,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
       setRawSheetData([]);
       setImportLog([]);
       setExcelHeaders([]);
+      setFileSchoolName('');
   };
 
   // Migration Handlers
@@ -473,6 +512,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                                  <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[100px]">SISTEM: KAUM</th>
                                  <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[100px]">SISTEM: ID AHLI</th>
                                  <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[100px]">SISTEM: PERANAN</th>
+                                 <th className="px-3 py-2 border-b border-r border-blue-200 bg-blue-100 text-blue-900 min-w-[140px]">SISTEM: KATEGORI</th>
 
                                  {/* RAW EXCEL COLUMNS */}
                                  {excelHeaders.map((h, i) => (
@@ -492,6 +532,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                                      <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800">{row.race}</td>
                                      <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800 font-mono">{row.membershipId}</td>
                                      <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800 font-bold">{row.category}</td>
+                                     <td className="px-3 py-2 border-r border-blue-100 bg-blue-50 text-blue-800">{row.kategori || '-'}</td>
 
                                      {/* RAW DATA CELLS */}
                                      {excelHeaders.map((_, cIndex) => (

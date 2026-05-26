@@ -32,10 +32,10 @@ const getBadgeByName = async (badgeName: string) => {
 };
 
 const getSchoolByCodeOrName = async (schoolCode?: string, schoolName?: string) => {
-  let query = supabase.from('schools').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)');
+  let query = supabase.from('schools').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)').eq('is_active', true);
   if (schoolCode) query = query.eq('school_code', normalize(schoolCode));
   else query = query.eq('name', normalize(schoolName));
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await query.limit(1).maybeSingle();
   if (error) throw error;
   return data;
 };
@@ -70,14 +70,29 @@ export const fetchCloudData = async (
 ): Promise<ApiResponse> => {
   try {
     let schoolsQuery = supabase.from('schools').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)').eq('is_active', true).order('name');
-    let submissionsQuery = supabase.from('submission_people').select(`
-      *,
-      submission:submissions(
-        id, submission_year, submitted_at, status, remarks,
-        school:schools(id, name, school_code, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
-        badge:badges(id, name)
-      )
-    `).eq('is_deleted', false).order('created_at', { ascending: false });
+    // Paginated fetch to overcome Supabase 1000-row default limit
+    const fetchAllSubmissionPeople = async () => {
+      const pageSize = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase.from('submission_people').select(`
+          *,
+          submission:submissions(
+            id, submission_year, submitted_at, status, remarks,
+            school:schools(id, name, school_code, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
+            badge:badges(id, name)
+          )
+        `).eq('is_deleted', false).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+        if (error) return { data: null, error };
+        allData = allData.concat(data || []);
+        hasMore = (data || []).length === pageSize;
+        from += pageSize;
+      }
+      return { data: allData, error: null };
+    };
+    const peopleRes = await fetchAllSubmissionPeople();
 
     if (role === 'negeri' && negeriCode) {
       const negeriId = await getNegeriId(negeriCode);
@@ -88,19 +103,19 @@ export const fetchCloudData = async (
       if (daerahId) schoolsQuery = schoolsQuery.eq('daerah_id', daerahId);
     }
 
-    const [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, peopleRes, statusRes] = await Promise.all([
+    const [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, statusRes] = await Promise.all([
       schoolsQuery,
-      supabase.from('badges').select('*').order('name'),
+      supabase.from('badges').select('*, negeri:negeri_id(code,name), daerah:daerah_id(code,name)').order('name'),
       supabase.from('negeri').select('*').order('name'),
       supabase.from('daerah').select('*, negeri:negeri_id(code,name)').order('name'),
       supabase.from('school_profiles').select('*, school:school_id(school_code,name,group_number)').order('updated_at', { ascending: false }),
-      submissionsQuery,
       supabase.from('school_badge_status').select('*, school:school_id(school_code,name), badge:badge_id(name)').order('updated_at', { ascending: false }),
     ]);
 
-    for (const res of [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, peopleRes, statusRes]) {
+    for (const res of [schoolsRes, badgesRes, negeriRes, daerahRes, profilesRes, statusRes]) {
       if (res.error) throw res.error;
     }
+    if (peopleRes.error) throw peopleRes.error;
 
     const allowedSchoolCodes = new Set((schoolsRes.data || []).map((s: any) => s.school_code));
 
@@ -159,13 +174,23 @@ export const fetchCloudData = async (
         studentPhone: p.phone_number || '',
         role: p.role || 'PESERTA',
         category: p.category || '',
+        unit: p.unit || '',
+        makanan: p.makanan || '',
+        masalahKesihatan: p.masalah_kesihatan || '',
+        masalahKesihatanLain: p.masalah_kesihatan_lain || '',
         remarks: p.remarks || p.submission?.remarks || '',
+        isWithdrawn: !!p.is_withdrawn,
+        withdrawnAt: p.withdrawn_at || undefined,
+        withdrawalReason: p.withdrawal_reason || undefined,
+        withdrawalNotes: p.withdrawal_notes || undefined,
+        participantId: p.id,
       }));
 
     const userProfiles: UserProfile[] = (profilesRes.data || []).map((p: any) => ({
       schoolCode: p.school?.school_code || '',
       schoolName: p.school?.name || '',
       groupNumber: p.school?.group_number || '',
+      phone: p.phone || '',
       principalName: p.principal_name || '',
       principalPhone: p.principal_phone || '',
       leaderName: p.leader_name || '',
@@ -180,7 +205,15 @@ export const fetchCloudData = async (
 
     const negeriList: Negeri[] = (negeriRes.data || []).map((n: any) => ({ code: n.code, name: n.name, createdDate: n.created_at }));
     const daerahList: Daerah[] = (daerahRes.data || []).map((d: any) => ({ code: d.code, name: d.name, negeriCode: d.negeri?.code || '', createdDate: d.created_at }));
-    const badges: Badge[] = (badgesRes.data || []).map((b: any) => ({ name: b.name, isOpen: b.is_open, deadline: b.deadline }));
+    const badges: Badge[] = (badgesRes.data || []).map((b: any) => ({
+      name: b.name,
+      isOpen: b.is_open,
+      deadline: b.deadline,
+      scope: b.scope || 'daerah',
+      negeriCode: b.negeri?.code,
+      daerahCode: b.daerah?.code,
+      requiresDaerahApproval: !!b.requires_daerah_approval,
+    }));
 
     return { status: 'success', schools, badges, badgeTypes: badges.map(b => b.name), submissions, userProfiles, negeriList, daerahList, isRegistrationOpen: badges.some(b => b.isOpen) };
   } catch (error: any) {
@@ -193,7 +226,8 @@ const createSubmissionWithPeople = async (
   leaderInfo: LeaderInfo,
   people: Array<Participant & { role?: string }>,
   customDate?: string,
-  source: 'manual' | 'bulk_import' | 'migration' = 'manual'
+  source: 'manual' | 'bulk_import' | 'migration' = 'manual',
+  submissionStatus: 'draft' | 'submitted' = 'draft'
 ) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
@@ -223,7 +257,7 @@ const createSubmissionWithPeople = async (
       submission_year: year,
       submitted_at: submittedAt,
       submitted_by: user?.id || null,
-      status: 'submitted',
+      status: submissionStatus,
       source,
       remarks: leaderInfo.groupNumber ? `No Kumpulan: ${leaderInfo.groupNumber}` : null,
     })
@@ -231,16 +265,42 @@ const createSubmissionWithPeople = async (
     .single();
   if (subError) throw subError;
 
+  const formatIcNumber = (ic: string | undefined): string | null => {
+    if (!ic) return null;
+    const digits = ic.replace(/\D/g, '');
+    if (digits.length === 12) return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
+    return ic.trim() || null;
+  };
+
+  const formatPhoneNumber = (phone: string | undefined): string | null => {
+    if (!phone) return null;
+    let cleaned = phone.trim();
+    if (!cleaned) return null;
+    // Buang +6 atau 6 di depan dulu untuk normalize
+    cleaned = cleaned.replace(/^\+6/, '').replace(/^6(?=0)/, '');
+    // Tambah +6 di depan jika bermula dengan 0
+    if (cleaned.startsWith('0')) {
+      cleaned = '+6' + cleaned;
+    } else if (!cleaned.startsWith('+')) {
+      cleaned = '+6' + cleaned;
+    }
+    return cleaned;
+  };
+
   const rows = people.filter(p => p.name?.trim()).map(p => ({
     submission_id: submission.id,
     name: normalize(p.name),
     gender: p.gender || null,
     race: p.race || null,
     membership_id: normalize(p.membershipId),
-    ic_number: p.icNumber || null,
-    phone_number: p.phoneNumber || null,
+    ic_number: formatIcNumber(p.icNumber),
+    phone_number: formatPhoneNumber(p.phoneNumber),
     role: (p as any).role || 'PESERTA',
-    category: p.category || null,
+    category: (p as any).kategori || null,
+    unit: (p as any).unit || null,
+    makanan: (p as any).makanan || null,
+    masalah_kesihatan: (p as any).masalahKesihatan || null,
+    masalah_kesihatan_lain: (p as any).masalahKesihatanLain || null,
     remarks: p.remarks || null,
   }));
 
@@ -249,25 +309,32 @@ const createSubmissionWithPeople = async (
     if (peopleError) throw peopleError;
   }
 
-  await supabase.from('school_profiles').upsert({
-    school_id: school.id,
-    principal_name: normalize(leaderInfo.principalName),
-    principal_phone: leaderInfo.principalPhone || null,
-    leader_name: normalize(leaderInfo.leaderName),
-    leader_phone: leaderInfo.phone || null,
-    leader_race: leaderInfo.race || null,
-    updated_by: user?.id || null,
-  }, { onConflict: 'school_id' });
+  // Only upsert school_profiles if no profile exists yet (don't overwrite existing profile data)
+  const { data: existingProfile } = await supabase.from('school_profiles').select('id').eq('school_id', school.id).single();
+  if (!existingProfile) {
+    await supabase.from('school_profiles').insert({
+      school_id: school.id,
+      principal_name: normalize(leaderInfo.principalName),
+      principal_phone: leaderInfo.principalPhone || null,
+      leader_name: normalize(leaderInfo.leaderName),
+      leader_phone: leaderInfo.phone || null,
+      leader_race: leaderInfo.race || null,
+      updated_by: user?.id || null,
+    });
+  }
 
-  await supabase.from('school_badge_status').upsert({
-    school_id: school.id,
-    badge_id: badge.id,
-    year,
-    status: 'submitted',
-    submitted_at: submittedAt,
-  }, { onConflict: 'school_id,badge_id,year' });
+  // Hanya upsert school_badge_status jika bukan draft
+  if (submissionStatus !== 'draft') {
+    await supabase.from('school_badge_status').upsert({
+      school_id: school.id,
+      badge_id: badge.id,
+      year,
+      status: 'submitted',
+      submitted_at: submittedAt,
+    }, { onConflict: 'school_id,badge_id,year' });
+  }
 
-  return { status: 'success', message: 'Pendaftaran berjaya disimpan ke Supabase.' };
+  return { status: 'success', message: submissionStatus === 'draft' ? 'Data berjaya disimpan sebagai draf.' : 'Pendaftaran berjaya dihantar.' };
 };
 
 export const submitRegistration = async (
@@ -277,7 +344,8 @@ export const submitRegistration = async (
   assistants: Participant[] = [],
   examiners: Participant[] = [],
   customDate?: string,
-  _csrfToken?: string
+  _csrfToken?: string,
+  submissionStatus: 'draft' | 'submitted' = 'draft'
 ): Promise<ApiResponse> => {
   try {
     const allPeople = [
@@ -285,7 +353,7 @@ export const submitRegistration = async (
       ...assistants.map(p => ({ ...p, role: 'PENOLONG PEMIMPIN' })),
       ...examiners.map(p => ({ ...p, role: 'PENGUJI' })),
     ];
-    const result = await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual');
+    const result = await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual', submissionStatus);
     return result as ApiResponse;
   } catch (error: any) {
     console.error('submitRegistration Supabase error:', error);
@@ -301,7 +369,7 @@ export const bulkSubmitRegistration = async (
     badgeType: string;
     year: number;
     role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
-    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; remarks?: string; }>;
+    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string; }>;
   },
   _csrfToken?: string
 ): Promise<ApiResponse> => {
@@ -316,18 +384,26 @@ export const bulkSubmitRegistration = async (
       phone: '',
       badgeType: payload.badgeType,
     };
-    const people = payload.records.map((r, idx) => ({
-      id: idx + 1,
-      name: r.student,
-      icNumber: r.icNumber,
-      membershipId: r.membershipId,
-      gender: r.gender,
-      race: r.race,
-      phoneNumber: r.phoneNumber || '',
-      category: r.category || 'Perdana',
-      remarks: r.remarks || '',
-      role: r.role || payload.role,
-    }));
+    const people = payload.records.map((r, idx) => {
+      const role = r.role || payload.role;
+      const isPeserta = role === 'PESERTA';
+      return {
+        id: idx + 1,
+        name: r.student,
+        icNumber: r.icNumber,
+        membershipId: r.membershipId,
+        gender: r.gender,
+        race: r.race,
+        phoneNumber: r.phoneNumber || '',
+        kategori: isPeserta ? (r.category || 'Pengakap Kanak-kanak') : '',
+        unit: isPeserta ? (r.unit || 'Perdana') : '',
+        makanan: isPeserta ? (r.makanan || 'Biasa') : '',
+        masalahKesihatan: isPeserta ? (r.masalahKesihatan || 'Tiada') : '',
+        masalahKesihatanLain: isPeserta ? (r.masalahKesihatanLain || '') : '',
+        remarks: r.remarks || '',
+        role,
+      };
+    });
     return await createSubmissionWithPeople(leaderInfo, people, `${payload.year}-01-01`, 'bulk_import') as ApiResponse;
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal import bulk.' };
@@ -382,11 +458,16 @@ export const addSchool = async (_url: string, schoolData: { name?: string; schoo
   }
 };
 
-export const addSchoolBatch = async (_url: string, schools: string[], negeriCode?: string, daerahCode?: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const addSchoolBatch = async (_url: string, schools: string[] | { name: string; schoolCode: string }[], negeriCode?: string, daerahCode?: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
     const negeriId = negeriCode ? await getNegeriId(negeriCode) : null;
     const daerahId = daerahCode ? await getDaerahId(daerahCode) : null;
-    const rows = schools.map(name => ({ name: normalize(name), school_code: normalize(name), negeri_id: negeriId, daerah_id: daerahId, is_active: true }));
+    const rows = schools.map(item => {
+      if (typeof item === 'string') {
+        return { name: normalize(item), school_code: normalize(item), negeri_id: negeriId, daerah_id: daerahId, is_active: true };
+      }
+      return { name: normalize(item.name), school_code: normalize(item.schoolCode), negeri_id: negeriId, daerah_id: daerahId, is_active: true };
+    });
     const { error } = await supabase.from('schools').insert(rows);
     if (error) throw error;
     return { status: 'success', message: `${schools.length} sekolah berjaya ditambah.` };
@@ -402,6 +483,19 @@ export const deleteSchool = async (_url: string, schoolCodeOrName: string, _csrf
     return { status: 'success', message: 'Sekolah berjaya dipadam.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal padam sekolah.' };
+  }
+};
+
+export const updateSchoolCode = async (schoolName: string, newSchoolCode: string): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase
+      .from('schools')
+      .update({ school_code: normalize(newSchoolCode) })
+      .eq('name', normalize(schoolName));
+    if (error) throw error;
+    return { status: 'success', message: 'Kod sekolah berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini kod sekolah.' };
   }
 };
 
@@ -451,6 +545,15 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
     
     const badge = await getBadgeByName(badgeName);
     if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
+
+    // Tukar semua submission draft → submitted untuk sekolah + badge + tahun ini
+    await supabase
+      .from('submissions')
+      .update({ status: 'submitted' })
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('submission_year', year || currentYear())
+      .eq('status', 'draft');
     
     const { error } = await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'submitted', submitted_at: new Date().toISOString() }, { onConflict: 'school_id,badge_id,year' });
     if (error) throw error;
@@ -466,12 +569,46 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
     const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
     const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
 
+    console.log('[unlockSchoolBadge] Input:', { schoolName, badgeNameWithYear, parsedBadge: badgeName, parsedYear: year });
+
     const school = await getSchoolByCodeOrName(undefined, schoolName);
+    if (!school) return { status: 'error', message: `Sekolah '${schoolName}' tidak dijumpai dalam database.` };
+
     const badge = await getBadgeByName(badgeName);
-    if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    await supabase.from('school_badge_status').delete().eq('school_id', school.id).eq('badge_id', badge.id).eq('year', year || currentYear());
+    if (!badge) return { status: 'error', message: `Badge '${badgeName}' tidak dijumpai dalam database.` };
+
+    console.log('[unlockSchoolBadge] Found:', { schoolId: school.id, badgeId: badge.id, year });
+
+    // Cuba UPDATE dulu (row sudah wujud kerana nampak dalam UI)
+    const { data: updateData, error: updateError } = await supabase
+      .from('school_badge_status')
+      .update({ status: 'reopened' })
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('year', year || currentYear())
+      .select();
+
+    console.log('[unlockSchoolBadge] UPDATE result:', { updateData, updateError });
+
+    if (updateError) throw updateError;
+
+    // Jika UPDATE tak affect mana-mana row, cuba UPSERT sebagai fallback
+    if (!updateData || updateData.length === 0) {
+      console.log('[unlockSchoolBadge] UPDATE 0 rows, trying UPSERT fallback...');
+      const { data: upsertData, error: upsertError } = await supabase
+        .from('school_badge_status')
+        .upsert(
+          { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
+          { onConflict: 'school_id,badge_id,year' }
+        )
+        .select();
+      console.log('[unlockSchoolBadge] UPSERT result:', { upsertData, upsertError });
+      if (upsertError) throw upsertError;
+    }
+
     return { status: 'success' };
   } catch (error: any) {
+    console.error('[unlockSchoolBadge] ERROR:', error);
     return { status: 'error', message: error.message || 'Gagal unlock badge.' };
   }
 };
@@ -506,6 +643,7 @@ export const updateUserProfile = async (_url: string, schoolCode: string, profil
     }
     const { error: profileUpdateError } = await supabase.from('school_profiles').upsert({
       school_id: school.id,
+      phone: profileData.phone || null,
       principal_name: profileData.principalName || null,
       principal_phone: profileData.principalPhone || null,
       leader_name: profileData.leaderName || null,
@@ -566,9 +704,42 @@ export const deleteDaerah = async (_url: string, daerahCode: string, _csrfToken?
   }
 };
 
-export const addBadgeType = async (_url: string, badgeName: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const updateDaerah = async (oldCode: string, newCode: string, newName: string): Promise<ApiResponse> => {
   try {
-    const { error } = await supabase.from('badges').insert({ name: badgeName.trim(), is_open: true });
+    const updates: any = {};
+    const oldNorm = normalize(oldCode);
+    const newCodeNorm = normalize(newCode);
+    if (newCodeNorm && newCodeNorm !== oldNorm) updates.code = newCodeNorm;
+    if (newName && newName.trim()) updates.name = newName.trim();
+    if (Object.keys(updates).length === 0) {
+      return { status: 'success', message: 'Tiada perubahan.' };
+    }
+    const { error } = await supabase.from('daerah').update(updates).eq('code', oldNorm);
+    if (error) throw error;
+    return { status: 'success', message: 'Daerah berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini daerah.' };
+  }
+};
+
+export const addBadgeType = async (
+  _url: string,
+  badgeName: string,
+  _csrfToken?: string,
+  options?: { scope?: 'negeri' | 'daerah'; negeriCode?: string; daerahCode?: string }
+): Promise<ApiResponse> => {
+  try {
+    const insert: any = { name: badgeName.trim(), is_open: true };
+    if (options?.scope) insert.scope = options.scope;
+    if (options?.negeriCode) {
+      const negeriId = await getNegeriId(options.negeriCode);
+      if (negeriId) insert.negeri_id = negeriId;
+    }
+    if (options?.daerahCode) {
+      const daerahId = await getDaerahId(options.daerahCode);
+      if (daerahId) insert.daerah_id = daerahId;
+    }
+    const { error } = await supabase.from('badges').insert(insert);
     if (error) throw error;
     return { status: 'success', message: 'Badge berjaya ditambah.' };
   } catch (error: any) {
@@ -583,6 +754,16 @@ export const deleteBadgeType = async (_url: string, badgeName: string, _csrfToke
     return { status: 'success', message: 'Badge berjaya dipadam.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal padam badge.' };
+  }
+};
+
+export const updateBadgeName = async (_url: string, oldName: string, newName: string, _csrfToken?: string): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase.from('badges').update({ name: newName.trim() }).eq('name', oldName.trim());
+    if (error) throw error;
+    return { status: 'success', message: 'Nama lencana berjaya dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini nama lencana.' };
   }
 };
 
@@ -619,6 +800,40 @@ export const updateBadgeDeadline = async (_url: string, badgeName: string, deadl
     return { status: 'success', message: 'Tarikh akhir berjaya dikemaskini.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal kemaskini deadline.' };
+  }
+};
+
+export const updateBadgeRequiresDaerahApproval = async (badgeName: string, requires: boolean): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase.from('badges').update({ requires_daerah_approval: requires }).eq('name', badgeName.trim());
+    if (error) throw error;
+    return { status: 'success', message: 'Tetapan pengesahan daerah dikemaskini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemaskini.' };
+  }
+};
+
+export const approveDaerahLevel = async (schoolName: string, badgeName: string, year?: number): Promise<ApiResponse> => {
+  try {
+    const targetYear = year || currentYear();
+    const school = await getSchoolByCodeOrName(schoolName);
+    if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
+    const badge = await getBadgeByName(badgeName);
+    if (!badge) return { status: 'error', message: 'Program tidak dijumpai.' };
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('school_badge_status').upsert({
+      school_id: school.id,
+      badge_id: badge.id,
+      year: targetYear,
+      status: 'submitted',
+      daerah_approved: true,
+      daerah_approved_at: new Date().toISOString(),
+      daerah_approved_by: session?.user?.id || null,
+    }, { onConflict: 'school_id,badge_id,year' });
+    if (error) throw error;
+    return { status: 'success', message: 'Pengesahan daerah berjaya.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal pengesahan daerah.' };
   }
 };
 
@@ -707,15 +922,64 @@ export const recordAttendanceVerification = async (record: { schoolCode: string;
   }
 };
 
-export const getAttendanceVerifications = async (year?: number, daerahCode?: string): Promise<any[]> => {
+export const withdrawParticipant = async (
+  participantId: string,
+  reason: string,
+  notes?: string
+): Promise<ApiResponse> => {
   try {
-    let query = supabase.from('attendance_verifications').select('*, school:school_id(name, school_code, daerah:daerah_id(code)), badge:badge_id(name)').order('verified_at', { ascending: false });
+    if (!participantId) return { status: 'error', message: 'ID peserta diperlukan.' };
+    if (!reason || !reason.trim()) return { status: 'error', message: 'Sebab penarikan diperlukan.' };
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase
+      .from('submission_people')
+      .update({
+        is_withdrawn: true,
+        withdrawn_at: new Date().toISOString(),
+        withdrawal_reason: reason.trim(),
+        withdrawal_notes: notes?.trim() || null,
+        withdrawn_by: session?.user?.id || null,
+      })
+      .eq('id', participantId);
+    if (error) throw error;
+    return { status: 'success', message: 'Peserta berjaya ditarik balik.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal tarik balik peserta.' };
+  }
+};
+
+export const unwithdrawParticipant = async (participantId: string): Promise<ApiResponse> => {
+  try {
+    if (!participantId) return { status: 'error', message: 'ID peserta diperlukan.' };
+    const { error } = await supabase
+      .from('submission_people')
+      .update({
+        is_withdrawn: false,
+        withdrawn_at: null,
+        withdrawal_reason: null,
+        withdrawal_notes: null,
+        withdrawn_by: null,
+      })
+      .eq('id', participantId);
+    if (error) throw error;
+    return { status: 'success', message: 'Penarikan diri berjaya dibatalkan.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal batal penarikan.' };
+  }
+};
+
+export const getAttendanceVerifications = async (year?: number, daerahCode?: string, negeriCode?: string): Promise<any[]> => {
+  try {
+    let query = supabase.from('attendance_verifications').select('*, school:school_id(name, school_code, negeri:negeri_id(code), daerah:daerah_id(code)), badge:badge_id(name)').order('verified_at', { ascending: false });
     if (year) query = query.eq('year', year);
     const { data, error } = await query;
     if (error) throw error;
     let results = data || [];
     if (daerahCode) {
       results = results.filter((r: any) => r.school?.daerah?.code === daerahCode);
+    }
+    if (negeriCode) {
+      results = results.filter((r: any) => r.school?.negeri?.code === negeriCode);
     }
     return results;
   } catch (error: any) {
@@ -779,20 +1043,44 @@ export const reopenSchoolBadge = async (_url: string, schoolCodeOrName: string, 
   }
 };
 
-export const getSubmittedSchools = async (daerahCode?: string, year?: number): Promise<any[]> => {
+export const getSubmittedSchools = async (daerahCode?: string, year?: number, negeriCode?: string): Promise<any[]> => {
   try {
     const targetYear = year || currentYear();
     const { data, error } = await supabase
       .from('school_badge_status')
-      .select('*, school:school_id(id, name, school_code, daerah:daerah_id(code)), badge:badge_id(name)')
+      .select('*, school:school_id(id, name, school_code, negeri:negeri_id(code), daerah:daerah_id(code)), badge:badge_id(name, scope, requires_daerah_approval, negeri:negeri_id(code), daerah:daerah_id(code))')
       .eq('status', 'submitted')
       .eq('year', targetYear)
       .not('submitted_at', 'is', null)
       .order('submitted_at', { ascending: false });
     if (error) throw error;
     let results = data || [];
-    if (daerahCode) {
-      results = results.filter((r: any) => r.school?.daerah?.code === daerahCode);
+    // Admin daerah: paparkan program daerah + program negeri yang requires_daerah_approval=true (belum disahkan daerah)
+    if (daerahCode && !negeriCode) {
+      results = results.filter((r: any) => {
+        const badgeScope = r.badge?.scope || 'daerah';
+        if (r.school?.daerah?.code !== daerahCode) return false;
+        if (badgeScope === 'daerah') {
+          if (r.badge?.daerah?.code && r.badge.daerah.code !== daerahCode) return false;
+          return true;
+        }
+        // scope === 'negeri'
+        if (!r.badge?.requires_daerah_approval) return false;
+        if (r.daerah_approved) return false; // dah disahkan daerah, takde dalam senarai pending
+        return true;
+      });
+    }
+    // Admin negeri: program scope=negeri sahaja
+    if (negeriCode && !daerahCode) {
+      results = results.filter((r: any) => {
+        const badgeScope = r.badge?.scope || 'daerah';
+        if (badgeScope !== 'negeri') return false;
+        if (r.school?.negeri?.code !== negeriCode) return false;
+        if (r.badge?.negeri?.code && r.badge.negeri.code !== negeriCode) return false;
+        // Kalau perlu pengesahan daerah, hanya papar yang dah disahkan daerah
+        if (r.badge?.requires_daerah_approval && !r.daerah_approved) return false;
+        return true;
+      });
     }
     return results;
   } catch (error: any) {
@@ -884,7 +1172,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -898,6 +1186,10 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber || null;
     if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
     if (updates.category !== undefined) updateData.category = updates.category || null;
+    if (updates.unit !== undefined) updateData.unit = updates.unit || null;
+    if (updates.makanan !== undefined) updateData.makanan = updates.makanan || null;
+    if (updates.masalahKesihatan !== undefined) updateData.masalah_kesihatan = updates.masalahKesihatan || null;
+    if (updates.masalahKesihatanLain !== undefined) updateData.masalah_kesihatan_lain = updates.masalahKesihatanLain || null;
     if (updates.remarks !== undefined) updateData.remarks = updates.remarks || null;
 
     let query = supabase.from('submission_people').update(updateData);

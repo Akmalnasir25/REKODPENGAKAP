@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -7,11 +7,15 @@ import { AdminMigration } from './AdminMigration';
 import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
-import { SubmissionData, Badge, School as SchoolType } from '../types';
+import { PengesahanTab } from './PengesahanTab';
+import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { uploadLogo, getLogoUrl } from '../services/logoService';
+import { WithdrawalScanner } from './WithdrawalScanner';
+import { WithdrawalsList } from './WithdrawalsList';
 
 interface PengesahanTabProps {
   data: SubmissionData[];
@@ -211,15 +215,16 @@ interface AdminDaerahPanelProps {
   data: SubmissionData[];
   schools: SchoolType[];
   badges: Badge[]; 
+  userProfiles?: UserProfile[];
   isRegistrationOpen: boolean; 
   refreshData: () => void;
   deleteData: (item: SubmissionData) => void;
 }
 
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
-  daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, isRegistrationOpen, refreshData, deleteData 
+  daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'withdrawals' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -232,62 +237,8 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
-  const [submittedList, setSubmittedList] = useState<any[]>([]);
-  const [loadingSubmitted, setLoadingSubmitted] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const fetchSubmitted = useCallback(async () => {
-    setLoadingSubmitted(true);
-    try {
-      const results = await getSubmittedSchools(daerahCode, new Date().getFullYear());
-      setSubmittedList(results);
-    } catch (e) {
-      console.error('Failed to fetch submitted schools:', e);
-    } finally {
-      setLoadingSubmitted(false);
-    }
-  }, [daerahCode]);
-
-  useEffect(() => {
-    fetchSubmitted();
-  }, [fetchSubmitted]);
-
-  const handleApproveSubmitted = async (schoolName: string, badgeName: string) => {
-    if (!confirm(`Sahkan pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
-    setActionLoading(`approve-${schoolName}-${badgeName}`);
-    try {
-      const res = await approveSchoolBadge(scriptUrl, schoolName, badgeName);
-      if (res.status === 'success') {
-        await fetchSubmitted();
-        refreshData();
-      } else {
-        alert('Gagal: ' + res.message);
-      }
-    } catch (e) {
-      alert('Ralat sambungan.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleReopenSubmitted = async (schoolName: string, badgeName: string) => {
-    if (!confirm(`Tolak/Buka semula pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
-    setActionLoading(`reopen-${schoolName}-${badgeName}`);
-    try {
-      const badgeKey = `${badgeName}_${new Date().getFullYear()}`;
-      const res = await reopenSchoolBadge(scriptUrl, schoolName, badgeKey);
-      if (res.status === 'success') {
-        await fetchSubmitted();
-        refreshData();
-      } else {
-        alert('Gagal: ' + res.message);
-      }
-    } catch (e) {
-      alert('Ralat sambungan.');
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const [daerahLogoUrl, setDaerahLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
@@ -302,6 +253,34 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   useEffect(() => {
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
+
+  // Load daerah logo on mount
+  useEffect(() => {
+    getLogoUrl('daerah', daerahCode).then(url => setDaerahLogoUrl(url));
+  }, [daerahCode]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Sila pilih fail imej sahaja (PNG, JPG, dll).');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Saiz fail melebihi 2MB. Sila pilih fail yang lebih kecil.');
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const url = await uploadLogo(file, 'daerah', daerahCode);
+      setDaerahLogoUrl(url);
+      alert('Logo daerah berjaya dimuat naik!');
+    } catch (err: any) {
+      alert('Gagal muat naik logo: ' + (err.message || 'Ralat tidak diketahui'));
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   const handleDeleteAttendance = async (record: any) => {
     const schoolName = record.school?.name || 'sekolah ini';
@@ -322,9 +301,22 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     }
   };
 
-  // Filter data untuk daerah ini sahaja
+  // Filter data untuk daerah ini sahaja.
+  // NOTA: peserta program scope=negeri tetap dipaparkan untuk admin daerah pantau,
+  // tetapi mereka tidak boleh edit/sahkan (lihat readOnlyBadges di bawah).
   const filteredData = data.filter(d => d.daerahCode === daerahCode);
   const filteredSchools = schools.filter(s => s.daerahCode === daerahCode);
+
+  // Senarai badge yang readonly untuk admin daerah:
+  // - Program scope=negeri yang TIDAK perlu pengesahan daerah (terus ke negeri)
+  // - Program scope=negeri yang dah disahkan daerah (sebab dah komit, jangan ubah)
+  // Untuk program scope=negeri yang requiresDaerahApproval=true DAN belum disahkan,
+  // daerah boleh edit data peserta
+  const readOnlyBadges = new Set(
+    badges
+      .filter(b => (b.scope || 'daerah') === 'negeri' && !b.requiresDaerahApproval)
+      .map(b => b.name)
+  );
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -502,8 +494,10 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
+    { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
+    { id: 'profile', label: 'Profil', icon: User, allowed: true },
   ];
 
   const SidebarItem = ({ icon: Icon, label, badge, onClick, isActive, className }: any) => (
@@ -563,14 +557,12 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
           </div>
 
           <div className="p-6 border-b border-slate-800 flex flex-col items-center text-center overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 shadow-lg bg-green-600 shadow-green-900/50">
-                  <Shield size={24} className="text-white" />
-              </div>
+              <img src={daerahLogoUrl || LOGO_URL} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
               {isDesktopSidebarOpen && (
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-lg tracking-tight">Panel Admin Daerah</h2>
                     <p className="text-[10px] font-mono mt-1 tracking-wider uppercase px-2 py-0.5 rounded bg-green-500/20 text-green-300">
-                        PENTADBIR DAERAH
+                        {daerahName}
                     </p>
                   </div>
               )}
@@ -587,14 +579,6 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                     onClick={() => { setTab(item.id as any); setIsMobileSidebarOpen(false); }}
                   />
               ))}
-              
-              {/* Change Password Button */}
-              <SidebarItem 
-                icon={Key} 
-                label="Tukar Kata Laluan" 
-                onClick={() => { setShowPasswordModal(true); setIsMobileSidebarOpen(false); }}
-                className="mt-4 text-amber-500 hover:text-amber-400 hover:bg-amber-900/20 border border-amber-900/30"
-              />
           </div>
 
           <div className="p-4 border-t border-slate-800 bg-slate-900">
@@ -653,7 +637,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
             
             {tab === 'badges' && (
               <div className="animate-[fadeIn_0.2s_ease-out] print:hidden">
-                 <AdminBadges badges={badges} scriptUrl={scriptUrl} onRefresh={refreshData} />
+                 <AdminBadges badges={badges} scriptUrl={scriptUrl} onRefresh={refreshData} scopeContext={{ type: 'daerah', daerahCode, label: `Daerah ${daerahName}` }} />
               </div>
             )}
 
@@ -687,7 +671,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
 
             {tab === 'dashboard' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} onRefresh={refreshData} onDelete={deleteData} />
+                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} userProfiles={userProfiles} onRefresh={refreshData} onDelete={deleteData} readOnlyBadges={readOnlyBadges} />
               </div>
             )}
 
@@ -703,10 +687,20 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
                     <ScanLine size={20} className="text-green-600" /> Pengesahan Kehadiran QR
                   </h2>
-                  <p className="text-sm text-slate-500 mb-6">
+                  <p className="text-sm text-slate-500 mb-4">
                     Imbas QR code sekolah untuk mengesahkan kehadiran peserta. Selepas scan, jumlah peserta berdaftar akan dipaparkan.
                   </p>
-                  <QRAttendanceScanner 
+
+                  {/* Status Peserta Scanner */}
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-red-800">Kemaskini Status Peserta</p>
+                      <p className="text-xs text-red-600 mt-1">Imbas QR peserta yang perlu pulang awal/tarik diri di tengah program.</p>
+                    </div>
+                    <WithdrawalScanner onWithdrawn={() => refreshData()} />
+                  </div>
+
+                  <QRAttendanceScanner
                     verifierName={adminSession.fullName || adminSession.username}
                     onVerified={async (record) => {
                       const res = await recordAttendanceVerification({
@@ -738,6 +732,17 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                       const uniqueSchools = new Set(todayRecords.map((r: any) => `${r.school?.school_code || ''}|${r.badge?.name || ''}`));
                       const totalSchools = uniqueSchools.size;
                       const totalParticipants = todayRecords.reduce((sum: number, r: any) => sum + (r.participant_count || 0), 0);
+
+                      // Group by badge/program
+                      const byBadge: Record<string, { schools: Set<string>; participants: number }> = {};
+                      for (const r of todayRecords) {
+                        const badgeName = r.badge?.name || 'Tidak Diketahui';
+                        if (!byBadge[badgeName]) byBadge[badgeName] = { schools: new Set(), participants: 0 };
+                        byBadge[badgeName].schools.add(r.school?.school_code || '');
+                        byBadge[badgeName].participants += r.participant_count || 0;
+                      }
+                      const programList = Object.entries(byBadge).sort((a, b) => b[1].participants - a[1].participants);
+
                       return (
                         <div>
                           <div className="grid grid-cols-2 gap-4 mb-4">
@@ -750,6 +755,23 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                               <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
                             </div>
                           </div>
+
+                          {/* Pecahan ikut program */}
+                          <div className="mb-4">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Pecahan ikut Program</p>
+                            <div className="space-y-1">
+                              {programList.map(([badgeName, info], i) => (
+                                <div key={i} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded px-3 py-2">
+                                  <span className="text-xs font-bold text-purple-900">{badgeName}</span>
+                                  <span className="text-xs text-purple-700">
+                                    <strong>{info.schools.size}</strong> sekolah · <strong>{info.participants}</strong> peserta
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Senarai Scan</p>
                           <div className="space-y-2 max-h-60 overflow-y-auto">
                             {todayRecords.map((r: any, i: number) => (
                               <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
@@ -780,6 +802,109 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                 </div>
               </div>
             )}
+
+            {tab === 'withdrawals' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <WithdrawalsList
+                  data={data.filter(d => d.daerahCode === daerahCode)}
+                  onRefresh={refreshData}
+                  allowUnwithdraw={true}
+                  scopeLabel={`Daerah ${daerahCode}`}
+                />
+              </div>
+            )}
+
+            {tab === 'profile' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+                  {/* Logo Upload Section */}
+                  <div className="bg-white rounded-xl shadow p-6">
+                    <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                      <Image size={20} className="text-green-600" /> Logo Daerah
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      Muat naik logo rasmi daerah. Logo ini akan digunakan pada sidebar dan cetakan bagi semua sekolah dalam daerah ini.
+                    </p>
+
+                    {/* Current Logo Preview */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Logo Semasa</label>
+                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex items-center justify-center bg-slate-50">
+                        {daerahLogoUrl ? (
+                          <img src={daerahLogoUrl} alt="Logo Daerah" className="h-32 w-auto object-contain" />
+                        ) : (
+                          <div className="text-center text-slate-400">
+                            <Image size={48} className="mx-auto mb-2 opacity-30" />
+                            <p className="text-xs">Belum ada logo dimuat naik. Logo default akan digunakan.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Upload Button */}
+                    <div>
+                      <label className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-green-300 rounded-xl cursor-pointer hover:bg-green-50 transition ${logoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        {logoUploading ? (
+                          <><RefreshCw size={18} className="animate-spin text-green-600" /> <span className="text-sm font-medium text-green-700">Sedang memuat naik...</span></>
+                        ) : (
+                          <><Upload size={18} className="text-green-600" /> <span className="text-sm font-medium text-green-700">Pilih Fail Imej (PNG/JPG, maks 2MB)</span></>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                          disabled={logoUploading}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Change Password Section */}
+                  <div className="bg-white rounded-xl shadow p-6">
+                    <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
+                      <Key size={20} className="text-green-600" /> Tukar Kata Laluan
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-6">
+                      Tukar kata laluan akaun admin daerah anda.
+                    </p>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Kata Laluan Baru</label>
+                        <input
+                          type="password"
+                          value={newAdminPassword}
+                          onChange={(e) => setNewAdminPassword(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          placeholder="Masukkan kata laluan baru"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Sahkan Kata Laluan</label>
+                        <input
+                          type="password"
+                          value={confirmAdminPassword}
+                          onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                          placeholder="Masukkan semula kata laluan"
+                        />
+                      </div>
+                      <button
+                        onClick={handleChangeAdminPassword}
+                        disabled={passwordLoading}
+                        className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {passwordLoading ? (
+                          <><RefreshCw size={16} className="animate-spin" /> Sedang Proses...</>
+                        ) : (
+                          'Simpan Kata Laluan'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
         </div>
       </main>
 
@@ -791,80 +916,6 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
         />
       )}
 
-      {/* Password Change Modal */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Key size={20} className="text-green-600" />
-                Tukar Kata Laluan Admin Daerah
-              </h3>
-              <button 
-                onClick={() => setShowPasswordModal(false)}
-                className="p-1 hover:bg-slate-100 rounded"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Kata Laluan Baru
-                </label>
-                <input
-                  type="password"
-                  value={newAdminPassword}
-                  onChange={(e) => setNewAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="Masukkan kata laluan baru"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Sahkan Kata Laluan
-                </label>
-                <input
-                  type="password"
-                  value={confirmAdminPassword}
-                  onChange={(e) => setConfirmAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="Masukkan semula kata laluan"
-                />
-              </div>
-              
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setNewAdminPassword('');
-                    setConfirmAdminPassword('');
-                  }}
-                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleChangeAdminPassword}
-                  disabled={passwordLoading}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {passwordLoading ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      Sedang Proses...
-                    </>
-                  ) : (
-                    'Simpan'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

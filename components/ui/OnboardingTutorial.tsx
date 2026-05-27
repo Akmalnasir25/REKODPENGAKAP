@@ -14,11 +14,11 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     title: 'Dashboard',
-    description: 'Di Dashboard, anda boleh melihat semua data peserta yang telah didaftarkan, menapis mengikut tahun dan lencana, serta mengeksport data.',
+    description: 'Di Dashboard, anda boleh melihat semua data peserta yang telah didaftarkan, menapis mengikut tahun dan program, serta mengeksport data.',
   },
   {
     title: 'Pendaftaran Baru',
-    description: 'Klik butang "Pendaftaran Baru" untuk mendaftar peserta. Isi maklumat sekolah, pilih lencana, dan masukkan data peserta.',
+    description: 'Klik butang "Pendaftaran Baru" untuk mendaftar peserta. Isi maklumat sekolah, pilih program, dan masukkan data peserta.',
   },
   {
     title: 'Kategori Peserta',

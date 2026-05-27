@@ -917,7 +917,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                   <div>
                     <h3 className="font-bold text-lg flex items-center gap-2">
                       <Shield size={20} />
-                      Data Penyertaan Lencana
+                      Data Penyertaan Program
                     </h3>
                     <p className="text-sm text-slate-500 mt-0.5">
                       Memaparkan {filteredSubmissions.length} daripada {submissionsData.length} rekod
@@ -990,7 +990,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
 
                     {/* Badge */}
                     <select value={dataFilterBadge} onChange={e => setDataFilterBadge(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">Semua Lencana</option>
+                      <option value="">Semua Program</option>
                       {uniqueBadges.map(b => <option key={b} value={b}>{b}</option>)}
                     </select>
 
@@ -1029,7 +1029,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                   {activeFilterCount > 0 && (
                     <div className="flex flex-wrap gap-2 pt-1">
                       {dataFilterYear && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">Tahun: {dataFilterYear} <button onClick={() => setDataFilterYear('')} className="hover:text-blue-900">&times;</button></span>}
-                      {dataFilterBadge && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Lencana: {dataFilterBadge} <button onClick={() => setDataFilterBadge('')} className="hover:text-amber-900">&times;</button></span>}
+                      {dataFilterBadge && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Program: {dataFilterBadge} <button onClick={() => setDataFilterBadge('')} className="hover:text-amber-900">&times;</button></span>}
                       {dataFilterNegeri && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Negeri: {negeriList.find(n=>n.code===dataFilterNegeri)?.name || dataFilterNegeri} <button onClick={() => { setDataFilterNegeri(''); setDataFilterDaerah(''); }} className="hover:text-green-900">&times;</button></span>}
                       {dataFilterDaerah && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-medium">Daerah: {daerahList.find(d=>d.code===dataFilterDaerah)?.name || dataFilterDaerah} <button onClick={() => setDataFilterDaerah('')} className="hover:text-teal-900">&times;</button></span>}
                       {dataFilterSchool && <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">Sekolah: {dataFilterSchool.length > 20 ? dataFilterSchool.slice(0,20)+'...' : dataFilterSchool} <button onClick={() => setDataFilterSchool('')} className="hover:text-purple-900">&times;</button></span>}
@@ -1049,7 +1049,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                         <th className="px-4 py-3 text-left font-semibold text-slate-600">Tarikh</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-600">Nama</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-600">Sekolah</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Lencana</th>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-600">Program</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-600">Peranan</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-600">Jantina</th>
                         <th className="px-4 py-3 text-left font-semibold text-slate-600">IC</th>

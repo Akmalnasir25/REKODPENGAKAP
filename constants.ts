@@ -2,7 +2,7 @@
 
 
 export const DEFAULT_SERVER_URL = "https://script.google.com/macros/s/AKfycbzAAmcB5O3e1q6wn8Whx4PilN9WUSfrgwgc7X57zSmum-OtUW54_K6AZ0UtCVIMFPbJ/exec";
-export const APP_VERSION = "v12.5";
+export const APP_VERSION = "";
 
 export const LOCAL_STORAGE_KEYS = {
   SCRIPT_URL: 'APPS_SCRIPT_URL',

@@ -162,7 +162,7 @@ export const PDFExportButton: React.FC<PDFExportButtonProps> = ({
                     <input type="checkbox" checked={includeStats} onChange={e => setIncludeStats(e.target.checked)} className="rounded" />
                     <div>
                       <div className="text-sm font-bold">Statistik & Analisis</div>
-                      <div className="text-[10px] text-gray-500">Pecahan jantina, kategori, lencana, sekolah</div>
+                      <div className="text-[10px] text-gray-500">Pecahan jantina, kategori, program, sekolah</div>
                     </div>
                   </label>
                 </div>

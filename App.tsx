@@ -23,6 +23,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
 import { loginAdminSupabase } from './services/supabaseAuth';
+import { FloatingChatbot } from './components/FloatingChatbot';
 
 
 // Helper functions for access control (independent of localStorage)

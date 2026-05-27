@@ -187,7 +187,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   // Handlers
   const handleBadgeInfoAI = async () => {
     if (!leaderInfo.badgeType) {
-      alert("Sila pilih jenis program/lencana dahulu.");
+      alert("Sila pilih jenis program dahulu.");
       return;
     }
 
@@ -272,7 +272,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                  });
 
                  if (duplicate) {
-                     alert(`HALANGAN DUPLIKASI:\n\nPeserta ${p.name} (${p.icNumber}) telah pun didaftarkan untuk lencana '${leaderInfo.badgeType}' pada tahun ${currentYear} oleh sekolah ${duplicate.school}.\n\nSila padam rekod ini dari senarai untuk meneruskan.`);
+                     alert(`HALANGAN DUPLIKASI:\n\nPeserta ${p.name} (${p.icNumber}) telah pun didaftarkan untuk program '${leaderInfo.badgeType}' pada tahun ${currentYear} oleh sekolah ${duplicate.school}.\n\nSila padam rekod ini dari senarai untuk meneruskan.`);
                      return;
                  }
              }
@@ -479,13 +479,13 @@ export const UserForm: React.FC<UserFormProps> = ({
 
                     <div>
                         <div className="flex justify-between items-center mb-1">
-                            <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2"><Medal size={16}/> Jenis Program / Lencana</label>
+                            <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2"><Medal size={16}/> Jenis Program / Program</label>
                             <button type="button" onClick={handleBadgeInfoAI} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold flex items-center gap-1 hover:bg-purple-200 transition">
                                 <Sparkles size={12}/> Info Syarat (AI)
                             </button>
                         </div>
                         <select required className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition" value={leaderInfo.badgeType} onChange={e=>setLeaderInfo({...leaderInfo, badgeType: e.target.value})}>
-                            <option value="">-- Sila Pilih Program / Lencana --</option>
+                            <option value="">-- Sila Pilih Program / Program --</option>
                             {safeBadges.map((badge, idx) => {
                                 if (badge.name === 'Anugerah Rambu') return null;
 
@@ -498,10 +498,10 @@ export const UserForm: React.FC<UserFormProps> = ({
                             )})}
                         </select>
                          {leaderInfo.badgeType && lockedBadges.includes(`${leaderInfo.badgeType}_${currentYear}`) && (
-                             <p className="text-red-500 text-xs mt-1 font-bold">Pendaftaran lencana ini telah anda hantar. Sila hubungi Admin jika perlu ubah.</p>
+                             <p className="text-red-500 text-xs mt-1 font-bold">Pendaftaran program ini telah anda hantar. Sila hubungi Admin jika perlu ubah.</p>
                          )}
                          {leaderInfo.badgeType && safeBadges.find(b => b.name === leaderInfo.badgeType && !b.isOpen) && (
-                            <p className="text-red-500 text-xs mt-1 font-bold">Lencana ini telah ditutup. Sila pilih lencana lain.</p>
+                            <p className="text-red-500 text-xs mt-1 font-bold">Program ini telah ditutup. Sila pilih program lain.</p>
                          )}
                     </div>
                 </div>

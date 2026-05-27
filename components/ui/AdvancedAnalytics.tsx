@@ -134,7 +134,7 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
           <p className="text-2xl font-bold text-gray-900">{stats.schools}</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 text-purple-600 mb-1"><Award size={16} /><span className="text-[10px] font-bold uppercase text-gray-500">Lencana</span></div>
+          <div className="flex items-center gap-2 text-purple-600 mb-1"><Award size={16} /><span className="text-[10px] font-bold uppercase text-gray-500">Program</span></div>
           <p className="text-2xl font-bold text-gray-900">{stats.badges}</p>
         </div>
       </div>
@@ -160,7 +160,7 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
         {/* Badge Distribution Pie */}
         <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
           <h4 className="font-bold text-sm text-gray-800 mb-4 flex items-center gap-2">
-            <Award size={16} className="text-amber-600" /> Pecahan Lencana
+            <Award size={16} className="text-amber-600" /> Pecahan Program
           </h4>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>

@@ -146,7 +146,7 @@ export const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
             <select value={filters.badge} onChange={e => updateFilter('badge', e.target.value)} className="p-2 border border-gray-200 dark:border-gray-600 rounded-lg text-[11px] bg-white dark:bg-gray-700 outline-none">
-              <option value="">Semua Lencana</option>
+              <option value="">Semua Program</option>
               {uniqueValues.badges.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
 

@@ -420,7 +420,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                         {/* BADGES BACKUP */}
                         <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
-                            <div className="text-xs font-bold text-gray-500 mb-2 uppercase flex items-center gap-1"><Medal size={12}/> Data Lencana</div>
+                            <div className="text-xs font-bold text-gray-500 mb-2 uppercase flex items-center gap-1"><Medal size={12}/> Data Program</div>
                             <div className="flex gap-2">
                                 <button onClick={() => handleExport('BADGES', 'xlsx')} className="flex-1 bg-green-600 text-white py-1.5 rounded text-[10px] font-bold hover:bg-green-700 flex items-center justify-center gap-1"><FileSpreadsheet size={12}/> EXCEL</button>
                                 <button onClick={() => handleExport('BADGES', 'json')} className="flex-1 bg-gray-700 text-white py-1.5 rounded text-[10px] font-bold hover:bg-gray-800 flex items-center justify-center gap-1"><FileJson size={12}/> JSON</button>
@@ -456,11 +456,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
 
                         <button 
-                            onClick={() => handleClearData('BADGES', 'BADGES (Senarai Lencana)')}
+                            onClick={() => handleClearData('BADGES', 'BADGES (Senarai Program)')}
                             disabled={setupLoading}
                             className="bg-white border-2 border-red-200 text-red-600 px-4 py-3 rounded-lg text-xs font-bold hover:bg-red-600 hover:text-white transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
                         >
-                            <Medal size={16}/> Reset Senarai Lencana
+                            <Medal size={16}/> Reset Senarai Program
                         </button>
 
                         <button 

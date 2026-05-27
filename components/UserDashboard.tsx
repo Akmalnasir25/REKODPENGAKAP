@@ -498,7 +498,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const handleFinalSubmit = async () => {
     if (!selectedBadgeFilter) return;
-    if (!confirm(`PENGESAHAN AKHIR (${selectedYear})\n\nAdakah anda pasti mahu menghantar pendaftaran untuk lencana '${selectedBadgeFilter}' pada tahun ${selectedYear}?\n\nSelepas ini data akan dikunci.`)) return;
+    if (!confirm(`PENGESAHAN AKHIR (${selectedYear})\n\nAdakah anda pasti mahu menghantar pendaftaran untuk program '${selectedBadgeFilter}' pada tahun ${selectedYear}?\n\nSelepas ini data akan dikunci.`)) return;
     setIsLocking(true);
     try {
         const res = await lockSchoolBadge(scriptUrl, user.schoolName, getLockKey(selectedBadgeFilter, selectedYear));
@@ -951,7 +951,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 onChange={(e) => setHistoryBadgeFilter(e.target.value)}
                                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                             >
-                                <option value="">Semua Lencana</option>
+                                <option value="">Semua Program</option>
                                 {badges.map(b => (
                                     <option key={b.name} value={b.name}>{b.name}</option>
                                 ))}
@@ -1087,9 +1087,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </div>
                     
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                        <p className="text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-1"><Filter size={12}/> Lencana</p>
+                        <p className="text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-1"><Filter size={12}/> Program</p>
                         <select className="w-full p-1.5 border rounded font-bold text-slate-800 text-sm bg-slate-50" value={selectedBadgeFilter} onChange={(e) => setSelectedBadgeFilter(e.target.value)}>
-                            <option value="">Semua Lencana</option>
+                            <option value="">Semua Program</option>
                             {availableBadges.map((b, i) => <option key={i} value={b}>{b}</option>)}
                         </select>
                     </div>
@@ -1133,7 +1133,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 {isRegistrationOpen && isAnyAllowed && !selectedBadgeFilter && filteredData.length > 0 && (
                     <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 border border-blue-100">
                         <AlertTriangle size={14} className="shrink-0"/> 
-                        Pilih <strong>Lencana</strong> di atas untuk membolehkan butang "Hantar Pendaftaran".
+                        Pilih <strong>Program</strong> di atas untuk membolehkan butang "Hantar Pendaftaran".
                     </div>
                 )}
 
@@ -1145,7 +1145,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <p className="text-purple-600 text-xs font-bold uppercase mb-1">Jumlah Rekod</p>
                                 <p className="text-2xl font-black text-purple-900">{filteredStats.total} Rekod</p>
                                 <p className="text-[10px] text-purple-700 mt-1">
-                                    {selectedBadgeFilter ? `Lencana: ${selectedBadgeFilter} | Tahun: ${selectedYear}` : ''}
+                                    {selectedBadgeFilter ? `Program: ${selectedBadgeFilter} | Tahun: ${selectedYear}` : ''}
                                 </p>
                             </div>
                             <div className="bg-white rounded-lg p-3 shadow-sm border border-purple-100">
@@ -1159,7 +1159,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 {isRegistrationOpen && isAnyAllowed && !selectedBadgeFilter && filteredData.length > 0 && (
                     <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 border border-blue-100">
                         <AlertTriangle size={14} className="shrink-0"/> 
-                        Pilih <strong>Lencana</strong> di atas untuk membolehkan butang "Hantar Pendaftaran".
+                        Pilih <strong>Program</strong> di atas untuk membolehkan butang "Hantar Pendaftaran".
                     </div>
                 )}
 
@@ -1214,7 +1214,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                       <input type="checkbox" checked={filteredData.length > 0 && selectedForDelete.size === filteredData.length} onChange={toggleSelectAll} className="rounded" />
                                     </th>
                                     <th className="px-4 py-3">Nama</th>
-                                    <th className="px-4 py-3">KP / Lencana</th>
+                                    <th className="px-4 py-3">KP / Program</th>
                                     <th className="px-4 py-3">Kaum</th>
                                     <th className="px-4 py-3">No. Keahlian</th>
                                     <th className="px-4 py-3">Peranan</th>
@@ -1449,7 +1449,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         </select>
                     </div>
                     <div>
-                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Lencana Asal</div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Asal</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs" value={importSourceBadge} onChange={(e) => { setImportSourceBadge(e.target.value); setSelectedImportCandidates([]); setImportNewIds({}); }}>
                             <option value="">-- Pilih --</option>
                             <option value="Keris Gangsa">Keris Gangsa</option>
@@ -1459,7 +1459,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         </select>
                     </div>
                     <div>
-                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Lencana Target</div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Target</div>
                         <div className="bg-white border rounded px-3 py-2 text-gray-700 text-xs uppercase font-bold">{getImportTargetBadge(importSourceBadge) || '-'}</div>
                     </div>
                 </div>

@@ -618,14 +618,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
                 <div className="flex items-center gap-2 flex-1">
                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                        Lencana:
+                        Program:
                     </label>
                     <select 
                         className="p-2 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full md:w-auto"
                         value={selectedBadgeFilter}
                         onChange={(e) => setSelectedBadgeFilter(e.target.value)}
                     >
-                        <option value="">Semua Lencana</option>
+                        <option value="">Semua Program</option>
                         {availableBadges.map((b, i) => (
                             <option key={i} value={b}>{b}</option>
                         ))}
@@ -984,7 +984,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                 <th className="px-4 py-3">Nama</th>
                                 <th className="px-4 py-3">Kad Pengenalan</th>
                                 <th className="px-4 py-3">Sekolah</th>
-                                <th className="px-4 py-3">Peranan & Lencana</th>
+                                <th className="px-4 py-3">Peranan & Program</th>
                                 <th className="px-4 py-3">No. Telefon</th>
                                 {activeTab === 'principals' && <th className="px-4 py-3">Nama GB</th>}
                                 <th className="px-4 py-3 text-right">Tindakan</th>

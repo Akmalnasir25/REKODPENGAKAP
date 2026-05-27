@@ -303,7 +303,7 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
 
   const handleUnlockBadge = async (schoolName: string, badgeName: string) => {
       const displayBadge = badgeName.includes('_') ? `${badgeName.split('_')[0]} (${badgeName.split('_')[1]})` : badgeName;
-      if (!confirm(`Buka semula pendaftaran '${displayBadge}' untuk ${schoolName}?\n\nSekolah ini akan boleh mengedit semula data peserta bagi lencana ini.`)) return;
+      if (!confirm(`Buka semula pendaftaran '${displayBadge}' untuk ${schoolName}?\n\nSekolah ini akan boleh mengedit semula data peserta bagi program ini.`)) return;
       
       setUnlockingBadge(`${schoolName}-${badgeName}`);
       try {

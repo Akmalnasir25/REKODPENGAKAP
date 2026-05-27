@@ -425,7 +425,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
                  <input type="number" className="w-full p-2 border rounded font-bold" value={importYear} onChange={e => setImportYear(parseInt(e.target.value))} />
              </div>
              <div>
-                 <label className="text-xs font-bold text-gray-500">Lencana Sasaran</label>
+                 <label className="text-xs font-bold text-gray-500">Program Sasaran</label>
                  <select className="w-full p-2 border rounded" value={importBadge} onChange={e => setImportBadge(e.target.value)}>
                      <option value="Keris Gangsa">Keris Gangsa</option>
                      <option value="Keris Perak">Keris Perak</option>

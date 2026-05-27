@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
@@ -16,193 +16,6 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import { uploadLogo, getLogoUrl } from '../services/logoService';
 import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
-
-interface PengesahanTabProps {
-  data: SubmissionData[];
-  submittedList: any[];
-  loading: boolean;
-  actionLoading: string | null;
-  onRefresh: () => void;
-  onApprove: (schoolName: string, badgeName: string) => void;
-  onReopen: (schoolName: string, badgeName: string) => void;
-}
-
-const PengesahanTab: React.FC<PengesahanTabProps> = ({ data, submittedList, loading, actionLoading, onRefresh, onApprove, onReopen }) => {
-  const [showReport, setShowReport] = useState(false);
-
-  // Group by badge
-  const grouped = submittedList.reduce((acc: Record<string, any[]>, item: any) => {
-    const badgeName = item.badge?.name || 'Tidak Diketahui';
-    if (!acc[badgeName]) acc[badgeName] = [];
-    acc[badgeName].push(item);
-    return acc;
-  }, {});
-
-  // Report summary data
-  const currentYear = new Date().getFullYear();
-  const totalSchools = submittedList.length;
-  const approvedCount = submittedList.filter((item: any) => item.status === 'approved').length;
-  const rejectedCount = submittedList.filter((item: any) => item.status === 'rejected' || item.status === 'reopened').length;
-  const pendingCount = submittedList.filter((item: any) => item.status === 'submitted').length;
-  const totalParticipants = data.filter((d) => new Date(d.date).getFullYear() === currentYear).length;
-
-  // Count participants per school+badge from data
-  const getParticipantCount = (schoolName: string, badgeName: string) => {
-    const currentYear = new Date().getFullYear();
-    return data.filter(d => 
-      d.school === schoolName && 
-      d.badge === badgeName && 
-      new Date(d.date).getFullYear() === currentYear
-    ).length;
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-          <CheckCircle size={20} className="text-green-600" /> Pengesahan Pendaftaran
-        </h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowReport(!showReport)}
-            className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg hover:bg-blue-100 border border-blue-200 transition flex items-center gap-1"
-          >
-            <FileText size={14} />
-            {showReport ? 'Tutup Laporan' : 'Lihat Laporan'}
-          </button>
-          <button onClick={onRefresh} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      <p className="text-sm text-slate-500 mb-6">
-        Senarai sekolah yang telah menghantar pendaftaran (status: submitted) dan menunggu pengesahan.
-      </p>
-
-      {showReport && !loading && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-6">
-          <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
-            <BarChart3 size={18} className="text-blue-600" /> Laporan Ringkasan Pengesahan
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-              <p className="text-2xl font-bold text-slate-800">{totalSchools}</p>
-              <p className="text-xs text-slate-500 mt-1">Jumlah Sekolah</p>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-              <p className="text-2xl font-bold text-green-600">{approvedCount}</p>
-              <p className="text-xs text-slate-500 mt-1">Telah Disahkan</p>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-              <p className="text-2xl font-bold text-red-600">{rejectedCount}</p>
-              <p className="text-xs text-slate-500 mt-1">Ditolak/Dibuka Semula</p>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-              <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
-              <p className="text-xs text-slate-500 mt-1">Menunggu Pengesahan</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-              <p className="text-2xl font-bold text-blue-600">{totalParticipants}</p>
-              <p className="text-xs text-slate-500 mt-1">Jumlah Peserta Tahun {currentYear}</p>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-slate-200 text-center">
-              <p className="text-2xl font-bold text-purple-600">{Object.keys(grouped).length}</p>
-              <p className="text-xs text-slate-500 mt-1">Jumlah Lencana Aktif</p>
-            </div>
-          </div>
-          <div className="mt-4">
-            <p className="text-xs text-slate-500 mb-2 font-semibold">Ringkasan Mengikut Lencana:</p>
-            <div className="space-y-1.5">
-              {Object.entries(grouped).map(([badgeName, items]: [string, any[]]) => {
-                const approved = items.filter((item) => item.status === 'approved').length;
-                const pending = items.filter((item) => item.status === 'submitted').length;
-                const rejected = items.filter((item) => item.status === 'rejected' || item.status === 'reopened').length;
-                return (
-                  <div key={badgeName} className="flex items-center justify-between text-xs bg-white rounded px-3 py-2 border border-slate-200">
-                    <span className="font-medium text-slate-700">{badgeName}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-green-600 font-semibold">{approved} disahkan</span>
-                      <span className="text-amber-600 font-semibold">{pending} menunggu</span>
-                      <span className="text-red-600 font-semibold">{rejected} ditolak</span>
-                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">{items.length} sekolah</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {loading && (
-        <div className="flex justify-center py-8">
-          <LoadingSpinner size="md" />
-        </div>
-      )}
-
-      {!loading && Object.keys(grouped).length === 0 && (
-        <div className="text-center py-12 text-slate-400">
-          <CheckCircle size={48} className="mx-auto mb-3 opacity-50" />
-          <p className="font-medium">Tiada pendaftaran menunggu pengesahan.</p>
-        </div>
-      )}
-
-      {!loading && Object.entries(grouped).map(([badgeName, items]) => (
-        <div key={badgeName} className="mb-6">
-          <div className="flex items-center gap-2 mb-3 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
-            <Medal size={16} className="text-amber-600" />
-            <span className="font-bold text-slate-700">{badgeName}</span>
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{items.length} sekolah</span>
-          </div>
-
-          <div className="space-y-2">
-            {items.map((item: any, idx: number) => {
-              const schoolName = item.school?.name || 'Tidak Diketahui';
-              const participantCount = getParticipantCount(schoolName, badgeName);
-              const submittedDate = item.submitted_at ? new Date(item.submitted_at).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-              const isApproving = actionLoading === `approve-${schoolName}-${badgeName}`;
-              const isReopening = actionLoading === `reopen-${schoolName}-${badgeName}`;
-
-              return (
-                <div key={idx} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-4 py-3 hover:shadow-sm transition">
-                  <div className="flex-1">
-                    <p className="font-semibold text-slate-800 text-sm">{schoolName}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                      <span className="flex items-center gap-1"><Users size={12} /> {participantCount} peserta</span>
-                      <span className="flex items-center gap-1"><Medal size={12} /> {badgeName}</span>
-                      <span>Dihantar: {submittedDate}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onApprove(schoolName, badgeName)}
-                      disabled={isApproving}
-                      className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {isApproving ? <LoadingSpinner size="sm" color="border-white" /> : <CheckCircle size={14} />}
-                      Sahkan
-                    </button>
-                    <button
-                      onClick={() => onReopen(schoolName, badgeName)}
-                      disabled={isReopening}
-                      className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 border border-red-200 transition disabled:opacity-50 flex items-center gap-1"
-                    >
-                      {isReopening ? <LoadingSpinner size="sm" color="border-red-500" /> : <X size={14} />}
-                      Tolak/Buka Semula
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
 
 interface AdminDaerahPanelProps {
   daerahCode: string;
@@ -574,7 +387,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                     key={item.id}
                     icon={item.icon}
                     label={item.label}
-                    badge={item.id === 'pengesahan' ? pendingCount : 0}
+                    badge={0}
                     isActive={tab === item.id}
                     onClick={() => { setTab(item.id as any); setIsMobileSidebarOpen(false); }}
                   />
@@ -650,9 +463,6 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   schools={filteredSchools}
                   badges={badges}
                   onRefresh={refreshData}
-                  onApprove={approveItem}
-                  onReject={rejectItem}
-                  onUpdateGred={updateGred}
                 />
               </div>
             )}
@@ -764,7 +574,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                                 <div key={i} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded px-3 py-2">
                                   <span className="text-xs font-bold text-purple-900">{badgeName}</span>
                                   <span className="text-xs text-purple-700">
-                                    <strong>{info.schools.size}</strong> sekolah · <strong>{info.participants}</strong> peserta
+                                    <strong>{info.schools.size}</strong> sekolah Â· <strong>{info.participants}</strong> peserta
                                   </span>
                                 </div>
                               ))}

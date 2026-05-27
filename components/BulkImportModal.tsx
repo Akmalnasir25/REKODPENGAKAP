@@ -286,7 +286,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         <div className="p-5 overflow-y-auto space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <select value={selectedBadge} onChange={e => { setSelectedBadge(e.target.value); setRecords([]); }} className="p-3 border rounded-lg text-sm">
-              <option value="">Pilih Program / Lencana</option>
+              <option value="">Pilih Program</option>
               {openBadges.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
             </select>
             <input type="number" value={selectedYear} onChange={e => { setSelectedYear(Number(e.target.value)); setRecords([]); }} className="p-3 border rounded-lg text-sm" />

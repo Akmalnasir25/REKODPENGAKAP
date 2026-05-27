@@ -66,7 +66,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     if (!newBadge.trim()) return;
 
     if (safeBadges.some(b => b.name === newBadge.trim())) {
-      alert("Lencana ini sudah wujud.");
+      alert("Program ini sudah wujud.");
       return;
     }
 
@@ -79,7 +79,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         } : undefined);
         
         if (response.status === 'success') {
-            alert(`Lencana '${newBadge}' berjaya ditambah.`);
+            alert(`Program '${newBadge}' berjaya ditambah.`);
             setNewBadge('');
             // Immediate refresh
             onRefresh(); 
@@ -95,7 +95,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   };
 
   const handleDelete = async (name: string) => {
-    if (!confirm(`Padam lencana/kategori: ${name}?`)) return;
+    if (!confirm(`Padam program/kategori: ${name}?`)) return;
     setLoading(true);
     try {
         const response = await deleteBadgeType(scriptUrl, name);
@@ -119,7 +119,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         await toggleRegistration(scriptUrl, newStatus, badge.name);
         onRefresh();
     } catch (e) {
-        alert("Gagal menukar status lencana.");
+        alert("Gagal menukar status program.");
     } finally {
         setTogglingBadge(null);
     }
@@ -144,9 +144,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
 
   const handleSaveBadgeName = async (oldName: string) => {
     const newName = editBadgeValue.trim();
-    if (!newName) { alert('Nama lencana tidak boleh kosong.'); return; }
+    if (!newName) { alert('Nama program tidak boleh kosong.'); return; }
     if (newName === oldName) { setEditingBadge(null); return; }
-    if (safeBadges.some(b => b.name === newName)) { alert('Nama lencana ini sudah wujud.'); return; }
+    if (safeBadges.some(b => b.name === newName)) { alert('Nama program ini sudah wujud.'); return; }
     setSavingBadgeName(oldName);
     try {
       const res = await updateBadgeName(scriptUrl, oldName, newName);
@@ -168,7 +168,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     <div className="bg-white p-6 rounded-xl shadow animate-[fadeIn_0.2s_ease-out]">
       <div className="flex justify-between items-center mb-4">
         <h2 className="font-bold text-gray-800 flex items-center gap-2">
-            <Medal size={20} className="text-purple-600"/> Senarai Lencana / Kategori ({safeBadges.length})
+            <Medal size={20} className="text-purple-600"/> Senarai Program / Kategori ({safeBadges.length})
             {scopeContext?.label && (
               <span className="ml-2 text-xs font-semibold bg-purple-100 text-purple-700 px-2 py-1 rounded">
                 {scopeContext.type === 'negeri' ? 'Peringkat Negeri' : 'Peringkat Daerah'}: {scopeContext.label}
@@ -193,7 +193,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         <input
           type="text"
           className="flex-1 p-3 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm font-medium"
-          placeholder="Nama Lencana Baru (Cth: Keris Gangsa)"
+          placeholder="Nama Program Baru (Cth: Keris Gangsa)"
           value={newBadge}
           onChange={e => setNewBadge(e.target.value)}
         />
@@ -289,7 +289,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                         onClick={() => handleToggle(b)}
                         disabled={togglingBadge === b.name}
                         className={`p-1 rounded hover:bg-gray-200 transition ${b.isOpen ? 'text-green-600' : 'text-gray-400'}`}
-                        title={b.isOpen ? "Tutup Pendaftaran Lencana Ini" : "Buka Pendaftaran Lencana Ini"}
+                        title={b.isOpen ? "Tutup Pendaftaran Program Ini" : "Buka Pendaftaran Program Ini"}
                     >
                         {togglingBadge === b.name ? <LoadingSpinner size="sm" color="border-purple-600"/> : (b.isOpen ? <ToggleRight size={24}/> : <ToggleLeft size={24}/>)}
                     </button>
@@ -297,7 +297,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                     <button 
                     onClick={() => handleDelete(b.name)} 
                     className="text-gray-300 hover:text-red-500 transition p-1"
-                    title="Padam Lencana"
+                    title="Padam Program"
                     >
                     <Trash2 size={16} />
                     </button>
@@ -305,7 +305,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
             </div>
           </div>
         ))}
-        {safeBadges.length === 0 && <p className="text-center text-gray-400 p-4">Tiada lencana dalam database.</p>}
+        {safeBadges.length === 0 && <p className="text-center text-gray-400 p-4">Tiada program dalam database.</p>}
       </div>
     </div>
   );

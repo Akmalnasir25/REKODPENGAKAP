@@ -77,7 +77,7 @@ export const BadgeModal: React.FC<BadgeModalProps> = ({ isOpen, onClose, badgeTy
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4">
           <div className="flex items-center justify-between">
             <h3 id="badge-modal-title" className="font-bold text-lg text-white flex gap-2 items-center">
-              <Award className="w-5 h-5" /> Syarat {badgeType || 'Lencana'}
+              <Award className="w-5 h-5" /> Syarat {badgeType || 'Program'}
             </h3>
             <button 
               onClick={onClose} 

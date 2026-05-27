@@ -81,8 +81,8 @@ export const BulkWhatsApp: React.FC<BulkWhatsAppProps> = ({ data, className = ''
   const getMessage = (): string => {
     if (selectedTemplate === 'custom') return customMessage;
     if (selectedTemplate === 'reminder') return MESSAGE_TEMPLATES.reminder('Sekolah');
-    if (selectedTemplate === 'deadline') return MESSAGE_TEMPLATES.deadline('Lencana', 7);
-    return MESSAGE_TEMPLATES.confirmation('Peserta', 'Lencana');
+    if (selectedTemplate === 'deadline') return MESSAGE_TEMPLATES.deadline('Program', 7);
+    return MESSAGE_TEMPLATES.confirmation('Peserta', 'Program');
   };
 
   const handleCopyAll = () => {

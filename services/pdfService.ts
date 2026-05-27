@@ -63,7 +63,7 @@ export const generateParticipantReport = (
   const infoLines: string[] = [];
   if (negeri) infoLines.push(`Negeri: ${negeri}`);
   if (daerah) infoLines.push(`Daerah: ${daerah}`);
-  if (badge) infoLines.push(`Lencana: ${badge}`);
+  if (badge) infoLines.push(`Program: ${badge}`);
   if (school) infoLines.push(`Sekolah: ${school}`);
   if (subtitle) infoLines.push(subtitle);
 
@@ -126,7 +126,7 @@ export const generateParticipantReport = (
   autoTable(doc, {
     startY: yPos + 2,
     head: [[
-      'No.', 'Nama', 'No. KP', 'Jantina', 'Kaum', 'Sekolah', 'Kod', 'Lencana', 'Peranan', 'Kategori', 'No. Ahli'
+      'No.', 'Nama', 'No. KP', 'Jantina', 'Kaum', 'Sekolah', 'Kod', 'Program', 'Peranan', 'Kategori', 'No. Ahli'
     ]],
     body: tableData,
     styles: {
@@ -307,7 +307,7 @@ export const generateSummaryReport = (
 
   autoTable(doc, {
     startY: yPos,
-    head: [['Lencana', 'Bilangan']],
+    head: [['Program', 'Bilangan']],
     body: Object.entries(badgeCount).sort((a, b) => b[1] - a[1]).map(([badge, count]) => [badge, count.toString()]),
     styles: { fontSize: 9, cellPadding: 3 },
     headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
@@ -449,7 +449,7 @@ const appendParticipantTable = (
   const infoLines: string[] = [];
   if (negeri) infoLines.push(`Negeri: ${negeri}`);
   if (daerah) infoLines.push(`Daerah: ${daerah}`);
-  if (badge) infoLines.push(`Lencana: ${badge}`);
+  if (badge) infoLines.push(`Program: ${badge}`);
   if (school) infoLines.push(`Sekolah: ${school}`);
   if (infoLines.length > 0) {
     doc.text(infoLines.join('  |  '), pageWidth / 2, yPos, { align: 'center' });
@@ -507,7 +507,7 @@ const appendParticipantTable = (
   autoTable(doc, {
     startY: yPos + 2,
     head: [[
-      'No.', 'Nama', 'No. KP', 'Jantina', 'Kaum', 'Sekolah', 'Kod', 'Lencana', 'Peranan', 'Kategori', 'No. Ahli'
+      'No.', 'Nama', 'No. KP', 'Jantina', 'Kaum', 'Sekolah', 'Kod', 'Program', 'Peranan', 'Kategori', 'No. Ahli'
     ]],
     body: tableData,
     styles: { fontSize: 7, cellPadding: 1.5, lineWidth: 0.1, lineColor: [0, 0, 0] },

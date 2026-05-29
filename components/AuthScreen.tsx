@@ -1,10 +1,11 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Lock, UserPlus, LogIn, AlertCircle, Eye, EyeOff, Key, RefreshCw, HelpCircle, ArrowLeft, User, School as SchoolIcon, Code, Shield, Mail } from 'lucide-react';
+import { Lock, UserPlus, LogIn, AlertCircle, Eye, EyeOff, Key, RefreshCw, HelpCircle, ArrowLeft, User, School as SchoolIcon, Code, Shield, Mail, IdCard, Phone, Briefcase, Award } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { validatePassword } from '../services/supabaseApi';
 import { loginUser as loginUserSupabase, registerSchoolUser, resetPassword as resetPasswordSupabase, fetchSchoolsForRegistration } from '../services/supabaseAuth';
+import { registerLeader, loginLeader, resetLeaderPasswordByIC, saveLeaderSession } from '../services/leaderAuthService';
 import { UserSession, School, Negeri, Daerah } from '../types';
 import { APP_VERSION, LOGO_URL } from '../constants';
 import { checkLoginAttempts, recordLoginAttempt, fetchServerCsrf } from '../services/security';
@@ -15,6 +16,8 @@ interface AuthScreenProps {
   onAdminLogin: (username: string, pass: string) => Promise<{success: boolean, message?: string}>;
   onAdminRegionalLogin?: (username: string, pass: string, role: 'negeri' | 'daerah') => Promise<{success: boolean, message?: string, adminData?: any}>;
   onDeveloperLogin?: (username: string, pass: string) => Promise<{success: boolean, message?: string}>;
+  onLeaderClick?: () => void;
+  onLeaderLoginSuccess?: () => void;
   schools: School[];
   negeriList?: Negeri[];
   daerahList?: Daerah[];
@@ -39,6 +42,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onAdminLogin, 
   onAdminRegionalLogin,
   onDeveloperLogin, 
+  onLeaderClick,
+  onLeaderLoginSuccess,
   schools = [], 
   negeriList = [], 
   daerahList = [], 
@@ -64,7 +69,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [secretKey, setSecretKey] = useState('');
-  const [loginType, setLoginType] = useState<'user' | 'admin_daerah' | 'admin_negeri' | 'developer'>('user');
+  const [loginType, setLoginType] = useState<'user' | 'admin_daerah' | 'admin_negeri' | 'developer' | 'leader'>('user');
+
+  // Leader-specific state
+  const [leaderFullName, setLeaderFullName] = useState('');
+  const [leaderIC, setLeaderIC] = useState('');
+  const [leaderPhone, setLeaderPhone] = useState('');
+  const [leaderType, setLeaderType] = useState<'guru' | 'luar'>('guru');
+  const [leaderSchoolId, setLeaderSchoolId] = useState(''); // Sekolah untuk guru
+  const [leaderSchoolCode, setLeaderSchoolCode] = useState(''); // Kod untuk validation
+
   const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const loginPassword = isPreviewMode && authMode === 'login' ? 'PREVIEW_BYPASS' : password;
 
@@ -153,6 +167,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         }
 
         if (authMode === 'login') {
+            // LEADER LOGIN
+            if (loginType === 'leader') {
+                if (!email || !password) {
+                    setError('Sila isikan Email dan Kata Laluan.');
+                    setLoading(false);
+                    return;
+                }
+                const res = await loginLeader({ email, password });
+                if (!res.success || !res.leader) {
+                    recordLoginAttempt(false);
+                    setError(res.message || 'Log masuk pemimpin gagal.');
+                    setLoading(false);
+                    return;
+                }
+                recordLoginAttempt(true);
+                saveLeaderSession(res.leader);
+                if (onLeaderLoginSuccess) onLeaderLoginSuccess();
+                return;
+            }
+
             // Handle different login types
             if (loginType === 'developer') {
                 // DEVELOPER LOGIN
@@ -230,6 +264,63 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 setError(result.message || 'Log masuk gagal.');
             }
         } else if (authMode === 'register') {
+            // LEADER REGISTRATION
+            if (loginType === 'leader') {
+                if (!leaderFullName.trim()) { setError('Sila masukkan nama penuh.'); setLoading(false); return; }
+                if (!email) { setError('Sila masukkan Email.'); setLoading(false); return; }
+                if (!leaderPhone.trim()) { setError('Sila masukkan No Telefon.'); setLoading(false); return; }
+                if (!selectedNegeri) { setError('Sila pilih Negeri.'); setLoading(false); return; }
+                if (!selectedDaerah) { setError('Sila pilih Daerah.'); setLoading(false); return; }
+
+                // Validation sekolah - opsyenal, tapi kalau pilih sekolah, kod mesti betul
+                if (leaderSchoolId) {
+                    if (!leaderSchoolCode.trim()) { setError('Sila masukkan Kod Sekolah untuk sekolah yang dipilih.'); setLoading(false); return; }
+                    const selectedSchool = supabaseSchools.find((s) => s.id === leaderSchoolId);
+                    if (!selectedSchool) {
+                        setError('Sekolah dipilih tidak dijumpai.');
+                        setLoading(false); return;
+                    }
+                    const expectedCode = selectedSchool.school_code || '';
+                    if (expectedCode.toUpperCase() !== leaderSchoolCode.trim().toUpperCase()) {
+                        setError('Kod sekolah tidak sepadan dengan sekolah yang dipilih.');
+                        setLoading(false); return;
+                    }
+                }
+
+                if (password !== confirmPassword) {
+                    setError('Kata laluan dan pengesahan kata laluan tidak sama.');
+                    setLoading(false); return;
+                }
+                if (password.length < 8) {
+                    setError('Kata laluan mesti sekurang-kurangnya 8 aksara.');
+                    setLoading(false); return;
+                }
+                // Convert codes ke UUID ids untuk backend
+                const negeriObj = negeriList.find((n: any) => n.code === selectedNegeri);
+                const daerahObj = daerahList.find((d: any) => d.code === selectedDaerah);
+                const negeriId = (negeriObj as any)?.id || null;
+                const daerahId = (daerahObj as any)?.id || null;
+
+                const res = await registerLeader({
+                    email,
+                    password,
+                    icNumber: leaderIC,
+                    fullName: leaderFullName,
+                    phoneNumber: leaderPhone,
+                    leaderType,
+                    schoolId: leaderSchoolId || null,
+                    negeriId,
+                    daerahId,
+                });
+                if (!res.success || !res.leader) {
+                    setError(res.message || 'Pendaftaran pemimpin gagal.');
+                    setLoading(false); return;
+                }
+                saveLeaderSession(res.leader);
+                if (onLeaderLoginSuccess) onLeaderLoginSuccess();
+                return;
+            }
+
             // REGISTER via Supabase
             if (!schoolName) { setError('Sila pilih nama sekolah.'); setLoading(false); return; }
             if (!schoolCode) { setError('Sila masukkan Kod Sekolah.'); setLoading(false); return; }
@@ -270,6 +361,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 setError(result.message || 'Pendaftaran gagal.');
             }
         } else if (authMode === 'forgot_password') {
+            // LEADER PASSWORD RESET (guna IC sebagai security check)
+            if (loginType === 'leader') {
+                if (!email) { setError('Sila masukkan Email.'); setLoading(false); return; }
+                if (!leaderIC.trim()) { setError('Sila masukkan No IC untuk pengesahan.'); setLoading(false); return; }
+                if (password.length < 8) {
+                    setError('Kata laluan baru mesti sekurang-kurangnya 8 aksara.');
+                    setLoading(false); return;
+                }
+                const res = await resetLeaderPasswordByIC(email, leaderIC, password);
+                if (!res.success) {
+                    setError(res.message || 'Gagal reset kata laluan.');
+                    setLoading(false); return;
+                }
+                alert('Kata laluan berjaya ditukar. Sila log masuk semula.');
+                switchMode('login');
+                return;
+            }
+
             // RESET PASSWORD via Supabase email
             if (!email) { setError('Sila masukkan Email.'); setLoading(false); return; }
 
@@ -291,39 +400,45 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans">
-      
-      {/* Background Ambience */}
-      <div className="absolute inset-0 z-0">
-          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 opacity-90"></div>
-          <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-600 rounded-full blur-[120px] opacity-20 animate-pulse"></div>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden font-sans" style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 45%, #04011E 100%)' }}>
+
+      {/* Decorative background elements */}
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+          <div className="absolute top-0 left-0 w-full h-full opacity-90" style={{ background: 'linear-gradient(135deg, #230F5C 0%, #07012C 50%, #04011E 100%)' }}></div>
+          <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full blur-[120px] opacity-30" style={{ background: '#5b3fa8' }}></div>
           <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-amber-600 rounded-full blur-[120px] opacity-10"></div>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden relative z-10 flex flex-col md:flex-row min-h-[600px] border border-slate-700/50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden relative z-10 flex flex-col md:flex-row min-h-[600px] border border-purple-900/30">
         
         {/* LEFT PANEL */}
-        <div className="md:w-5/12 bg-slate-900 text-white p-10 flex flex-col relative overflow-hidden border-r border-slate-800">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-400 via-amber-600 to-amber-800"></div>
-            
-            {/* Main Content Centered */}
-            <div className="relative z-10 flex-1 flex flex-col justify-center items-center w-full">
-                <div className="flex flex-col items-center justify-center mb-8 bg-white/5 px-6 py-2 rounded-full border border-white/10 backdrop-blur-sm shadow-lg">
-                    <span className="text-[10px] md:text-xs font-bold tracking-[0.2em] text-amber-500 uppercase text-center">PERSEKUTUAN PENGAKAP MALAYSIA</span>
-                </div>
-                <img src={LOGO_URL} alt="Logo Perkhemahan" className="h-32 w-auto object-contain mb-8 drop-shadow-2xl hover:scale-105 transition-transform duration-500"/>
-                <h1 className="text-3xl font-black text-white leading-tight mb-3 tracking-tight text-center">
-                    SISTEM PENGURUSAN <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">PENGAKAP MALAYSIA</span>
-                </h1>
-                <p className="text-slate-400 text-sm font-light leading-relaxed max-w-xs mx-auto text-center">Sistem Pendaftaran & Pengurusan Data Keahlian Berpusat.</p>
+        <div className="md:w-5/12 text-white flex flex-col relative overflow-hidden border-r border-purple-900/40">
+            {/* White section atas dengan logo */}
+            <div className="bg-white px-10 pt-10 pb-6 flex flex-col items-center justify-center">
+                <img src="/nadi-1.png" alt="ScoutNadi" className="h-32 w-auto object-contain drop-shadow-md hover:scale-105 transition-transform duration-500"/>
             </div>
-            
-            {/* Footer */}
-            <div className="relative z-10 w-full mt-auto border-t border-slate-800 pt-6">
-                <div className="flex flex-col items-center justify-center gap-1.5 w-full">
-                    <span className="uppercase tracking-[0.2em] font-bold text-slate-500 text-[10px]">Design By Akmal Nasir<sup className="ml-0.5">&trade;</sup></span>
-                    <span className="font-mono text-slate-600 text-[9px] opacity-60 tracking-widest">{APP_VERSION.split(' ')[0]}</span>
+
+            {/* Gradient bawah dengan tagline */}
+            <div className="flex-1 px-10 py-8 flex flex-col relative" style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)' }}>
+                <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-400 via-amber-600 to-amber-800"></div>
+
+                <div className="relative z-10 flex-1 flex flex-col justify-center items-center w-full">
+                    <div className="flex flex-col items-center justify-center mb-8 bg-white/5 px-6 py-2 rounded-full border border-white/10 backdrop-blur-sm shadow-lg">
+                        <span className="text-[10px] md:text-xs font-bold tracking-[0.2em] text-amber-500 uppercase text-center">Register. Manage. Verify.</span>
+                    </div>
+                    <h1 className="text-3xl font-black text-white leading-tight mb-3 tracking-tight text-center">
+                        SISTEM PENGURUSAN <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">PENGAKAP MALAYSIA</span>
+                    </h1>
+                    <p className="text-slate-400 text-sm font-light leading-relaxed max-w-xs mx-auto text-center">ScoutNadi - Sistem Pengurusan Data Pengakap.</p>
+                </div>
+
+                {/* Footer */}
+                <div className="relative z-10 w-full mt-auto border-t border-purple-900/40 pt-6">
+                    <div className="flex flex-col items-center justify-center gap-1.5 w-full">
+                        <span className="uppercase tracking-[0.2em] font-bold text-slate-500 text-[10px]">Design By Akmal Nasir<sup className="ml-0.5">&trade;</sup></span>
+                        <span className="font-mono text-slate-600 text-[9px] opacity-60 tracking-widest">{APP_VERSION.split(' ')[0]}</span>
+                    </div>
                 </div>
             </div>
 
@@ -424,8 +539,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     </>
                 )}
 
-                {/* REGISTER FORM - Negeri/Daerah/School selection */}
-                {authMode === 'register' && (
+                {/* REGISTER FORM - Negeri/Daerah/School selection (untuk PENGGUNA SEKOLAH sahaja) */}
+                {authMode === 'register' && loginType === 'user' && (
                     <>
                         <div>
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Negeri</label>
@@ -511,9 +626,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                             <select 
                                 className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white"
                                 value={loginType}
-                                onChange={(e) => setLoginType(e.target.value as 'user' | 'admin_daerah' | 'admin_negeri' | 'developer')}
+                                onChange={(e) => setLoginType(e.target.value as 'user' | 'admin_daerah' | 'admin_negeri' | 'developer' | 'leader')}
                             >
                                 <option value="user">👤 Pengguna Sekolah</option>
+                                <option value="leader">🎖️ Pemimpin / Kursus</option>
                                 <option value="admin_daerah">🏛️ Admin Daerah</option>
                                 <option value="admin_negeri">🏢 Admin Negeri</option>
                                 <option value="developer">⚙️ Developer</option>
@@ -521,6 +637,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-400 mt-1 italic">
                             {loginType === 'user' && '*Untuk sekolah yang telah berdaftar'}
+                            {loginType === 'leader' && '*Akaun individu pemimpin (guru/luar) untuk daftar kursus'}
                             {loginType === 'admin_daerah' && '*Akses pengurusan sekolah dalam daerah anda'}
                             {loginType === 'admin_negeri' && '*Akses pengurusan semua daerah dalam negeri anda'}
                             {loginType === 'developer' && '*Akses penuh ke seluruh sistem'}
@@ -531,6 +648,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 {/* SHARED FIELDS - Only show for non-developer modes */}
                 {authMode !== 'developer' && (
                 <>
+                {/* Hide email/code field bila leader register (ada field email khusus dalam leader block) */}
+                {!(loginType === 'leader' && authMode === 'register') && (
                 <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
                         {loginType === 'developer' ? 'Email Developer' : 
@@ -561,6 +680,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         />
                     </div>
                 </div>
+                )}
 
                 {authMode === 'register' && loginType === 'user' && (
                     <div>
@@ -576,6 +696,118 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                                 required
                             />
                         </div>
+                    </div>
+                )}
+
+                {/* LEADER REGISTER FIELDS */}
+                {authMode === 'register' && loginType === 'leader' && (
+                    <>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Penuh</label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input type="text" required value={leaderFullName}
+                                    onChange={(e) => setLeaderFullName(e.target.value)}
+                                    placeholder="Nama seperti dalam IC"
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">No Telefon</label>
+                            <div className="relative">
+                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input type="tel" required value={leaderPhone}
+                                    onChange={(e) => setLeaderPhone(e.target.value)}
+                                    placeholder="0123456789"
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
+                            <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                <input type="email" required value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="email@anda.com"
+                                    className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white" />
+                            </div>
+                        </div>
+                        {/* Negeri & Daerah - WAJIB untuk geo-filter kursus */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Negeri</label>
+                                <select required value={selectedNegeri}
+                                    onChange={(e) => { setSelectedNegeri(e.target.value); setSelectedDaerah(''); setLeaderSchoolId(''); }}
+                                    className="w-full px-3 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white">
+                                    <option value="">-- Pilih Negeri --</option>
+                                    {negeriList.map((n) => (
+                                        <option key={n.code} value={n.code}>{n.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Daerah</label>
+                                <select required value={selectedDaerah}
+                                    onChange={(e) => { setSelectedDaerah(e.target.value); setLeaderSchoolId(''); }}
+                                    disabled={!selectedNegeri}
+                                    className="w-full px-3 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white disabled:bg-slate-100 disabled:text-slate-400">
+                                    <option value="">-- Pilih Daerah --</option>
+                                    {daerahList
+                                        .filter((d) => d.negeriCode === selectedNegeri)
+                                        .map((d) => (
+                                            <option key={d.code} value={d.code}>{d.name}</option>
+                                        ))}
+                                </select>
+                            </div>
+                        </div>
+                        {/* Sekolah & Kod - OPSYENAL untuk semua pemimpin */}
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                Pilih Sekolah <span className="text-slate-300 normal-case font-normal">(opsyenal)</span>
+                            </label>
+                            <select value={leaderSchoolId}
+                                onChange={(e) => { setLeaderSchoolId(e.target.value); if (!e.target.value) setLeaderSchoolCode(''); }}
+                                disabled={!selectedDaerah}
+                                className="w-full px-3 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white disabled:bg-slate-100 disabled:text-slate-400">
+                                <option value="">{selectedDaerah ? '-- Tiada sekolah / Pilih sekolah --' : 'Pilih daerah dahulu'}</option>
+                                {filteredRegistrationSchools.map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.school_code} - {s.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-[10px] text-slate-400 mt-1 italic">*Pilih jika anda dari sekolah berdaftar untuk akses modul sekolah (perlukan approval admin sekolah).</p>
+                        </div>
+                        {leaderSchoolId && (
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                    Kod Sekolah <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <SchoolIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <input type="text" required value={leaderSchoolCode}
+                                        onChange={(e) => setLeaderSchoolCode(e.target.value.toUpperCase())}
+                                        placeholder="CTH: ABA1234"
+                                        className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white font-mono uppercase" />
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-1 italic">*Kod sekolah mesti betul untuk pengesahan link akaun.</p>
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* LEADER FORGOT PASSWORD: extra IC field for verification */}
+                {authMode === 'forgot_password' && loginType === 'leader' && (
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">No IC (Pengesahan)</label>
+                        <div className="relative">
+                            <IdCard className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input type="text" required value={leaderIC}
+                                onChange={(e) => setLeaderIC(e.target.value)}
+                                placeholder="Cth: 901231101234"
+                                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-slate-50 focus:bg-white" />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1 italic">*Untuk pengesahan keselamatan sebelum tukar kata laluan.</p>
                     </div>
                 )}
 
@@ -706,10 +938,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                         <p className="text-sm text-slate-600">
                             Belum ada akaun? <button onClick={() => switchMode('register')} className="text-blue-600 font-bold hover:underline">Daftar Sekolah</button>
                         </p>
+                        <p className="text-sm text-slate-600">
+                            Pemimpin individu? <button onClick={() => { setLoginType('leader'); switchMode('register'); }} className="text-emerald-700 font-bold hover:underline">Daftar Pemimpin</button>
+                        </p>
                         <button onClick={() => switchMode('forgot_password')} className="text-xs text-slate-500 hover:text-blue-600 transition">
                             Lupa Kata Laluan?
                         </button>
                     </>
+                )}
+                {authMode === 'login' && loginType === 'leader' && (
+                    <>
+                        <p className="text-sm text-slate-600">
+                            Belum ada akaun pemimpin? <button onClick={() => switchMode('register')} className="text-emerald-700 font-bold hover:underline">Daftar di sini</button>
+                        </p>
+                        <button onClick={() => switchMode('forgot_password')} className="text-xs text-slate-500 hover:text-emerald-700 transition">
+                            Lupa Kata Laluan?
+                        </button>
+                    </>
+                )}
+                {/* Meja Bantuan sentiasa muncul */}
+                {authMode === 'login' && (
+                    <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => window.open('https://t.me/AkmalNasir', '_blank', 'noopener')}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-400/30 hover:border-blue-400/60 text-blue-600 hover:text-blue-700 transition-all duration-200 group text-xs font-bold"
+                            title="Hubungi melalui Telegram"
+                        >
+                            <HelpCircle size={14} className="opacity-80 group-hover:opacity-100" />
+                            <span>Meja Bantuan</span>
+                        </button>
+                    </div>
                 )}
                 {(authMode === 'register' || authMode === 'forgot_password') && (
                     <button onClick={() => switchMode('login')} className="text-blue-600 font-bold text-sm flex items-center justify-center gap-2 hover:underline w-full">
@@ -719,7 +978,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </div>
         </div>
 
-        {/* Hidden Developer Icon - Bottom Right Corner */}
+        {/* Developer Console - Bottom Right Corner */}
         {authMode === 'login' && (
           <button
             type="button"

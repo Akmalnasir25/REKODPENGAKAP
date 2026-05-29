@@ -23,6 +23,8 @@ import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { SchoolQRGenerator, ParticipantQRGenerator } from './ui/QRVerification';
 import { WithdrawalsList } from './WithdrawalsList';
+import { SchoolLeaderRequestsTab } from './SchoolLeaderRequestsTab';
+import { countPendingLeaderRequests } from '../services/leaderApprovalService';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
 
@@ -39,10 +41,11 @@ interface UserDashboardProps {
   onNewRegistration: () => void;
   onDelete: (item: SubmissionData) => void;
   onRefresh: () => void;
+  onSwitchToLeader?: () => void; // Untuk akaun pemimpin yang ada link sekolah
 }
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({ 
-    user, allData, schools, badges, userProfiles, isRegistrationOpen, scriptUrl, onLogout, onNewRegistration, onDelete, onRefresh 
+    user, allData, schools, badges, userProfiles, isRegistrationOpen, scriptUrl, onLogout, onNewRegistration, onDelete, onRefresh, onSwitchToLeader 
 }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -56,6 +59,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [showHistoryView, setShowHistoryView] = useState(false);
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [showWithdrawalsView, setShowWithdrawalsView] = useState(false);
+  const [showLeaderRequestsView, setShowLeaderRequestsView] = useState(false);
+  const [pendingLeaderCount, setPendingLeaderCount] = useState(0);
+
+  // Auto-refresh count permintaan pemimpin pending setiap 30 saat
+  useEffect(() => {
+    if (!user.schoolId) return;
+    const refresh = () => {
+      countPendingLeaderRequests(user.schoolId!).then(setPendingLeaderCount);
+    };
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => clearInterval(interval);
+  }, [user.schoolId, showLeaderRequestsView]);
   const [historyBadgeFilter, setHistoryBadgeFilter] = useState(''); // Filter for history view
   
   // Modals
@@ -165,6 +181,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     const settingsSchoolName = normalizeText(currentSchoolSettings?.name);
     const validCodes = [userSchoolCode, settingsSchoolCode].filter(Boolean);
     const validNames = [userSchoolName, settingsSchoolName].filter(Boolean);
+
+    // DEBUG: Log filter values to help diagnose missing data
+    const samples = allData.slice(0, 5).map(d => ({
+      schoolCode: (d as any).schoolCode || (d as any).school_code,
+      schoolName: d.school || (d as any).schoolName,
+      date: d.date,
+      year: getSubmissionYear(d.date),
+    }));
+    console.log('[UserDashboard] allDataLen:', allData.length);
+    console.log('[UserDashboard] selectedYear:', selectedYear);
+    console.log('[UserDashboard] userSchoolCode:', userSchoolCode, 'userSchoolName:', userSchoolName);
+    console.log('[UserDashboard] validCodes:', JSON.stringify(validCodes));
+    console.log('[UserDashboard] validNames:', JSON.stringify(validNames));
+    console.log('[UserDashboard] sample 5 data:', JSON.stringify(samples, null, 2));
 
     return allData.filter(d => {
       const rowSchoolCode = normalizeText((d as any).schoolCode || (d as any).school_code || (d as any).kodSekolah);
@@ -658,7 +688,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
       
       {/* MOBILE HEADER (DARK) */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600">
+      <div className="md:hidden text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600" style={{ background: '#07012C' }}>
           <div className="flex items-center gap-2">
               <User size={20} className="text-amber-500" />
               <div className="text-sm font-bold truncate w-36">{user.schoolName}</div>
@@ -671,8 +701,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       </div>
 
       {/* SIDEBAR NAVIGATION (DARK & LUXURY) */}
-      <aside className={`
-          fixed inset-y-0 left-0 z-50 bg-slate-900 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r border-slate-800 flex flex-col
+      <aside
+          style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)', borderColor: '#1a0a47' }}
+          className={`
+          fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
           md:relative md:translate-x-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
@@ -724,7 +756,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 icon={AlertTriangle}
                 label="Status Peserta"
                 isActive={showWithdrawalsView}
-                onClick={() => { setShowWithdrawalsView(true); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
+                onClick={() => { setShowWithdrawalsView(true); setShowHistoryView(false); setShowArchiveView(false); setShowLeaderRequestsView(false); setIsMobileSidebarOpen(false); }}
+              />
+
+              <SidebarItem
+                icon={Users}
+                label="Akses Pemimpin"
+                badge={pendingLeaderCount}
+                isActive={showLeaderRequestsView}
+                onClick={() => { setShowLeaderRequestsView(true); setShowWithdrawalsView(false); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
               />
 
               <SidebarItem 
@@ -770,6 +810,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 className="text-red-400 hover:bg-red-900/20 hover:text-red-300 mt-auto border border-transparent hover:border-red-900/30"
                 onClick={onLogout} 
               />
+
+              {onSwitchToLeader && (
+                <SidebarItem
+                  icon={LogOut}
+                  label="Kembali ke Modul Kursus"
+                  className="text-emerald-400 hover:bg-emerald-900/20 hover:text-emerald-300 border border-emerald-900/30"
+                  onClick={onSwitchToLeader}
+                />
+              )}
 
               {isDesktopSidebarOpen && (
                   <div className="text-center mt-4 text-[9px] text-slate-600 font-mono">
@@ -924,7 +973,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             {/* CONTENT VIEWS (SCREEN ONLY) */}
             <div className="print:hidden">
-            {showWithdrawalsView ? (
+            {showLeaderRequestsView ? (
+                user.schoolId ? (
+                  <SchoolLeaderRequestsTab
+                    schoolId={user.schoolId}
+                    schoolName={user.schoolName || ''}
+                    approverName={user.schoolCode || user.schoolName || 'Admin Sekolah'}
+                  />
+                ) : (
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-sm text-amber-800">
+                    Tiada ID sekolah dalam sesi ini. Sila log masuk semula.
+                  </div>
+                )
+            ) : showWithdrawalsView ? (
                 <WithdrawalsList
                   data={allData.filter(d => {
                     const code = String((d as any).schoolCode || '').toUpperCase();

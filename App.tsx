@@ -24,6 +24,12 @@ import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
 import { loginAdminSupabase } from './services/supabaseAuth';
 import { FloatingChatbot } from './components/FloatingChatbot';
+import { LeaderAuthScreen } from './components/courses/LeaderAuthScreen';
+import { LeaderDashboard } from './components/courses/LeaderDashboard';
+import { FirstLoginICModal } from './components/courses/FirstLoginICModal';
+import { getLeaderSession, clearLeaderSession } from './services/leaderAuthService';
+import { fetchLeaderSchoolData } from './services/leaderSchoolDataService';
+import type { LeaderSession } from './types';
 
 
 // Helper functions for access control (independent of localStorage)
@@ -95,6 +101,7 @@ function AppContent() {
   const [adminSession, setAdminSession] = useState<AdminRegional | null>(null);
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
+  const [leaderSession, setLeaderSession] = useState<LeaderSession | null>(null);
 
   // Access Control State
   const [accessState, setAccessState] = useState({
@@ -105,7 +112,7 @@ function AppContent() {
   });
 
   // View State
-  const [view, setView] = useState<'auth' | 'user_dashboard' | 'user_form' | 'admin' | 'developer' | 'developer_admin' | 'developer_hierarchy'>('auth');
+  const [view, setView] = useState<'auth' | 'user_dashboard' | 'user_form' | 'admin' | 'developer' | 'developer_admin' | 'developer_hierarchy' | 'leader_auth' | 'leader_dashboard'>('auth');
 
   // URL Router Sync - push view changes to URL hash
   const navigateTo = (newView: typeof view) => {
@@ -140,10 +147,12 @@ function AppContent() {
 
   // Initialization with Fallback Logic & Session Check
   const handleFetchData = async (url: string, role?: string, negeriCode?: string, daerahCode?: string): Promise<boolean> => {
+    console.log('[handleFetchData] Called with:', { url, role, negeriCode, daerahCode });
     setFetchingData(true);
     setConnectionError(false);
     try {
       const result = await fetchCloudData(url, role, negeriCode, daerahCode);
+      console.log('[handleFetchData] Result status:', result?.status, 'submissions:', result?.submissions?.length);
       if (result && result.status === 'success') {
         if (result.schools) {
             setSchoolsList(result.schools
@@ -221,9 +230,18 @@ function AppContent() {
         const { data: { session: supaSession } } = await supabase.auth.getSession();
         const savedAdminSession = localStorage.getItem(ADMIN_SESSION_KEY);
         const savedDeveloperSession = localStorage.getItem(DEVELOPER_SESSION_KEY);
+        const savedLeaderSession = getLeaderSession();
         let sessionRestored = false;
 
-        if (savedDeveloperSession) {
+        if (savedLeaderSession) {
+            setLeaderSession(savedLeaderSession);
+            replaceViewInHash('leader_dashboard');
+            setView('leader_dashboard');
+            updateSessionActivity();
+            sessionRestored = true;
+        }
+
+        if (!sessionRestored && savedDeveloperSession) {
             try {
                 const parsedDeveloper = JSON.parse(savedDeveloperSession);
                 if (parsedDeveloper && (!parsedDeveloper.expiresAt || parsedDeveloper.expiresAt > Date.now())) {
@@ -617,7 +635,7 @@ function AppContent() {
               <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
                   <div className="relative">
                       <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-                      <img src={LOGO_URL} className="w-10 h-10 object-contain absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" alt="Logo" />
+                      <img src="/logo-tab.png" className="w-10 h-10 object-contain absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" alt="Logo" />
                   </div>
                   <p className="text-white mt-4 font-mono text-sm animate-pulse tracking-widest uppercase">Memuatkan Sistem...</p>
               </div>
@@ -625,6 +643,138 @@ function AppContent() {
       }
 
       switch (view) {
+          case 'leader_auth':
+              return (
+                <LeaderAuthScreen
+                  onLoginSuccess={() => {
+                    const session = getLeaderSession();
+                    if (session) {
+                      setLeaderSession(session);
+                      navigateTo('leader_dashboard');
+                    }
+                  }}
+                  onBack={() => navigateTo('auth')}
+                  schools={schoolsList}
+                  negeriList={negeriList}
+                  daerahList={daerahList}
+                />
+              );
+
+          case 'leader_dashboard':
+              if (!leaderSession) {
+                navigateTo('leader_auth');
+                return null;
+              }
+              return (
+                <>
+                  {!leaderSession.icNumber && (
+                    <FirstLoginICModal
+                      session={leaderSession}
+                      onComplete={(newSession) => setLeaderSession(newSession)}
+                    />
+                  )}
+                  <LeaderDashboard
+                    session={leaderSession}
+                    onLogout={() => {
+                      clearLeaderSession();
+                      setLeaderSession(null);
+                      navigateTo('auth');
+                    }}
+                  onSwitchToSchoolModule={leaderSession.schoolId && leaderSession.schoolName && leaderSession.schoolLinkStatus === 'approved' ? async () => {
+                    if (!leaderSession.passwordHash) {
+                      alert('Sesi tidak lengkap. Sila log masuk semula.');
+                      clearLeaderSession();
+                      setLeaderSession(null);
+                      navigateTo('auth');
+                      return;
+                    }
+
+                    setFetchingData(true);
+                    try {
+                      const result = await fetchLeaderSchoolData(leaderSession.email, leaderSession.passwordHash);
+                      if (!result.success || !result.data) {
+                        alert(result.message || 'Gagal akses modul sekolah.');
+                        return;
+                      }
+
+                      const d = result.data;
+                      // Set school user session
+                      const schoolUserSession: UserSession = {
+                        userId: leaderSession.leaderId,
+                        schoolName: d.school?.name || leaderSession.schoolName!,
+                        schoolCode: d.school?.school_code || leaderSession.schoolCode || '',
+                        schoolId: leaderSession.schoolId!,
+                        isLoggedIn: true,
+                      };
+                      setUserSession(schoolUserSession);
+
+                      // Map data dari edge function ke format dashboard
+                      const schoolItem: any = {
+                        name: d.school.name,
+                        schoolCode: d.school.school_code,
+                        negeriCode: d.school.negeri?.code,
+                        daerahCode: d.school.daerah?.code,
+                        allowStudents: true,
+                        allowAssistants: true,
+                        allowExaminers: true,
+                      };
+                      setSchoolsList([schoolItem]);
+
+                      const submissions = (d.submissionPeople || []).map((p: any, idx: number) => ({
+                        rowIndex: idx + 2,
+                        date: p.submission?.submitted_at || p.created_at,
+                        school: p.submission?.school?.name || '',
+                        schoolCode: p.submission?.school?.school_code || '',
+                        negeriCode: p.submission?.school?.negeri?.code,
+                        daerahCode: p.submission?.school?.daerah?.code,
+                        badge: p.submission?.badge?.name || '',
+                        student: p.name || '',
+                        gender: p.gender || '',
+                        race: p.race || '',
+                        id: p.membership_id || '',
+                        icNumber: p.ic_number || '',
+                        studentPhone: p.phone_number || '',
+                        role: p.role || 'PESERTA',
+                        category: p.category || '',
+                        unit: p.unit || '',
+                        makanan: p.makanan || '',
+                        masalahKesihatan: p.masalah_kesihatan || '',
+                        masalahKesihatanLain: p.masalah_kesihatan_lain || '',
+                        remarks: p.remarks || p.submission?.remarks || '',
+                        isWithdrawn: !!p.is_withdrawn,
+                        withdrawnAt: p.withdrawn_at,
+                        withdrawalReason: p.withdrawal_reason,
+                        withdrawalNotes: p.withdrawal_notes,
+                        participantId: p.id,
+                      }));
+                      setDashboardData(submissions);
+                      setBadges((d.badges || []).map((b: any) => ({ name: b.name, isOpen: b.is_open })));
+                      setUserProfiles((d.schoolProfiles || []).map((p: any) => ({
+                        schoolCode: p.school?.school_code || '',
+                        schoolName: p.school?.name || '',
+                        groupNumber: p.school?.group_number || '',
+                        phone: p.phone || '',
+                        principalName: p.principal_name || '',
+                        principalPhone: p.principal_phone || '',
+                        leaderName: p.leader_name || '',
+                        leaderPhone: p.leader_phone || '',
+                        leaderIC: p.leader_ic || '',
+                        leaderGender: p.leader_gender || '',
+                        leaderMembershipId: p.leader_membership_id || '',
+                        leaderRace: p.leader_race || '',
+                        remarks: p.remarks || '',
+                        lastUpdated: p.updated_at || '',
+                      })));
+
+                      navigateTo('user_dashboard');
+                    } finally {
+                      setFetchingData(false);
+                    }
+                  } : undefined}
+                  />
+                </>
+              );
+
           case 'developer':
               return (
                 <DeveloperPanel 
@@ -707,7 +857,7 @@ function AppContent() {
                   if ((adminRole === 'admin' && !adminAccessEnabledCheck) || (adminRole === 'district' && !districtAccessEnabledCheck) || (!adminAccessEnabledCheck && !districtAccessEnabledCheck)) {
                       // Access disabled, force logout
                       handleLogout();
-                      return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
+                      return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} onLeaderClick={() => navigateTo('leader_auth')} onLeaderLoginSuccess={() => { const session = getLeaderSession(); if (session) { setLeaderSession(session); navigateTo('leader_dashboard'); } }} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
                   }
               }
               
@@ -733,7 +883,7 @@ function AppContent() {
                       // Clear session if user access was disabled
                       handleLogout();
                   }
-                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
+                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} onLeaderClick={() => navigateTo('leader_auth')} onLeaderLoginSuccess={() => { const session = getLeaderSession(); if (session) { setLeaderSession(session); navigateTo('leader_dashboard'); } }} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
               }
               return (
                   <UserDashboard 
@@ -748,6 +898,11 @@ function AppContent() {
                       onNewRegistration={() => navigateTo('user_form')}
                       onDelete={handleDeleteData}
                       onRefresh={handleRefreshData}
+                      onSwitchToLeader={leaderSession ? () => {
+                        // Bersihkan session sekolah sementara, kekal leader session
+                        setUserSession(null);
+                        navigateTo('leader_dashboard');
+                      } : undefined}
                   />
               );
 
@@ -758,7 +913,7 @@ function AppContent() {
                       // Clear session if user access was disabled
                       handleLogout();
                   }
-                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
+                  return <AuthScreen scriptUrl={scriptUrl} onLoginSuccess={handleUserLoginSuccess} onAdminLogin={handleAdminLogin} onAdminRegionalLogin={handleAdminRegionalLogin} onDeveloperLogin={handleDeveloperLogin} onLeaderClick={() => navigateTo('leader_auth')} onLeaderLoginSuccess={() => { const session = getLeaderSession(); if (session) { setLeaderSession(session); navigateTo('leader_dashboard'); } }} schools={schoolsList} negeriList={negeriList} daerahList={daerahList} userAccessEnabled={accessState.userAccess} isLoading={fetchingData} />;
               }
               return (
                   <UserForm 
@@ -784,6 +939,14 @@ function AppContent() {
                     onAdminLogin={handleAdminLogin}
                     onAdminRegionalLogin={handleAdminRegionalLogin}
                     onDeveloperLogin={handleDeveloperLogin}
+                    onLeaderClick={() => navigateTo('leader_auth')}
+                    onLeaderLoginSuccess={() => {
+                      const session = getLeaderSession();
+                      if (session) {
+                        setLeaderSession(session);
+                        navigateTo('leader_dashboard');
+                      }
+                    }}
                     schools={schoolsList}
                     negeriList={negeriList}
                     daerahList={daerahList}
@@ -796,6 +959,20 @@ function AppContent() {
 
   // Determine current user info for FloatingChatbot
   const chatbotUser = (() => {
+    if (leaderSession) {
+      return {
+        userId: undefined,
+        senderName: leaderSession.fullName || 'Pemimpin',
+        senderEmail: leaderSession.email || '',
+        role: 'leader',
+        schoolName: leaderSession.schoolName || undefined,
+        schoolId: leaderSession.schoolId || undefined,
+        isLeader: true,
+        leaderId: leaderSession.leaderId,
+        leaderNegeriId: leaderSession.negeriId || null,
+        leaderDaerahId: leaderSession.daerahId || null,
+      };
+    }
     if (userSession) {
       return {
         userId: supabaseUserId || undefined,
@@ -851,6 +1028,10 @@ function AppContent() {
           role={chatbotUser.role}
           schoolName={chatbotUser.schoolName}
           schoolId={chatbotUser.schoolId}
+          isLeader={(chatbotUser as any).isLeader}
+          leaderId={(chatbotUser as any).leaderId}
+          leaderNegeriId={(chatbotUser as any).leaderNegeriId}
+          leaderDaerahId={(chatbotUser as any).leaderDaerahId}
         />
       )}
     </>

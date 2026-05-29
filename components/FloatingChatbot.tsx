@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, X, Send, CheckCircle, AlertCircle, Loader, Bell, CheckCheck, MessageSquare } from 'lucide-react';
-import { sendTelegramFeedback, getUserNotifications, markNotificationRead, markAllNotificationsRead } from '../services/telegramService';
+import { MessageCircle, X, Send, CheckCircle, AlertCircle, Loader, Bell, CheckCheck, MessageSquare, Target } from 'lucide-react';
+import { sendTelegramFeedback, getUserNotifications, markNotificationRead, markAllNotificationsRead, getProgramsForSchool, ProgramOption, getCoursesForLeader, CourseOption } from '../services/telegramService';
 
 interface FloatingChatbotProps {
   userId?: string;
@@ -9,6 +9,11 @@ interface FloatingChatbotProps {
   role: string;
   schoolName?: string;
   schoolId?: string;
+  // Untuk leader (chatbot pemimpin)
+  isLeader?: boolean;
+  leaderId?: string;
+  leaderNegeriId?: string | null;
+  leaderDaerahId?: string | null;
 }
 
 interface Notification {
@@ -23,15 +28,23 @@ interface Notification {
 type Status = 'idle' | 'sending' | 'success' | 'error';
 type Tab = 'chat' | 'notifications';
 
-export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolName, schoolId }: FloatingChatbotProps) {
+export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolName, schoolId, isLeader, leaderId, leaderNegeriId, leaderDaerahId }: FloatingChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('chat');
   const [message, setMessage] = useState('');
   const [category, setCategory] = useState<'umum' | 'sistem'>('umum');
   const [status, setStatus] = useState<Status>('idle');
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
+  const [selectedProgramId, setSelectedProgramId] = useState<string>(''); // '' = tiada program (ke kedua-dua)
+  const [loadingPrograms, setLoadingPrograms] = useState(false);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const selectedProgram = programs.find((p) => p.id === selectedProgramId) || null;
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId) || null;
 
   const roleLabel: Record<string, string> = {
     school_user: 'Guru',
@@ -54,6 +67,36 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
     return () => clearInterval(interval);
   }, [userId]);
 
+  // Load programs untuk sekolah bila chatbot dibuka pertama kali
+  useEffect(() => {
+    if (!isOpen || !schoolId || programs.length > 0) return;
+    let cancelled = false;
+    setLoadingPrograms(true);
+    getProgramsForSchool(schoolId)
+      .then((data) => {
+        if (!cancelled) setPrograms(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPrograms(false);
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, schoolId]);
+
+  // Load courses untuk leader bila chatbot dibuka
+  useEffect(() => {
+    if (!isOpen || !isLeader || courses.length > 0) return;
+    let cancelled = false;
+    setLoadingCourses(true);
+    getCoursesForLeader(leaderNegeriId || null, leaderDaerahId || null)
+      .then((data) => {
+        if (!cancelled) setCourses(data);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCourses(false);
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, isLeader, leaderNegeriId, leaderDaerahId]);
+
   // Auto switch ke tab notifikasi bila ada unread
   useEffect(() => {
     if (isOpen && unreadCount > 0 && activeTab === 'chat') {
@@ -71,14 +114,25 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
       role,
       schoolName,
       schoolId,
+      leaderId,
+      leaderNegeriId,
+      leaderDaerahId,
       category,
       message: message.trim(),
+      programId: selectedProgram?.id || null,
+      programName: selectedProgram?.name || null,
+      programScope: selectedProgram?.scope || null,
+      courseId: selectedCourse?.id || null,
+      courseName: selectedCourse?.name || null,
+      courseScope: selectedCourse?.scope || null,
     });
 
     if (success) {
       setStatus('success');
       setMessage('');
       setCategory('umum'); // Reset ke default
+      setSelectedProgramId(''); // Reset ke default (semua admin)
+      setSelectedCourseId('');
       setTimeout(() => setStatus('idle'), 2500);
     } else {
       setStatus('error');
@@ -212,14 +266,110 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
                     </button>
                   </div>
 
-                  {/* Info kategori */}
-                  <div className="text-xs text-slate-400 px-1">
-                    {category === 'umum' ? (
-                      <span>📍 Mesej akan dihantar ke <b>Admin Daerah & Negeri</b></span>
-                    ) : (
+                  {/* Info kategori + program/course routing */}
+                  <div className="text-xs text-slate-500 px-1 leading-relaxed">
+                    {category === 'sistem' ? (
                       <span>🔧 Mesej akan dihantar ke <b>Developer (Admin Utama)</b></span>
+                    ) : selectedCourse ? (
+                      selectedCourse.scope === 'negeri' ? (
+                        <span>📍 Mesej akan dihantar ke <b>Admin Negeri</b> (Kursus Negeri)</span>
+                      ) : (
+                        <span>📍 Mesej akan dihantar ke <b>Admin Daerah</b> (Kursus Daerah)</span>
+                      )
+                    ) : selectedProgram ? (
+                      selectedProgram.scope === 'negeri' ? (
+                        <span>📍 Mesej akan dihantar ke <b>Admin Negeri</b> sahaja</span>
+                      ) : (
+                        <span>📍 Mesej akan dihantar ke <b>Admin Daerah</b> sahaja</span>
+                      )
+                    ) : (
+                      <span>📍 Mesej akan dihantar ke <b>Admin Daerah & Negeri</b></span>
                     )}
                   </div>
+
+                  {/* Program Dropdown - hanya untuk kategori 'umum' & ada schoolId */}
+                  {category === 'umum' && schoolId && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 px-1">
+                        <Target size={11} className="text-amber-500" />
+                        Program berkaitan <span className="text-slate-300 font-normal">(opsyenal)</span>
+                      </label>
+                      <select
+                        value={selectedProgramId}
+                        onChange={(e) => setSelectedProgramId(e.target.value)}
+                        disabled={loadingPrograms || status === 'sending'}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">
+                          {loadingPrograms ? 'Memuatkan program...' : '— Tiada program (ke semua admin) —'}
+                        </option>
+                        {programs.filter((p) => p.scope === 'negeri').length > 0 && (
+                          <optgroup label="Program Negeri">
+                            {programs
+                              .filter((p) => p.scope === 'negeri')
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                        {programs.filter((p) => p.scope === 'daerah').length > 0 && (
+                          <optgroup label="Program Daerah">
+                            {programs
+                              .filter((p) => p.scope === 'daerah')
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Course Dropdown - hanya untuk leader & kategori 'umum' */}
+                  {category === 'umum' && isLeader && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 px-1">
+                        <Target size={11} className="text-amber-500" />
+                        Kursus berkaitan <span className="text-slate-300 font-normal">(opsyenal)</span>
+                      </label>
+                      <select
+                        value={selectedCourseId}
+                        onChange={(e) => setSelectedCourseId(e.target.value)}
+                        disabled={loadingCourses || status === 'sending'}
+                        className="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="">
+                          {loadingCourses ? 'Memuatkan kursus...' : '— Tiada kursus (ke semua admin) —'}
+                        </option>
+                        {courses.filter((c) => c.scope === 'negeri').length > 0 && (
+                          <optgroup label="Kursus Negeri">
+                            {courses
+                              .filter((c) => c.scope === 'negeri')
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                        {courses.filter((c) => c.scope === 'daerah').length > 0 && (
+                          <optgroup label="Kursus Daerah">
+                            {courses
+                              .filter((c) => c.scope === 'daerah')
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+                  )}
 
                   <textarea
                     className="w-full border border-slate-200 rounded-xl p-3 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400 placeholder-slate-300 min-h-[100px]"

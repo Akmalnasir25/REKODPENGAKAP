@@ -346,7 +346,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                     <img src={displayLogo} alt="Logo" className="h-10 w-auto object-contain drop-shadow-sm"/>
                     BORANG PENDAFTARAN
                 </h1>
-                <p className="text-amber-500 text-sm font-mono mt-1 ml-14 uppercase tracking-widest opacity-80">Sistem Pengurusan Keahlian</p>
+                <p className="text-amber-500 text-sm font-mono mt-1 ml-14 uppercase tracking-widest opacity-80">ScoutNadi</p>
             </div>
             
             {onBackToDashboard ? (

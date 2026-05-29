@@ -16,6 +16,7 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import { uploadLogo, getLogoUrl } from '../services/logoService';
 import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
+import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
 
 interface AdminDaerahPanelProps {
   daerahCode: string;
@@ -37,7 +38,7 @@ interface AdminDaerahPanelProps {
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
   daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'withdrawals' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'history' | 'audit' | 'attendance' | 'withdrawals' | 'courses' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -308,6 +309,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true },
+    { id: 'courses', label: 'Kursus Pemimpin', icon: Users, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
     { id: 'profile', label: 'Profil', icon: User, allowed: true },
@@ -342,7 +344,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
       
       {/* MOBILE HEADER */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600">
+      <div className="md:hidden text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600" style={{ background: '#07012C' }}>
           <div className="flex items-center gap-2">
               <Settings size={20} className="text-amber-500" />
               <div className="text-sm font-bold">Admin Daerah - {daerahName}</div>
@@ -353,8 +355,10 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
       </div>
 
       {/* SIDEBAR NAVIGATION (DARK & LUXURY) */}
-      <aside className={`
-          fixed inset-y-0 left-0 z-50 bg-slate-900 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r border-slate-800 flex flex-col
+      <aside
+          style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)', borderColor: '#1a0a47' }}
+          className={`
+          fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
           md:relative md:translate-x-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
@@ -470,6 +474,17 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
             {tab === 'history' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
                   <AdminHistory data={filteredData} schools={filteredSchools} onRefresh={refreshData} />
+              </div>
+            )}
+
+            {tab === 'courses' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                  <CoursesAdminPanel
+                    adminScope="daerah"
+                    adminNegeriCode={negeriCode}
+                    adminDaerahCode={daerahCode}
+                    adminUser={adminSession?.username || 'admin_daerah'}
+                  />
               </div>
             )}
 

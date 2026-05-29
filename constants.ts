@@ -11,4 +11,4 @@ export const LOCAL_STORAGE_KEYS = {
 };
 
 // Logo Configuration
-export const LOGO_URL = "/logo-pengakap-baru.png";
+export const LOGO_URL = "/logo-default.png";

@@ -18,6 +18,7 @@ import { uploadLogo, getLogoUrl } from '../services/logoService';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
+import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
 
 interface AdminNegeriPanelProps {
   negeriCode: string;
@@ -39,7 +40,7 @@ interface AdminNegeriPanelProps {
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
   negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'pengesahan' | 'attendance' | 'withdrawals' | 'history' | 'audit' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'pengesahan' | 'attendance' | 'withdrawals' | 'courses' | 'history' | 'audit' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   // Filter daerah global utk semua tab data (Rumusan, Analitik, Sekolah, Semakan, Audit)
@@ -456,6 +457,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true, scoped: false },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true, scoped: false },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true, scoped: true },
+    { id: 'courses', label: 'Kursus Pemimpin', icon: Users, allowed: true, scoped: false },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true, scoped: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true, scoped: true },
     { id: 'profile', label: 'Profil', icon: User, allowed: true, scoped: false },
@@ -490,7 +492,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
       
       {/* MOBILE HEADER */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600">
+      <div className="md:hidden text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600" style={{ background: '#07012C' }}>
           <div className="flex items-center gap-2">
               <Settings size={20} className="text-amber-500" />
               <div className="text-sm font-bold">Admin Negeri - {negeriName}</div>
@@ -501,8 +503,10 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       </div>
 
       {/* SIDEBAR NAVIGATION (DARK & LUXURY) */}
-      <aside className={`
-          fixed inset-y-0 left-0 z-50 bg-slate-900 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r border-slate-800 flex flex-col
+      <aside
+          style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)', borderColor: '#1a0a47' }}
+          className={`
+          fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
           md:relative md:translate-x-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
@@ -921,6 +925,17 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
             {tab === 'history' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
                   <AdminHistory data={filteredData} schools={filteredSchools} onRefresh={refreshData} />
+              </div>
+            )}
+
+            {tab === 'courses' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                  <CoursesAdminPanel
+                    adminScope="negeri"
+                    adminNegeriCode={negeriCode}
+                    adminDaerahCode={null}
+                    adminUser={adminSession?.username || 'admin_negeri'}
+                  />
               </div>
             )}
 

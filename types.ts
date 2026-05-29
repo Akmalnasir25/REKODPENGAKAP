@@ -185,3 +185,127 @@ export enum BadgeType {
   KERIS_PERAK = 'Keris Perak',
   KERIS_EMAS = 'Keris Emas'
 }
+
+// ============================================================
+// MODUL KURSUS PEMIMPIN
+// ============================================================
+
+export type LeaderType = 'guru' | 'luar';
+
+export interface LeaderAccount {
+  id: string;
+  email: string;
+  icNumber: string;
+  fullName: string;
+  phoneNumber: string;
+  leaderType: LeaderType;
+  schoolId?: string | null;
+  schoolName?: string | null;
+  negeriId?: string | null;
+  negeriName?: string | null;
+  daerahId?: string | null;
+  daerahName?: string | null;
+  emailVerified: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface LeaderSession {
+  leaderId: string;
+  email: string;
+  fullName: string;
+  icNumber: string;
+  phoneNumber: string;
+  leaderType: LeaderType;
+  schoolId?: string | null;
+  schoolName?: string | null;
+  schoolCode?: string | null;
+  schoolLinkStatus?: 'pending' | 'approved' | 'rejected' | null;
+  passwordHash?: string | null;
+  negeriId?: string | null;
+  negeriName?: string | null;
+  daerahId?: string | null;
+  daerahName?: string | null;
+  expiresAt: number;
+  isLoggedIn: boolean;
+}
+
+export type CourseScope = 'negeri' | 'daerah';
+export type CourseStatus = 'draft' | 'open' | 'closed' | 'completed' | 'cancelled';
+
+export interface Course {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  scope: CourseScope;
+  negeriId?: string | null;
+  negeriName?: string | null;
+  daerahId?: string | null;
+  daerahName?: string | null;
+  startDate: string;
+  endDate: string;
+  venue: string;
+  venueAddress?: string;
+  quota: number;
+  feeAmount: number;
+  registrationDeadline?: string | null;
+  status: CourseStatus;
+  hasDigitalCertificate?: boolean;
+  certificateTemplateId?: string | null;
+  certificateTemplateUrl?: string | null;
+  certificateRequiresApproval?: boolean;
+  createdByRole?: string;
+  createdBy?: string;
+  createdAt: string;
+  registeredCount?: number;
+}
+
+export type RegistrationStatus = 'registered' | 'cancelled' | 'attended' | 'absent' | 'passed' | 'failed';
+export type PaymentStatus = 'unpaid' | 'paid' | 'waived';
+
+export interface CourseRegistration {
+  id: string;
+  courseId: string;
+  leaderId: string;
+  status: RegistrationStatus;
+  paymentStatus: PaymentStatus;
+  paymentProofUrl?: string | null;
+  resultGrade?: string | null;
+  resultNotes?: string | null;
+  certificateUrl?: string | null;
+  certificateGeneratedAt?: string | null;
+  certificateStatus?: 'pending' | 'approved' | 'rejected' | 'released';
+  certificateApprovedBy?: string | null;
+  certificateApprovedAt?: string | null;
+  certificateRejectReason?: string | null;
+  adminNotes?: string | null;
+  registeredAt: string;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  // Joined fields
+  course?: Course;
+  leader?: LeaderAccount;
+}
+
+export interface CourseDocument {
+  id: string;
+  registrationId: string;
+  documentType: 'ic' | 'sijil' | 'lain';
+  fileUrl: string;
+  fileName: string;
+  fileSize?: number;
+  uploadedAt: string;
+}
+
+export interface CourseAttendance {
+  id: string;
+  courseId: string;
+  leaderId: string;
+  registrationId?: string | null;
+  checkInAt: string;
+  checkOutAt?: string | null;
+  method: 'qr' | 'manual';
+  verifiedBy?: string;
+  notes?: string;
+}

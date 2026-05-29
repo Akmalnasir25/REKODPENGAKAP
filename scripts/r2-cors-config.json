@@ -1,0 +1,23 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://scoutnadi.web.app",
+      "https://ppmdaftar.web.app",
+      "http://localhost:5173",
+      "http://localhost:4173"
+    ],
+    "AllowedMethods": [
+      "GET",
+      "PUT",
+      "POST",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "*"
+    ],
+    "ExposeHeaders": [
+      "ETag"
+    ],
+    "MaxAgeSeconds": 3600
+  }
+]

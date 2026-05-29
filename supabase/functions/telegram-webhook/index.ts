@@ -59,7 +59,7 @@ async function editMessage(chatId: string, messageId: number, text: string, repl
   });
 }
 
-const HEADER = `🛡️ <b>SISTEM DAFTAR PENGAKAP</b>
+const HEADER = `🛡️ <b>ScoutNadi</b>
 <i>Pusat Kawalan Admin</i>
 ━━━━━━━━━━━━━━━━━━━━━━`;
 
@@ -595,7 +595,7 @@ Tiada sekolah dijumpai di daerah <b>${daerahName}</b>.`);
       }
       await updateSession(supabase, chatId, { step: 'scan_program', school_id: badgeId, school_name: badge.name });
       // Build WebApp URL with program info
-      const webAppUrl = `https://ppmdaftar.web.app/scan-qr.html?badge=${encodeURIComponent(badge.name)}&badgeId=${badgeId}&chatId=${chatId}`;
+      const webAppUrl = `https://scoutnadi.web.app/scan-qr.html?badge=${encodeURIComponent(badge.name)}&badgeId=${badgeId}&chatId=${chatId}`;
       await editMessage(chatId, msgId, `${HEADER}
 
 🎯 <b>${badge.name}</b>

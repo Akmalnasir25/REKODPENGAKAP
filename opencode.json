@@ -6,7 +6,7 @@
       "name": "Fiqstr Core API",
       "options": {
         "baseURL": "https://core.fiqstr.com/v1",
-        "apiKey": "fiq-4sFWJKVfvKkuc2nvL-Z7AoS9faFUqOpnCqzDcbPOf18"
+        "apiKey": "fiq-2uN8ARiPgMmlsdZjgA9zGK_BLjPC7WmTlxKGTLhIulQ"
       },
       "models": {
         "fiqstr/claude-opus-4.7": { "name": "Claude Opus 4.7" },

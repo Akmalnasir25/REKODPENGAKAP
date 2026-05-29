@@ -4,7 +4,7 @@
  * No external dependencies required.
  */
 
-type ViewName = 'auth' | 'user_dashboard' | 'user_form' | 'admin' | 'developer' | 'developer_admin' | 'developer_hierarchy';
+type ViewName = 'auth' | 'user_dashboard' | 'user_form' | 'admin' | 'developer' | 'developer_admin' | 'developer_hierarchy' | 'leader_auth' | 'leader_dashboard';
 
 const ROUTE_MAP: Record<string, ViewName> = {
   '/': 'auth',
@@ -15,6 +15,8 @@ const ROUTE_MAP: Record<string, ViewName> = {
   '/developer': 'developer',
   '/developer/admin': 'developer_admin',
   '/developer/hierarchy': 'developer_hierarchy',
+  '/pemimpin': 'leader_auth',
+  '/pemimpin/dashboard': 'leader_dashboard',
 };
 
 const VIEW_TO_ROUTE: Record<ViewName, string> = {
@@ -25,6 +27,8 @@ const VIEW_TO_ROUTE: Record<ViewName, string> = {
   'developer': '/developer',
   'developer_admin': '/developer/admin',
   'developer_hierarchy': '/developer/hierarchy',
+  'leader_auth': '/pemimpin',
+  'leader_dashboard': '/pemimpin/dashboard',
 };
 
 const VIEW_TITLES: Record<ViewName, string> = {
@@ -35,6 +39,8 @@ const VIEW_TITLES: Record<ViewName, string> = {
   'developer': 'Developer Panel - Pengakap',
   'developer_admin': 'Developer Admin - Pengakap',
   'developer_hierarchy': 'Hierarki - Pengakap',
+  'leader_auth': 'Portal Pemimpin - Pengakap',
+  'leader_dashboard': 'Dashboard Pemimpin - Pengakap',
 };
 
 /**

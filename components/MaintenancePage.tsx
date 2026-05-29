@@ -110,7 +110,7 @@ export const MaintenancePage: React.FC = () => {
         {/* Footer */}
         <div className="mt-12 pt-6 border-t border-slate-800/50">
           <p className="text-[10px] text-slate-600 uppercase tracking-widest font-medium">
-            Sistem Pengurusan Data Pengakap
+            ScoutNadi
           </p>
           <p className="text-[9px] text-slate-700 font-mono mt-1">{APP_VERSION}</p>
         </div>

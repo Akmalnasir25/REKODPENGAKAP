@@ -75,6 +75,67 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
     }
   };
 
+  const [bulkApproving, setBulkApproving] = useState<string | null>(null);
+
+  const handleBulkApproveByBadge = async (badgeName: string, items: any[]) => {
+    const pending = items.filter((item: any) => {
+      const daerah = item.school?.daerah?.code || '';
+      const isDaerahStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
+      return !item.daerah_approved || !isDaerahStep;
+    });
+    if (pending.length === 0) { alert('Semua sudah disahkan.'); return; }
+    if (!confirm(`Sahkan pukal ${pending.length} sekolah untuk "${badgeName}"?`)) return;
+    setBulkApproving(badgeName);
+    let successCount = 0;
+    let failCount = 0;
+    for (const item of pending) {
+      const schoolName = item.school?.name || '';
+      const daerah = item.school?.daerah?.code || '';
+      const isDaerahStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
+      try {
+        const res = isDaerahStep
+          ? await approveDaerahLevel(schoolName, badgeName)
+          : await approveSchoolBadge(scriptUrl, schoolName, badgeName);
+        if (res.status === 'success') successCount++;
+        else failCount++;
+      } catch { failCount++; }
+    }
+    setBulkApproving(null);
+    alert(`Selesai: ${successCount} berjaya, ${failCount} gagal.`);
+    await fetchSubmitted();
+    onRefresh();
+  };
+
+  const handleBulkApproveAll = async () => {
+    const allItems = submittedList.filter((item: any) => {
+      const daerah = item.school?.daerah?.code || '';
+      const isDaerahStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
+      return !item.daerah_approved || !isDaerahStep;
+    });
+    if (allItems.length === 0) { alert('Tiada pendaftaran menunggu pengesahan.'); return; }
+    if (!confirm(`Sahkan pukal SEMUA ${allItems.length} pendaftaran merentas semua program?\n\nTindakan ini tidak boleh dibatalkan.`)) return;
+    setBulkApproving('__ALL__');
+    let successCount = 0;
+    let failCount = 0;
+    for (const item of allItems) {
+      const schoolName = item.school?.name || '';
+      const badgeName = item.badge?.name || '';
+      const daerah = item.school?.daerah?.code || '';
+      const isDaerahStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
+      try {
+        const res = isDaerahStep
+          ? await approveDaerahLevel(schoolName, badgeName)
+          : await approveSchoolBadge(scriptUrl, schoolName, badgeName);
+        if (res.status === 'success') successCount++;
+        else failCount++;
+      } catch { failCount++; }
+    }
+    setBulkApproving(null);
+    alert(`Selesai: ${successCount} berjaya, ${failCount} gagal.`);
+    await fetchSubmitted();
+    onRefresh();
+  };
+
   const grouped = submittedList.reduce((acc: Record<string, any[]>, item: any) => {
     const badgeName = item.badge?.name || 'Tidak Diketahui';
     if (!acc[badgeName]) acc[badgeName] = [];
@@ -93,18 +154,34 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
 
   return (
     <div className="bg-white rounded-xl shadow p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
           <CheckCircle size={20} className="text-green-600" /> Pengesahan Pendaftaran
         </h2>
-        <button onClick={fetchSubmitted} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
-          <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={fetchSubmitted} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition" title="Muat semula">
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
-      <p className="text-sm text-slate-500 mb-6">
+      <p className="text-sm text-slate-500 mb-4">
         Senarai sekolah yang telah menghantar pendaftaran (status: submitted) dan menunggu pengesahan.
       </p>
+
+      {!loading && submittedList.length > 0 && (
+        <div className="mb-6 flex items-center gap-3">
+          <button
+            onClick={handleBulkApproveAll}
+            disabled={bulkApproving === '__ALL__'}
+            className="px-4 py-2 bg-green-700 text-white text-xs font-bold rounded-lg hover:bg-green-800 transition disabled:opacity-50 flex items-center gap-2 shadow"
+          >
+            {bulkApproving === '__ALL__' ? <LoadingSpinner size="sm" color="border-white" /> : <CheckCircle size={14} />}
+            Sahkan Pukal Semua ({submittedList.length})
+          </button>
+          <span className="text-[10px] text-slate-400">Tindakan ini akan sahkan semua pendaftaran yang menunggu.</span>
+        </div>
+      )}
 
       {loading && (
         <div className="flex justify-center py-8">
@@ -121,10 +198,22 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
 
       {!loading && Object.entries(grouped).map(([badgeName, items]) => (
         <div key={badgeName} className="mb-6">
-          <div className="flex items-center gap-2 mb-3 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
-            <Medal size={16} className="text-amber-600" />
-            <span className="font-bold text-slate-700">{badgeName}</span>
-            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{items.length} sekolah</span>
+          <div className="flex items-center justify-between mb-3 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-2">
+              <Medal size={16} className="text-amber-600" />
+              <span className="font-bold text-slate-700">{badgeName}</span>
+              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">{items.length} sekolah</span>
+            </div>
+            {items.length > 1 && (
+              <button
+                onClick={() => handleBulkApproveByBadge(badgeName, items)}
+                disabled={bulkApproving === badgeName}
+                className="px-3 py-1 bg-green-600 text-white text-[10px] font-bold rounded hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1"
+              >
+                {bulkApproving === badgeName ? <LoadingSpinner size="sm" color="border-white" /> : <CheckCircle size={10} />}
+                Sahkan Semua
+              </button>
+            )}
           </div>
 
           <div className="space-y-2">

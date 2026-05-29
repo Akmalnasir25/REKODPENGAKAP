@@ -26,6 +26,11 @@ dist-ssr
 # Env
 .env
 
+# Config files with secrets
+config.json
+opencode.json
+nano opencode.json
+
 # Local data exports / sensitive spreadsheets
 *.xlsx
 *.xls

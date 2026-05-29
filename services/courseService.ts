@@ -173,8 +173,40 @@ export async function updateCourse(id: string, patch: Partial<CreateCourseInput>
 
 export async function deleteCourse(id: string): Promise<{ success: boolean; message?: string }> {
   try {
-    const { error } = await supabase.from('courses').delete().eq('id', id);
+    // Delete dependent records first
+    await supabase.from('course_attendance').delete().eq('course_id', id);
+
+    const { data: regs } = await supabase
+      .from('course_registrations')
+      .select('id')
+      .eq('course_id', id);
+
+    if (regs && regs.length > 0) {
+      const regIds = regs.map((r: any) => r.id);
+      await supabase.from('course_documents').delete().in('registration_id', regIds);
+    }
+
+    await supabase.from('course_registrations').delete().eq('course_id', id);
+
+    // Delete the course
+    const { error } = await supabase
+      .from('courses')
+      .delete()
+      .eq('id', id);
+
     if (error) return { success: false, message: error.message };
+
+    // Verify deletion
+    const { data: remaining } = await supabase
+      .from('courses')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (remaining) {
+      return { success: false, message: 'Kursus masih wujud selepas cubaan padam. Semak RLS policy DELETE di Supabase Dashboard.' };
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, message: err.message || 'Ralat sistem.' };

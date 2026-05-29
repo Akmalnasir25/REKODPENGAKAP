@@ -12,7 +12,7 @@ interface Notification {
 }
 
 interface NotificationBellProps {
-  userId: string;
+  userId?: string;
 }
 
 export function NotificationBell({ userId }: NotificationBellProps) {

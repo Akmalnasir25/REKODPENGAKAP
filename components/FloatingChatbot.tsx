@@ -61,11 +61,11 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
   };
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !isOpen) return;
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [userId, isOpen]);
 
   // Load programs untuk sekolah bila chatbot dibuka pertama kali
   useEffect(() => {

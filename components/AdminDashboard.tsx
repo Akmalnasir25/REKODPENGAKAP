@@ -1,5 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { SubmissionData, School, Badge, UserProfile } from '../types';
 import { BrainCircuit, RefreshCw, BarChart3, Database, Trash2, Sparkles, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
@@ -735,7 +736,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                 </button>
                 </div>
                 {aiAnalysis ? (
-                <div className="bg-white p-4 rounded-lg border border-purple-200 text-sm text-gray-700 prose prose-sm max-w-none shadow-sm" dangerouslySetInnerHTML={{ __html: aiAnalysis }} />
+                <div className="bg-white p-4 rounded-lg border border-purple-200 text-sm text-gray-700 prose prose-sm max-w-none shadow-sm" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(aiAnalysis) }} />
                 ) : (
                 <p className="text-xs text-purple-600 italic">
                     Tekan butang 'Jana Analisis' untuk meminta AI merumuskan trend data yang telah disahkan (Diterima oleh Admin) pada tahun {selectedYear}.

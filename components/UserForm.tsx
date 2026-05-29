@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock, School, Medal, Users, Plus, Trash2, Save, Sparkles, CheckCircle, ArrowLeft, AlertOctagon, UserCheck, GraduationCap } from 'lucide-react';
 import { LeaderInfo, Participant, BadgeType, UserSession, Badge, School as SchoolType, SubmissionData } from '../types';
 import { APP_VERSION, LOGO_URL, LOCAL_STORAGE_KEYS } from '../constants';
@@ -7,6 +7,7 @@ import { generateBadgeInfo } from '../services/geminiService';
 import { BadgeModal } from './BadgeModal';
 import { submitRegistration } from '../services/supabaseApi';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
+import { PrivacyNotice } from './ui/PrivacyNotice';
 
 interface UserFormProps {
   schools: SchoolType[];
@@ -49,9 +50,9 @@ export const UserForm: React.FC<UserFormProps> = ({
   // Registration Data
   type PersonRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI';
   
-  let participantIdCounter = 0;
+  const participantIdCounterRef = useRef(0);
   const createEmptyParticipant = (role: PersonRole = 'PESERTA'): Participant & { role: PersonRole } => ({ 
-      id: Date.now() + (++participantIdCounter), 
+      id: Date.now() + (++participantIdCounterRef.current), 
       name: '', 
       gender: 'Lelaki', 
       race: 'Melayu',
@@ -75,6 +76,9 @@ export const UserForm: React.FC<UserFormProps> = ({
   const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [badgeInfoContent, setBadgeInfoContent] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [pdpaConsent, setPdpaConsent] = useState(false);
+  const [parentalConsent, setParentalConsent] = useState(false);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
 
   const safeBadges: Badge[] = Array.isArray(badgeTypes) && badgeTypes.length > 0
     ? badgeTypes
@@ -763,11 +767,38 @@ export const UserForm: React.FC<UserFormProps> = ({
                 </div>
             </div>
 
-            <div className="pt-4 pb-8">
+            <div className="pt-4 pb-8 space-y-3">
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 space-y-2">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={pdpaConsent}
+                      onChange={(e) => setPdpaConsent(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-[11px] text-slate-600 leading-relaxed">
+                      Saya bersetuju dengan{' '}
+                      <button type="button" onClick={() => setShowPrivacyNotice(true)} className="text-blue-600 font-bold hover:underline">Notis Privasi (PDPA)</button>
+                      {' '}dan membenarkan pemprosesan data peribadi peserta untuk tujuan pendaftaran pengakap.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={parentalConsent}
+                      onChange={(e) => setParentalConsent(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-[11px] text-slate-600 leading-relaxed">
+                      Saya mengesahkan bahawa saya adalah ibu bapa/penjaga sah atau telah mendapat kebenaran ibu bapa/penjaga bagi peserta di bawah umur 18 tahun untuk pendaftaran ini.
+                    </span>
+                  </label>
+                </div>
+
                 <button 
                     type="submit" 
-                    disabled={submitting} 
-                    className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg flex justify-center gap-2 transition active:scale-[0.98] ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-600'}`}
+                    disabled={submitting || !pdpaConsent || !parentalConsent} 
+                    className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg flex justify-center gap-2 transition active:scale-[0.98] ${submitting || !pdpaConsent || !parentalConsent ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-600'}`}
                 >
                     {submitting ? 'Menyimpan...' : <><Save size={24}/> Simpan Data</>}
                 </button>
@@ -793,6 +824,10 @@ export const UserForm: React.FC<UserFormProps> = ({
         content={badgeInfoContent}
         loading={aiLoading}
       />
+
+      {showPrivacyNotice && (
+        <PrivacyNotice onAccept={() => { setShowPrivacyNotice(false); setPdpaConsent(true); }} />
+      )}
     </div>
   );
 };

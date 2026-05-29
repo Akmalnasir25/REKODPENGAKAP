@@ -8,7 +8,7 @@ import { listCourses, deleteCourse } from '../../../services/courseService';
 import { supabase } from '../../../services/supabaseClient';
 import type { Course, CourseScope, CourseStatus } from '../../../types';
 import { CourseFormModal } from './CourseFormModal';
-import { CourseParticipantsList } from './CourseParticipantsList';
+import { CourseStatsDashboard } from './CourseStatsDashboard';
 
 interface CoursesAdminPanelProps {
   adminScope: 'negeri' | 'daerah' | 'developer';
@@ -109,8 +109,14 @@ export const CoursesAdminPanel: React.FC<CoursesAdminPanelProps> = ({
     if (!confirm(`Padam kursus "${name}"? Semua pendaftaran berkaitan akan dipadam juga.`)) return;
     setDeletingId(id);
     try {
-      await deleteCourse(id);
+      const result = await deleteCourse(id);
+      if (!result.success) {
+        alert(result.message || 'Gagal memadam kursus.');
+        return;
+      }
       await loadCourses();
+    } catch (err: any) {
+      alert(err.message || 'Ralat semasa memadam kursus.');
     } finally {
       setDeletingId(null);
     }
@@ -224,7 +230,7 @@ export const CoursesAdminPanel: React.FC<CoursesAdminPanelProps> = ({
       ) : (
         <div className="space-y-2">
           {filteredCourses.map((c) => (
-            <div key={c.id} className="bg-white border border-slate-200 rounded-xl p-3 hover:shadow-sm transition">
+            <div key={c.id} onClick={() => setViewParticipants(c)} className="bg-white border border-slate-200 rounded-xl p-3 hover:shadow-md hover:border-emerald-300 transition cursor-pointer group">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1 flex-wrap">
@@ -258,10 +264,10 @@ export const CoursesAdminPanel: React.FC<CoursesAdminPanelProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
+                <div className="flex flex-col gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => setViewParticipants(c)}
-                    title="Lihat Pendaftar"
+                    title="Lihat Statistik"
                     className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition"
                   >
                     <Eye size={14} />
@@ -304,9 +310,9 @@ export const CoursesAdminPanel: React.FC<CoursesAdminPanelProps> = ({
         />
       )}
 
-      {/* Participants Modal */}
+      {/* Course Stats Dashboard */}
       {viewParticipants && (
-        <CourseParticipantsList
+        <CourseStatsDashboard
           course={viewParticipants}
           adminUser={adminUser}
           onClose={() => setViewParticipants(null)}

@@ -60,6 +60,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [showWithdrawalsView, setShowWithdrawalsView] = useState(false);
   const [showLeaderRequestsView, setShowLeaderRequestsView] = useState(false);
+  const [showDataAccessView, setShowDataAccessView] = useState(false);
   const [pendingLeaderCount, setPendingLeaderCount] = useState(0);
 
   // Auto-refresh count permintaan pemimpin pending setiap 30 saat
@@ -734,8 +735,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <SidebarItem 
                 icon={Home} 
                 label="Utama" 
-                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView} 
-                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setIsMobileSidebarOpen(false); }} 
+                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView && !showDataAccessView} 
+                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setShowDataAccessView(false); setIsMobileSidebarOpen(false); }} 
               />
 
               <SidebarItem 
@@ -765,6 +766,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 badge={pendingLeaderCount}
                 isActive={showLeaderRequestsView}
                 onClick={() => { setShowLeaderRequestsView(true); setShowWithdrawalsView(false); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
+              />
+
+              <SidebarItem
+                icon={Shield}
+                label="Data Peribadi (PDPA)"
+                isActive={showDataAccessView}
+                onClick={() => { setShowDataAccessView(true); setShowLeaderRequestsView(false); setShowWithdrawalsView(false); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
               />
 
               <SidebarItem 
@@ -973,7 +981,57 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             {/* CONTENT VIEWS (SCREEN ONLY) */}
             <div className="print:hidden">
-            {showLeaderRequestsView ? (
+            {showDataAccessView ? (
+                <div className="bg-white rounded-xl shadow p-6 space-y-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <Shield className="text-blue-600" size={20} />
+                    </div>
+                    <div>
+                      <h2 className="font-bold text-slate-800 text-lg">Akses Data Peribadi (PDPA)</h2>
+                      <p className="text-xs text-slate-500">Hak anda di bawah Akta Perlindungan Data Peribadi 2010</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-3">
+                    <h3 className="font-bold text-sm text-blue-900">Data Sekolah Anda</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div><span className="text-slate-500 font-semibold">Nama Sekolah:</span> <span className="text-slate-700">{user.schoolName || '-'}</span></div>
+                      <div><span className="text-slate-500 font-semibold">Kod Sekolah:</span> <span className="text-slate-700">{user.schoolCode || '-'}</span></div>
+                      <div><span className="text-slate-500 font-semibold">ID Sekolah:</span> <span className="text-slate-700 font-mono">{user.schoolId || '-'}</span></div>
+                      <div><span className="text-slate-500 font-semibold">Jumlah Rekod ({selectedYear}):</span> <span className="text-slate-700">{myData.length} peserta</span></div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h3 className="font-bold text-sm text-slate-800">Hak Anda Di Bawah PDPA</h3>
+                    <ul className="text-xs text-slate-600 space-y-2 list-disc pl-4">
+                      <li><strong>Akses:</strong> Anda boleh melihat semua data yang disimpan mengenai sekolah anda di dashboard ini.</li>
+                      <li><strong>Pembetulan:</strong> Untuk membetulkan data yang tidak tepat, sila hubungi Meja Bantuan melalui Telegram.</li>
+                      <li><strong>Penarikan Balik:</strong> Anda boleh meminta data dipadam dengan menghubungi Pegawai Perlindungan Data (DPO).</li>
+                      <li><strong>Aduan:</strong> Anda berhak membuat aduan kepada Pesuruhjaya Perlindungan Data Peribadi Malaysia.</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <h3 className="font-bold text-xs text-amber-800 mb-2">Hubungi DPO / Meja Bantuan</h3>
+                    <p className="text-xs text-amber-700 mb-2">Untuk sebarang pertanyaan mengenai data peribadi, pembetulan data, atau penarikan balik persetujuan:</p>
+                    <a
+                      href="https://t.me/AkmalNasir"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Hubungi Melalui Telegram
+                    </a>
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+                    <p>Polisi Retensi: Data disimpan selama tempoh keahlian aktif + 7 tahun selepas tamat, kemudian dipadam secara automatik.</p>
+                    <p className="mt-1">Terakhir dikemas kini: Mei 2026</p>
+                  </div>
+                </div>
+            ) : showLeaderRequestsView ? (
                 user.schoolId ? (
                   <SchoolLeaderRequestsTab
                     schoolId={user.schoolId}

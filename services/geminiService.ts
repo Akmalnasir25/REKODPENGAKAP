@@ -2,7 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 
 export const generateBadgeInfo = async (badgeType: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || '' });
   
   try {
     const response = await ai.models.generateContent({
@@ -20,7 +20,7 @@ export const generateBadgeInfo = async (badgeType: string): Promise<string> => {
 };
 
 export const analyzeData = async (summaryData: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY || '' });
 
   try {
     const response = await ai.models.generateContent({

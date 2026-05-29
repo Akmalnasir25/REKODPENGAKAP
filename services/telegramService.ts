@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN || '8836450420:AAFjG2lH6Q2tlQi3KjCvINq2jzPFJrYqy_4';
-const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID || '39114512';
+const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID || '571382718';
 
-const SUPABASE_URL = 'https://jvjxeckzmokoqjfsuene.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jvjxeckzmokoqjfsuene.supabase.co';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2anhlY2t6bW9rb3FqZnN1ZW5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NzExMzYsImV4cCI6MjA5NDA0NzEzNn0.P5zhMteXlYSmpIDRq5n_hx5xNRguAYfUwzJUZu2JRFo';
 
 export interface FeedbackPayload {
   userId?: string;
@@ -327,16 +327,17 @@ export async function getCoursesForLeader(
   try {
     const { supabase } = await import('./supabaseClient');
 
-    const { data: courses } = await supabase
+    const { data: courses, error } = await supabase
       .from('courses')
       .select('id, name, scope, negeri_id, daerah_id, status')
       .in('status', ['open', 'closed', 'completed'])
       .order('start_date', { ascending: false });
 
-    if (!courses) return [];
+    if (error || !courses) return [];
 
-    return (courses as any[])
+    const filtered = (courses as any[])
       .filter((c) => {
+        if (!negeriId && !daerahId) return true;
         if (c.scope === 'negeri') {
           return !c.negeri_id || c.negeri_id === negeriId;
         }
@@ -352,6 +353,8 @@ export async function getCoursesForLeader(
         negeri_id: c.negeri_id,
         daerah_id: c.daerah_id,
       }));
+
+    return filtered;
   } catch (err) {
     console.error('getCoursesForLeader error:', err);
     return [];

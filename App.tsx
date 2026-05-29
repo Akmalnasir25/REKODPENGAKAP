@@ -24,6 +24,7 @@ import { I18nProvider } from './i18n';
 import { logAudit } from './services/auditService';
 import { loginAdminSupabase } from './services/supabaseAuth';
 import { FloatingChatbot } from './components/FloatingChatbot';
+import { PrivacyNotice } from './components/ui/PrivacyNotice';
 import { LeaderAuthScreen } from './components/courses/LeaderAuthScreen';
 import { LeaderDashboard } from './components/courses/LeaderDashboard';
 import { FirstLoginICModal } from './components/courses/FirstLoginICModal';
@@ -102,6 +103,15 @@ function AppContent() {
   const [isDeveloperMode, setIsDeveloperMode] = useState(false);
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [leaderSession, setLeaderSession] = useState<LeaderSession | null>(null);
+  const [showPrivacyConsent, setShowPrivacyConsent] = useState(false);
+
+  useEffect(() => {
+    const hasAccepted = localStorage.getItem('PDPA_CONSENT_ACCEPTED');
+    if (!hasAccepted) {
+      const timer = setTimeout(() => setShowPrivacyConsent(true), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   // Access Control State
   const [accessState, setAccessState] = useState({
@@ -1033,6 +1043,14 @@ function AppContent() {
           leaderNegeriId={(chatbotUser as any).leaderNegeriId}
           leaderDaerahId={(chatbotUser as any).leaderDaerahId}
         />
+      )}
+
+      {/* One-time PDPA Privacy Notice for existing users */}
+      {showPrivacyConsent && (
+        <PrivacyNotice onAccept={() => {
+          localStorage.setItem('PDPA_CONSENT_ACCEPTED', new Date().toISOString());
+          setShowPrivacyConsent(false);
+        }} />
       )}
     </>
   );

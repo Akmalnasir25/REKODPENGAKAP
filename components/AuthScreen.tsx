@@ -9,6 +9,7 @@ import { registerLeader, loginLeader, resetLeaderPasswordByIC, saveLeaderSession
 import { UserSession, School, Negeri, Daerah } from '../types';
 import { APP_VERSION, LOGO_URL } from '../constants';
 import { checkLoginAttempts, recordLoginAttempt, fetchServerCsrf } from '../services/security';
+import { PrivacyNotice } from './ui/PrivacyNotice';
 
 interface AuthScreenProps {
   scriptUrl: string;
@@ -78,9 +79,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [leaderType, setLeaderType] = useState<'guru' | 'luar'>('guru');
   const [leaderSchoolId, setLeaderSchoolId] = useState(''); // Sekolah untuk guru
   const [leaderSchoolCode, setLeaderSchoolCode] = useState(''); // Kod untuk validation
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
 
-  const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  const loginPassword = isPreviewMode && authMode === 'login' ? 'PREVIEW_BYPASS' : password;
+  const isPreviewMode = import.meta.env.DEV && ['4002', '4173'].includes(window.location.port);
+  const loginPassword = password;
 
   useEffect(() => {
       if (isPreviewMode && authMode === 'login') {
@@ -918,19 +921,48 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </>
                 )}
 
+                {authMode === 'register' && (
+                  <div className="flex items-start gap-2 mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <input
+                      type="checkbox"
+                      id="privacyConsent"
+                      checked={privacyAccepted}
+                      onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="privacyConsent" className="text-[11px] text-slate-600 leading-relaxed cursor-pointer">
+                      Saya telah membaca dan bersetuju dengan{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowPrivacyNotice(true)}
+                        className="text-blue-600 font-bold hover:underline"
+                      >
+                        Notis Privasi & Perlindungan Data (PDPA)
+                      </button>
+                      {' '}serta membenarkan pemprosesan data peribadi saya untuk tujuan pendaftaran pengakap.
+                    </label>
+                  </div>
+                )}
+
                 <button 
                     type="submit" 
-                    disabled={loading || isLoading}
+                    disabled={loading || isLoading || (authMode === 'register' && !privacyAccepted)}
                     className={`w-full font-bold py-3 rounded-lg shadow-lg transition transform active:scale-[0.98] flex justify-center items-center gap-2 mt-4 ${
                         authMode === 'developer' 
                             ? 'bg-purple-600 text-white hover:bg-purple-700'
-                            : 'bg-blue-900 text-white hover:bg-blue-800'
+                            : (authMode === 'register' && !privacyAccepted)
+                              ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                              : 'bg-blue-900 text-white hover:bg-blue-800'
                     }`}
                 >
                     {loading || isLoading ? <LoadingSpinner size="sm" color="border-white" /> : (authMode === 'developer' ? <Code size={18} /> : (authMode === 'login' ? <LogIn size={18} /> : (authMode === 'forgot_password' ? <RefreshCw size={18} /> : <UserPlus size={18} />)))}
                     {loading ? 'Memproses...' : (authMode === 'developer' ? 'Akses Console' : (authMode === 'login' ? 'Log Masuk' : (authMode === 'forgot_password' ? 'Tukar Kata Laluan' : 'Daftar Akaun')))}
                 </button>
             </form>
+
+            {showPrivacyNotice && (
+              <PrivacyNotice onAccept={() => { setShowPrivacyNotice(false); setPrivacyAccepted(true); }} />
+            )}
 
             <div className="mt-6 text-center space-y-3">
                 {authMode === 'login' && loginType === 'user' && (

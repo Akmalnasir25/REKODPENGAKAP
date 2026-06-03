@@ -996,16 +996,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
             </div>
         )}
 
-      {floatModalStudent && schools.find(s => s.name === data[0]?.school)?.school_code && (
+      {floatModalStudent && (
         <FloatStudentModal
           studentName={floatModalStudent.studentName}
           personId={floatModalStudent.personId}
-          schoolCode={schools.find(s => s.name === data[0]?.school)?.school_code || ''}
+          schoolCode={schools[0]?.schoolCode || ''}
+          isAdmin={true}
+          schools={schools}
           onClose={() => setFloatModalStudent(null)}
-          onFloated={() => {
-            setFloatModalStudent(null);
-            onRefresh();
-          }}
+          onFloated={() => { setFloatModalStudent(null); onRefresh(); }}
         />
       )}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, MapPin, Calendar, Phone, FileText, UserPlus, Loader, User, School as SchoolIcon, RefreshCw, Undo2, AlertCircle } from 'lucide-react';
+import { Users, Search, MapPin, Calendar, Phone, FileText, UserPlus, Loader, User, School as SchoolIcon, RefreshCw, Undo2, Download } from 'lucide-react';
 import { getFloatedStudents, pullStudent, unfloatStudent, FloatedStudent } from '../services/supabaseApi';
 
 export interface FloatedStudentsTabProps {
@@ -89,6 +89,45 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
     lain: 'Lain-lain',
   };
 
+  const handleExportExcel = () => {
+    if (filtered.length === 0) {
+      alert('Tiada data untuk dieksport.');
+      return;
+    }
+
+    const headers = [
+      'Bil', 'Nama', 'No. IC', 'Jantina', 'Peranan', 'Kategori',
+      'Sekolah Asal', 'Daerah', 'Negeri', 'Sebab Apung',
+      'Catatan', 'Diapungkan Oleh', 'Tarikh Apung',
+    ];
+
+    const rows = filtered.map((s, i) => [
+      i + 1,
+      `"${s.student_name}"`,
+      `"${s.ic_number}"`,
+      s.gender,
+      s.role,
+      s.category || '-',
+      `"${s.school_name}"`,
+      s.daerah_name || '-',
+      s.negeri_name || '-',
+      reasonLabels[s.float_reason] || s.float_reason || '-',
+      `"${s.float_notes || ''}"`,
+      `"${s.floated_by || ''}"`,
+      s.floated_at ? formatDate(s.floated_at) : '-',
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Murid_Terapung_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const formatDate = (d: string) => {
     if (!d) return '-';
     return new Date(d).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -100,9 +139,19 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
         <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
           <MapPin className="text-amber-500" size={20} /> Murid Diapungkan
         </h2>
-        <button onClick={fetchData} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportExcel}
+            disabled={filtered.length === 0}
+            className="text-emerald-600 hover:bg-emerald-50 p-2 rounded transition disabled:opacity-30"
+            title="Export ke Excel"
+          >
+            <Download size={16} />
+          </button>
+          <button onClick={fetchData} disabled={loading} className="text-blue-600 hover:bg-blue-50 p-2 rounded transition">
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       <p className="text-xs text-slate-500">

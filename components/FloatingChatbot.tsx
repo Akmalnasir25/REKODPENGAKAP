@@ -287,8 +287,8 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
                     )}
                   </div>
 
-                  {/* Program Dropdown - hanya untuk kategori 'umum' & ada schoolId */}
-                  {category === 'umum' && schoolId && (
+                  {/* Program Dropdown - hanya untuk school_user (bukan leader) */}
+                  {category === 'umum' && schoolId && !isLeader && (
                     <div className="flex flex-col gap-1">
                       <label className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 px-1">
                         <Target size={11} className="text-amber-500" />

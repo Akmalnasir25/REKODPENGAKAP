@@ -12,10 +12,7 @@
     "migrate:gas": "tsx scripts/migrate-gas-to-supabase.ts"
   },
   "dependencies": {
-    "@google/genai": "^1.30.0",
     "@supabase/supabase-js": "^2.105.4",
-    "@types/dompurify": "^3.0.5",
-    "dompurify": "^3.4.7",
     "dotenv": "^17.4.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

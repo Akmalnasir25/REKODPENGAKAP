@@ -1667,11 +1667,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           studentName={floatModalStudent.studentName}
           personId={floatModalStudent.personId}
           schoolCode={user.schoolCode}
+          schools={schools}
           onClose={() => setFloatModalStudent(null)}
-          onFloated={() => {
-            setFloatModalStudent(null);
-            onRefresh();
-          }}
+          onFloated={() => { setFloatModalStudent(null); onRefresh(); }}
         />
       )}
 

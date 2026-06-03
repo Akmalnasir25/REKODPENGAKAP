@@ -1,20 +1,17 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
-    "fiqstr_core": {
+    "cybersecdev": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Fiqstr Core API",
+      "name": "CyberSecDev API",
       "options": {
-        "baseURL": "https://core.fiqstr.com/v1",
-        "apiKey": "fiq-2uN8ARiPgMmlsdZjgA9zGK_BLjPC7WmTlxKGTLhIulQ"
+        "baseURL": "https://api.cybersecdev.cloud/v1",
+        "apiKey": "fiq-cde4fff599074bbe"
       },
       "models": {
-        "fiqstr/claude-opus-4.7": { "name": "Claude Opus 4.7" },
-        "fiqstr/claude-opus-4.7-agentic": { "name": "Claude Opus 4.7 Agentic" },
-        "fiqstr/claude-opus-4.7-thinking": { "name": "Claude Opus 4.7 Thinking" },
-        "fiqstr/claude-opus-4.7-thinking-agentic": { "name": "Claude Opus 4.7 Thinking Agentic" }
+        "fiq/qwen3.7-max": { "name": "Qwen 3.7 Max" }
       }
     }
   },
-  "model": "fiqstr_core:fiqstr/claude-opus-4.7"
+  "model": "cybersecdev:fiq/qwen3.7-max"
 }

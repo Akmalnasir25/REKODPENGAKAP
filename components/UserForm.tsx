@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, School, Medal, Users, Plus, Trash2, Save, Sparkles, CheckCircle, ArrowLeft, AlertOctagon, UserCheck, GraduationCap } from 'lucide-react';
+import { Lock, School, Medal, Users, Plus, Trash2, Save, CheckCircle, ArrowLeft, AlertOctagon, UserCheck, GraduationCap } from 'lucide-react';
 import { LeaderInfo, Participant, BadgeType, UserSession, Badge, School as SchoolType, SubmissionData } from '../types';
 import { APP_VERSION, LOGO_URL, LOCAL_STORAGE_KEYS } from '../constants';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { generateBadgeInfo } from '../services/geminiService';
-import { BadgeModal } from './BadgeModal';
 import { submitRegistration } from '../services/supabaseApi';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 import { PrivacyNotice } from './ui/PrivacyNotice';
@@ -73,9 +71,6 @@ export const UserForm: React.FC<UserFormProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   
-  const [showBadgeModal, setShowBadgeModal] = useState(false);
-  const [badgeInfoContent, setBadgeInfoContent] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
   const [pdpaConsent, setPdpaConsent] = useState(false);
   const [parentalConsent, setParentalConsent] = useState(false);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
@@ -187,27 +182,6 @@ export const UserForm: React.FC<UserFormProps> = ({
         </div>
       );
   }
-
-  // Handlers
-  const handleBadgeInfoAI = async () => {
-    if (!leaderInfo.badgeType) {
-      alert("Sila pilih jenis program dahulu.");
-      return;
-    }
-
-    setAiLoading(true);
-    setShowBadgeModal(true);
-    setBadgeInfoContent('');
-
-    try {
-        const result = await generateBadgeInfo(leaderInfo.badgeType);
-        setBadgeInfoContent(result);
-    } catch (e) {
-        setBadgeInfoContent("Maaf, gagal mendapatkan maklumat.");
-    } finally {
-        setAiLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -482,11 +456,8 @@ export const UserForm: React.FC<UserFormProps> = ({
                     )}
 
                     <div>
-                        <div className="flex justify-between items-center mb-1">
+                        <div className="mb-1">
                             <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2"><Medal size={16}/> Jenis Program / Program</label>
-                            <button type="button" onClick={handleBadgeInfoAI} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-bold flex items-center gap-1 hover:bg-purple-200 transition">
-                                <Sparkles size={12}/> Info Syarat (AI)
-                            </button>
                         </div>
                         <select required className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition" value={leaderInfo.badgeType} onChange={e=>setLeaderInfo({...leaderInfo, badgeType: e.target.value})}>
                             <option value="">-- Sila Pilih Program / Program --</option>
@@ -809,21 +780,11 @@ export const UserForm: React.FC<UserFormProps> = ({
                     <span className="uppercase tracking-[0.2em] font-sans">Design By Akmal Nasir<sup className="ml-0.5">&trade;</sup></span>
                     <div className="flex items-center gap-2">
                         <span className="font-mono">{APP_VERSION.split(' ')[0]}</span>
-                        <span className="text-gray-300">|</span>
-                        <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded text-[9px] font-bold border border-purple-100 flex items-center gap-1"><Sparkles size={10}/> AI Powered</span>
                     </div>
                 </div>
             </div>
         </form>
       </div>
-
-      <BadgeModal 
-        isOpen={showBadgeModal} 
-        onClose={() => setShowBadgeModal(false)} 
-        badgeType={leaderInfo.badgeType}
-        content={badgeInfoContent}
-        loading={aiLoading}
-      />
 
       {showPrivacyNotice && (
         <PrivacyNotice onAccept={() => { setShowPrivacyNotice(false); setPdpaConsent(true); }} />

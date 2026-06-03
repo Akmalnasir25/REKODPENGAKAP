@@ -1,11 +1,11 @@
 
 
 import React, { useState } from 'react';
-import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search, MapPin } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
-import { School, Badge } from '../types';
+import { School, Badge, Daerah } from '../types';
 
 interface AdminSchoolsProps {
   schools: School[];
@@ -13,12 +13,14 @@ interface AdminSchoolsProps {
   scriptUrl: string;
   negeriCode?: string;
   daerahCode?: string;
+  daerahList?: Daerah[];
   onRefresh: () => void;
   enableResetClaim?: boolean;
 }
 
-export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges = [], scriptUrl, negeriCode, daerahCode, onRefresh, enableResetClaim = false }) => {
+export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges = [], scriptUrl, negeriCode, daerahCode, daerahList = [], onRefresh, enableResetClaim = false }) => {
   const [newSchoolName, setNewSchoolName] = useState('');
+  const [selectedDaerahForAdd, setSelectedDaerahForAdd] = useState(daerahCode || '');
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<{name: string, type: string} | null>(null);
   const [batchToggling, setBatchToggling] = useState<string | null>(null);
@@ -113,7 +115,8 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
 
     setLoading(true);
     try {
-        await addSchoolBatch(scriptUrl, schoolsToSend, negeriCode, daerahCode);
+        const effectiveDaerah = selectedDaerahForAdd || daerahCode;
+        await addSchoolBatch(scriptUrl, schoolsToSend, negeriCode, effectiveDaerah);
         
         let finalMessage = `${schoolsToSend.length} sekolah berjaya dihantar.`;
         if (duplicateSchools.length > 0) {
@@ -386,6 +389,24 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
             Format: <span className="font-bold text-gray-700">NAMA SEKOLAH | KOD SEKOLAH</span> (satu setiap baris). Kod sekolah akan digunakan oleh guru untuk mendaftar akaun.
           </p>
         </div>
+        {daerahList.length > 0 && (
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase mb-1 flex items-center gap-1">
+              <MapPin size={12} /> Daerah <span className="text-gray-400 font-normal">(opsyenal)</span>
+            </label>
+            <select
+              value={selectedDaerahForAdd}
+              onChange={(e) => setSelectedDaerahForAdd(e.target.value)}
+              className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+            >
+              <option value="">— Tiada daerah (semua negeri) —</option>
+              {daerahList.map((d) => (
+                <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-400 mt-1">Pilih daerah untuk assign sekolah baru ke daerah tertentu.</p>
+          </div>
+        )}
         <button 
           onClick={handleAdd} 
           disabled={!newSchoolName || loading} 

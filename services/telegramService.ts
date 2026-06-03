@@ -360,3 +360,126 @@ export async function getCoursesForLeader(
     return [];
   }
 }
+
+// ============================================================
+// FLOAT/TRANSFER TELEGRAM NOTIFICATIONS
+// ============================================================
+
+export async function sendFloatNotification(params: {
+  studentName: string;
+  icNumber?: string;
+  originalSchool: string;
+  targetSchool?: string;
+  action: 'float' | 'unfloat' | 'pull';
+  reason?: string;
+  notes?: string;
+  performedBy: string;
+  negeriCode?: string;
+  daerahCode?: string;
+}): Promise<boolean> {
+  try {
+    const { supabase } = await import('./supabaseClient');
+
+    let groupsQuery = supabase
+      .from('telegram_groups')
+      .select('chat_id, role, label, negeri_id, daerah_id')
+      .eq('is_active', true);
+
+    const { data: allGroups } = await groupsQuery;
+    if (!allGroups || allGroups.length === 0) return false;
+
+    // Filter groups: hantar ke admin daerah & negeri yang berkaitan
+    const targetGroups = allGroups.filter((group: any) => {
+      if (group.role === 'developer') return true;
+      if (group.role === 'negeri_admin') return true;
+      if (group.role === 'daerah_admin') return true;
+      return false;
+    });
+
+    if (targetGroups.length === 0) return false;
+
+    const now = new Date().toLocaleString('ms-MY', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+
+    const reasonLabels: Record<string, string> = {
+      pindah_sekolah: 'Pindah Sekolah',
+      pindah_daerah: 'Pindah Daerah',
+      pindah_negeri: 'Pindah Negeri',
+      lain: 'Lain-lain',
+    };
+
+    let title = '';
+    let emoji = '';
+    let details = '';
+
+    if (params.action === 'float') {
+      title = 'Murid Diapungkan';
+      emoji = '📍';
+      details = [
+        `🏠 <b>Sekolah Asal:</b> ${params.originalSchool}`,
+        params.reason ? `📋 <b>Sebab:</b> ${reasonLabels[params.reason] || params.reason}` : null,
+        params.notes ? `📝 <b>Catatan:</b> ${params.notes}` : null,
+      ].filter(Boolean).join('\n');
+    } else if (params.action === 'unfloat') {
+      title = 'Apungan Dibatalkan';
+      emoji = '↩️';
+      details = [
+        `🏠 <b>Dikembalikan Ke:</b> ${params.originalSchool}`,
+      ].join('\n');
+    } else if (params.action === 'pull') {
+      title = 'Murid Ditarik Masuk';
+      emoji = '📥';
+      details = [
+        `🏠 <b>Dari Sekolah:</b> ${params.originalSchool}`,
+        `🏫 <b>Ke Sekolah:</b> ${params.targetSchool || '-'}`,
+      ].join('\n');
+    }
+
+    const text = [
+      `🛡️ <b>ScoutNadi</b>`,
+      `<i>Sistem Apung Pindah Murid</i>`,
+      `━━━━━━━━━━━━━━━━━━━━━━`,
+      ``,
+      `${emoji} <b>${title}</b>`,
+      ``,
+      `👤 <b>Nama:</b> ${params.studentName}`,
+      params.icNumber ? `🪪 <b>IC:</b> ${params.icNumber}` : null,
+      details,
+      `👤 <b>Dilakukan oleh:</b> ${params.performedBy}`,
+      `🕐 <b>Masa:</b> ${now}`,
+    ]
+      .filter((line) => line !== null)
+      .join('\n');
+
+    // Hantar ke semua target groups (tanpa simpan ke feedback table)
+    const sendPromises = targetGroups.map(async (group: any) => {
+      try {
+        const response = await fetch(
+          `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: group.chat_id,
+              text,
+              parse_mode: 'HTML',
+            }),
+          }
+        );
+        const result = await response.json();
+        return result.ok;
+      } catch {
+        return false;
+      }
+    });
+
+    const results = await Promise.all(sendPromises);
+    return results.some(r => r);
+  } catch (err) {
+    console.error('sendFloatNotification error:', err);
+    return false;
+  }
+}

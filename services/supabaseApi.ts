@@ -1222,7 +1222,7 @@ export const floatStudent = async (input: FloatStudentInput): Promise<ApiRespons
   try {
     const { data: person } = await supabase
       .from('submission_people')
-      .select('*, submission:submissions(school:schools(school_code))')
+      .select('*, submission:submissions(school:schools(school_code, name, negeri_id, daerah_id))')
       .eq('id', input.personId)
       .maybeSingle();
 
@@ -1230,6 +1230,7 @@ export const floatStudent = async (input: FloatStudentInput): Promise<ApiRespons
     if (person.float_status === 'floated') return { status: 'error', message: 'Murid sudah diapungkan.' };
 
     const schoolCode = person.submission?.school?.school_code || '';
+    const schoolName = person.submission?.school?.name || '';
 
     const { error } = await supabase
       .from('submission_people')
@@ -1244,6 +1245,21 @@ export const floatStudent = async (input: FloatStudentInput): Promise<ApiRespons
       .eq('id', input.personId);
 
     if (error) return { status: 'error', message: error.message };
+
+    // Telegram notification (fire-and-forget)
+    try {
+      const { sendFloatNotification } = await import('./telegramService');
+      sendFloatNotification({
+        studentName: person.name,
+        icNumber: person.ic_number,
+        originalSchool: schoolName,
+        action: 'float',
+        reason: input.reason,
+        notes: input.notes,
+        performedBy: input.floatedBy,
+      });
+    } catch {}
+
     return { status: 'success', message: 'Murid berjaya diapungkan.' };
   } catch (err: any) {
     return { status: 'error', message: err.message || 'Gagal apungkan murid.' };
@@ -1252,6 +1268,17 @@ export const floatStudent = async (input: FloatStudentInput): Promise<ApiRespons
 
 export const unfloatStudent = async (personId: string): Promise<ApiResponse> => {
   try {
+    const { data: person } = await supabase
+      .from('submission_people')
+      .select('*, submission:submissions(school:schools(school_code, name))')
+      .eq('id', personId)
+      .maybeSingle();
+
+    if (!person) return { status: 'error', message: 'Murid tidak dijumpai.' };
+
+    const originalSchoolCode = person.original_school_code || '';
+    const schoolName = person.submission?.school?.name || originalSchoolCode;
+
     const { error } = await supabase
       .from('submission_people')
       .update({
@@ -1265,6 +1292,19 @@ export const unfloatStudent = async (personId: string): Promise<ApiResponse> => 
       .eq('id', personId);
 
     if (error) return { status: 'error', message: error.message };
+
+    // Telegram notification (fire-and-forget)
+    try {
+      const { sendFloatNotification } = await import('./telegramService');
+      sendFloatNotification({
+        studentName: person.name,
+        icNumber: person.ic_number,
+        originalSchool: schoolName,
+        action: 'unfloat',
+        performedBy: 'admin',
+      });
+    } catch {}
+
     return { status: 'success', message: 'Murid berjaya dikembalikan.' };
   } catch (err: any) {
     return { status: 'error', message: err.message || 'Gagal kembalikan murid.' };
@@ -1278,6 +1318,39 @@ export interface PullStudentInput {
   newCategory?: string;
   pulledBy: string;
 }
+
+export interface FloatAndAssignStudentInput extends FloatStudentInput {
+  targetSchoolCode: string;
+  newRole?: string;
+  newCategory?: string;
+}
+
+export const floatAndAssignStudent = async (input: FloatAndAssignStudentInput): Promise<ApiResponse> => {
+  try {
+    // 1. Float the student first
+    const floatRes = await floatStudent(input);
+    if (floatRes.status !== 'success') {
+      return floatRes; // Abort if floating fails
+    }
+
+    // 2. Pull/Assign the student to the target school
+    const pullRes = await pullStudent({
+      personId: input.personId,
+      targetSchoolCode: input.targetSchoolCode,
+      newRole: input.newRole,
+      newCategory: input.newCategory,
+      pulledBy: input.floatedBy,
+    });
+
+    if (pullRes.status === 'success') {
+      return { status: 'success', message: pullRes.message || 'Murid berjaya dipindahkan ke sekolah baru.' };
+    } else {
+      return { status: 'error', message: `Gagal assign murid ke sekolah baru. Murid kekal terapung. (${pullRes.message})` };
+    }
+  } catch (err: any) {
+    return { status: 'error', message: err.message || 'Ralat sistem semasa assign murid.' };
+  }
+};
 
 export const pullStudent = async (input: PullStudentInput): Promise<ApiResponse> => {
   try {
@@ -1341,6 +1414,20 @@ export const pullStudent = async (input: PullStudentInput): Promise<ApiResponse>
       .eq('id', input.personId);
 
     if (updateErr) return { status: 'error', message: updateErr.message };
+
+    // Telegram notification (fire-and-forget)
+    try {
+      const { sendFloatNotification } = await import('./telegramService');
+      sendFloatNotification({
+        studentName: person.name,
+        icNumber: person.ic_number,
+        originalSchool: person.original_school_code || '',
+        targetSchool: school.name,
+        action: 'pull',
+        performedBy: input.pulledBy,
+      });
+    } catch {}
+
     return { status: 'success', message: `Murid ${person.name} berjaya ditarik ke ${school.name}.` };
   } catch (err: any) {
     return { status: 'error', message: err.message || 'Gagal tarik murid.' };

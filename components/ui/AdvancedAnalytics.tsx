@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { SubmissionData } from '../../types';
 import { TrendingUp, Users, Award, School, PieChart as PieIcon } from 'lucide-react';
+import { safeGetMonth } from '../../utils/dataProcessing';
 
 interface AdvancedAnalyticsProps {
   data: SubmissionData[];
@@ -10,24 +11,8 @@ interface AdvancedAnalyticsProps {
 
 const COLORS = ['#1e3a8a', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
-const safeParseDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  const date = new Date(value as string);
-  return isNaN(date.getTime()) ? null : date;
-};
-
-const safeGetYear = (value: unknown): number | null => {
-  const date = safeParseDate(value);
-  return date ? date.getFullYear() : null;
-};
-
-const safeGetMonth = (value: unknown): number | null => {
-  const date = safeParseDate(value);
-  return date ? date.getMonth() : null;
-};
-
 export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year = new Date().getFullYear() }) => {
-  const yearData = useMemo(() => data.filter(d => safeGetYear(d.date) === year), [data, year]);
+  const yearData = useMemo(() => data, [data]);
 
   // Badge distribution
   const badgeData = useMemo(() => {
@@ -100,45 +85,17 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [yearData]);
 
-  // Stats cards
-  const stats = useMemo(() => {
-    const uniqueSchools = new Set(yearData.map(d => d.schoolCode)).size;
-    const uniqueBadges = new Set(yearData.map(d => d.badge)).size;
-    const participants = yearData.filter(d => (d.role || 'PESERTA').toUpperCase() === 'PESERTA').length;
-    return { total: yearData.length, schools: uniqueSchools, badges: uniqueBadges, participants };
-  }, [yearData]);
-
   if (yearData.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
         <PieIcon size={48} className="mx-auto mb-3 opacity-30" />
-        <p className="text-sm">Tiada data untuk tahun {year}</p>
+        <p className="text-sm">Tiada data untuk dianalisis</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 text-blue-600 mb-1"><Users size={16} /><span className="text-[10px] font-bold uppercase text-gray-500">Jumlah Rekod</span></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.total.toLocaleString()}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 text-green-600 mb-1"><Users size={16} /><span className="text-[10px] font-bold uppercase text-gray-500">Peserta</span></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.participants.toLocaleString()}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 text-amber-600 mb-1"><School size={16} /><span className="text-[10px] font-bold uppercase text-gray-500">Sekolah</span></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.schools}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 text-purple-600 mb-1"><Award size={16} /><span className="text-[10px] font-bold uppercase text-gray-500">Program</span></div>
-          <p className="text-2xl font-bold text-gray-900">{stats.badges}</p>
-        </div>
-      </div>
-
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Trend */}

@@ -1,14 +1,14 @@
 
 import React, { useMemo, useState } from 'react';
-import DOMPurify from 'dompurify';
 import { SubmissionData, School, Badge, UserProfile } from '../types';
-import { BrainCircuit, RefreshCw, BarChart3, Database, Trash2, Sparkles, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { analyzeData } from '../services/geminiService';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { BulkWhatsApp } from './ui/BulkWhatsApp';
 import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
 import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
+import { FloatStudentModal } from './FloatStudentModal';
+import { safeGetYear, deduplicateRecords, computeRoleStats } from '../utils/dataProcessing';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
@@ -17,6 +17,7 @@ interface AdminDashboardProps {
   userProfiles?: UserProfile[];
   onRefresh: () => void;
   onDelete: (item: SubmissionData) => void;
+  onFloat?: (item: SubmissionData) => void;
   // Senarai nama badge yang readonly untuk pengguna ini (cth: admin daerah lihat program negeri)
   readOnlyBadges?: Set<string>;
 }
@@ -24,22 +25,12 @@ interface AdminDashboardProps {
 type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'examiners' | 'principals' | 'archive';
 type PrintMode = 'none' | 'stats' | 'list' | 'archive';
 
-const safeParseDate = (value: unknown): Date | null => {
-  if (!value) return null;
-  const date = new Date(value as string);
-  return isNaN(date.getTime()) ? null : date;
-};
-
-const safeGetYear = (value: unknown): number | null => {
-  const date = safeParseDate(value);
-  return date ? date.getFullYear() : null;
-};
-
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete, readOnlyBadges }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete, onFloat, readOnlyBadges }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
+  const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [showMakananDetail, setShowMakananDetail] = useState(false);
   const [showKesihatanDetail, setShowKesihatanDetail] = useState(false);
@@ -50,72 +41,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   // Default false: Only show APPROVED data in stats and list
   const [showDrafts, setShowDrafts] = useState(false); 
 
-  // AI State
-  const [aiAnalysis, setAiAnalysis] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-
-  // 1. FILTER DATA: Deduplicate and Filter
-  const submittedData = useMemo(() => {
-    const uniqueKeys = new Set<string>(); // Set to track unique records
-
-    return data.filter(item => {
-        // 1. Exclude system markers ALWAYS (Technical requirement)
-        if (item.school === '__SYSTEM_YEAR_MARKER__') return false;
-
-        // 2. Valid Name Check (Filter out ghost rows)
-        // Ensure student name exists and is a string
-        if (!item.student || typeof item.student !== 'string' || !item.student.trim()) return false;
-
-        // 3. APPROVAL LOGIC
-        // If showDrafts is ON, we show everything (Approved + Pending + Drafts)
-        let isApproved = false;
-        if (showDrafts) {
-            isApproved = true;
-        } else {
-            // CRITICAL FIX: Ensure 's' exists before accessing 's.name'
-            const schoolConfig = schools.find(s => s && s.name === item.school);
-            
-            // If school found and has approved badges
-            if (schoolConfig && schoolConfig.approvedBadges) {
-                const itemYear = safeGetYear(item.date);
-                if (itemYear === null) return false;
-                const badgeYearKey = `${item.badge}_${itemYear}`;
-                const approvedList = Array.isArray(schoolConfig.approvedBadges) ? schoolConfig.approvedBadges : [];
-                
-                // Check if allowed
-                if (approvedList.includes(badgeYearKey) || approvedList.includes(item.badge)) {
-                    isApproved = true;
-                }
-            }
-        }
-
-        if (!isApproved) return false;
-
-        // 4. DEDUPLICATION LOGIC (The Fix)
-        // We create a unique key for this person for this specific badge and year.
-        // If we see this key again, we skip it.
-        const year = safeGetYear(item.date);
-        if (year === null) return false;
-        const cleanName = String(item.student).trim().toUpperCase();
-        const cleanIC = item.icNumber ? String(item.icNumber).trim() : '';
-        const badge = item.badge;
-        const school = item.school;
-
-        // Unique Key Strategy:
-        // Preference 1: IC + Badge + Year (Most accurate)
-        // Preference 2: Name + School + Badge + Year (Fallback if no IC)
-        const uniqueKey = cleanIC && cleanIC.length > 4
-            ? `${cleanIC}_${badge}_${year}`
-            : `${cleanName}_${school}_${badge}_${year}`;
-
-        if (uniqueKeys.has(uniqueKey)) {
-            return false; // DUPLICATE FOUND - SKIP IT
-        }
-
-        uniqueKeys.add(uniqueKey); // Add to set
-        return true; // Keep it
-    });
-  }, [data, schools, showDrafts]);
+  const submittedData = useMemo(() => deduplicateRecords(data, schools, showDrafts), [data, schools, showDrafts]);
 
   // Count Pending Approvals (Submitted/Locked by user but NOT Approved by Admin)
   const pendingCount = useMemo(() => {
@@ -437,26 +363,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
       });
   }, [baseFilteredData, activeTab]);
 
-  const handleAdminAnalysisAI = async () => {
-    if (yearData.length === 0) {
-        alert("Tiada data yang disahkan untuk dianalisis.");
-        return;
-    }
-    setAiLoading(true);
-    setAiAnalysis("Sedang menganalisis data...");
-    
-    // We analyze the full year data to give better context
-    const summaryForAI = yearData.map(d => `${d.school} (${d.badge}): ${d.gender} [${d.role || 'PESERTA'}]`).join('\n').substring(0, 10000);
-    try {
-        const result = await analyzeData(summaryForAI);
-        setAiAnalysis(result);
-    } catch (e) {
-        setAiAnalysis("Ralat semasa menjana analisis.");
-    } finally {
-        setAiLoading(false);
-    }
-  };
-
   const handlePrint = (mode: PrintMode) => {
     setPrintMode(mode);
     // Allow state to update and render the print view before triggering print dialog
@@ -716,32 +622,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                     </div>
                     <GraduationCap size={100} className="absolute -bottom-4 -right-4 text-green-50 opacity-50 z-0" />
                 </div>
-            </div>
-        )}
-
-        {/* AI Section (Only if NOT in archive tab) */}
-        {activeTab !== 'archive' && (
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 p-6 rounded-xl shadow border border-purple-100">
-                <div className="flex justify-between items-start mb-4">
-                <h2 className="font-bold flex items-center gap-2 text-purple-800">
-                    <BrainCircuit size={20} /> Analisis Data Pintar (AI) - Tahun {selectedYear}
-                </h2>
-                <button 
-                    onClick={handleAdminAnalysisAI} 
-                    disabled={aiLoading} 
-                    className="bg-purple-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-purple-700 flex items-center gap-2 shadow transition disabled:opacity-50"
-                >
-                    {aiLoading ? <LoadingSpinner size="sm" color="border-white" /> : <Sparkles size={14} />}
-                    Jana Analisis
-                </button>
-                </div>
-                {aiAnalysis ? (
-                <div className="bg-white p-4 rounded-lg border border-purple-200 text-sm text-gray-700 prose prose-sm max-w-none shadow-sm" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(aiAnalysis) }} />
-                ) : (
-                <p className="text-xs text-purple-600 italic">
-                    Tekan butang 'Jana Analisis' untuk meminta AI merumuskan trend data yang telah disahkan (Diterima oleh Admin) pada tahun {selectedYear}.
-                </p>
-                )}
             </div>
         )}
 
@@ -1023,19 +903,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                         </td>
                                     )}
                                     <td className="px-4 py-3 text-right">
-                                        {readOnlyBadges?.has(item.badge) ? (
-                                            <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded" title="Program peringkat negeri - hanya boleh dipantau">
-                                                NEGERI
-                                            </span>
-                                        ) : (
-                                            <button 
-                                                onClick={() => onDelete(item)}
-                                                className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
-                                                title="Padam Rekod"
+                                        <div className="flex gap-1 justify-end">
+                                            <button
+                                                onClick={() => { if (item.personId) setFloatModalStudent({ personId: item.personId, studentName: item.student }); }}
+                                                className="text-amber-500 hover:text-amber-600 hover:bg-amber-50 p-1.5 rounded transition"
+                                                title="Apungkan Murid"
                                             >
-                                            <Trash2 size={16} />
-                                        </button>
-                                        )}
+                                                <MapPin size={16} />
+                                            </button>
+                                            {readOnlyBadges?.has(item.badge) ? (
+                                                <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded" title="Program peringkat negeri - hanya boleh dipantau">
+                                                    NEGERI
+                                                </span>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => onDelete(item)}
+                                                    className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded transition"
+                                                    title="Padam Rekod"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -1106,6 +995,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                 </div>
             </div>
         )}
+
+      {floatModalStudent && schools.find(s => s.name === data[0]?.school)?.school_code && (
+        <FloatStudentModal
+          studentName={floatModalStudent.studentName}
+          personId={floatModalStudent.personId}
+          schoolCode={schools.find(s => s.name === data[0]?.school)?.school_code || ''}
+          onClose={() => setFloatModalStudent(null)}
+          onFloated={() => {
+            setFloatModalStudent(null);
+            onRefresh();
+          }}
+        />
+      )}
 
       </div>
     </div>

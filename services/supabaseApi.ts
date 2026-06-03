@@ -40,13 +40,13 @@ const getSchoolByCodeOrName = async (schoolCode?: string, schoolName?: string) =
   return data;
 };
 
-const getNegeriId = async (code: string) => {
+export const getNegeriId = async (code: string) => {
   const { data, error } = await supabase.from('negeri').select('id').eq('code', normalize(code)).maybeSingle();
   if (error) throw error;
   return data?.id || null;
 };
 
-const getDaerahId = async (code: string) => {
+export const getDaerahId = async (code: string) => {
   const { data, error } = await supabase.from('daerah').select('id').eq('code', normalize(code)).maybeSingle();
   if (error) throw error;
   return data?.id || null;
@@ -84,7 +84,7 @@ export const fetchCloudData = async (
             school:schools(id, name, school_code, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
             badge:badges(id, name)
           )
-        `).eq('is_deleted', false).order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+        `).eq('is_deleted', false).not('float_status', 'in', '("floated","transferred")').order('created_at', { ascending: false }).range(from, from + pageSize - 1);
         if (error) return { data: null, error };
         allData = allData.concat(data || []);
         hasMore = (data || []).length === pageSize;
@@ -170,6 +170,7 @@ export const fetchCloudData = async (
         gender: p.gender || '',
         race: p.race || '',
         id: p.membership_id || '',
+        personId: p.id,
         icNumber: p.ic_number || '',
         studentPhone: p.phone_number || '',
         role: p.role || 'PESERTA',
@@ -1203,5 +1204,237 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     return { status: 'success', message: 'Rekod berjaya dikemaskini.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal kemaskini rekod.' };
+  }
+};
+
+// ============================================================
+// FLOAT / TRANSFER STUDENT SYSTEM
+// ============================================================
+
+export interface FloatStudentInput {
+  personId: string;
+  reason: 'pindah_sekolah' | 'pindah_daerah' | 'pindah_negeri' | 'lain';
+  notes?: string;
+  floatedBy: string;
+}
+
+export const floatStudent = async (input: FloatStudentInput): Promise<ApiResponse> => {
+  try {
+    const { data: person } = await supabase
+      .from('submission_people')
+      .select('*, submission:submissions(school:schools(school_code))')
+      .eq('id', input.personId)
+      .maybeSingle();
+
+    if (!person) return { status: 'error', message: 'Murid tidak dijumpai.' };
+    if (person.float_status === 'floated') return { status: 'error', message: 'Murid sudah diapungkan.' };
+
+    const schoolCode = person.submission?.school?.school_code || '';
+
+    const { error } = await supabase
+      .from('submission_people')
+      .update({
+        float_status: 'floated',
+        floated_at: new Date().toISOString(),
+        floated_by: input.floatedBy,
+        float_reason: input.reason,
+        float_notes: input.notes || null,
+        original_school_code: schoolCode,
+      })
+      .eq('id', input.personId);
+
+    if (error) return { status: 'error', message: error.message };
+    return { status: 'success', message: 'Murid berjaya diapungkan.' };
+  } catch (err: any) {
+    return { status: 'error', message: err.message || 'Gagal apungkan murid.' };
+  }
+};
+
+export const unfloatStudent = async (personId: string): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase
+      .from('submission_people')
+      .update({
+        float_status: 'active',
+        floated_at: null,
+        floated_by: null,
+        float_reason: null,
+        float_notes: null,
+        original_school_code: null,
+      })
+      .eq('id', personId);
+
+    if (error) return { status: 'error', message: error.message };
+    return { status: 'success', message: 'Murid berjaya dikembalikan.' };
+  } catch (err: any) {
+    return { status: 'error', message: err.message || 'Gagal kembalikan murid.' };
+  }
+};
+
+export interface PullStudentInput {
+  personId: string;
+  targetSchoolCode: string;
+  newRole?: string;
+  newCategory?: string;
+  pulledBy: string;
+}
+
+export const pullStudent = async (input: PullStudentInput): Promise<ApiResponse> => {
+  try {
+    const { data: person } = await supabase
+      .from('submission_people')
+      .select('*')
+      .eq('id', input.personId)
+      .maybeSingle();
+
+    if (!person) return { status: 'error', message: 'Murid tidak dijumpai.' };
+    if (person.float_status !== 'floated') return { status: 'error', message: 'Murid bukan dalam status terapung.' };
+
+    const school = await getSchoolByCodeOrName(input.targetSchoolCode);
+    if (!school) return { status: 'error', message: `Sekolah '${input.targetSchoolCode}' tidak dijumpai.` };
+
+    const badgeId = await getBadgeByName(person.badge || 'Keris Gangsa');
+
+    const { data: newSub } = await supabase
+      .from('submissions')
+      .insert({
+        school_id: school.id,
+        badge_id: badgeId.id,
+        submission_year: new Date().getFullYear(),
+        status: 'draft',
+        source: 'manual',
+      })
+      .select('id')
+      .single();
+
+    if (!newSub) return { status: 'error', message: 'Gagal cipta submission baru.' };
+
+    const { error: insertErr } = await supabase
+      .from('submission_people')
+      .insert({
+        submission_id: newSub.id,
+        name: person.name,
+        gender: person.gender,
+        race: person.race,
+        membership_id: person.membership_id,
+        ic_number: person.ic_number,
+        phone_number: person.phone_number,
+        role: input.newRole || person.role,
+        category: input.newCategory || person.category,
+        unit: person.unit,
+        makanan: person.makanan,
+        masalah_kesihatan: person.masalah_kesihatan,
+        masalah_kesihatan_lain: person.masalah_kesihatan_lain,
+        remarks: person.remarks,
+        float_status: 'active',
+      });
+
+    if (insertErr) return { status: 'error', message: insertErr.message };
+
+    const { error: updateErr } = await supabase
+      .from('submission_people')
+      .update({
+        float_status: 'transferred',
+        transferred_to_school_code: input.targetSchoolCode,
+        transferred_at: new Date().toISOString(),
+      })
+      .eq('id', input.personId);
+
+    if (updateErr) return { status: 'error', message: updateErr.message };
+    return { status: 'success', message: `Murid ${person.name} berjaya ditarik ke ${school.name}.` };
+  } catch (err: any) {
+    return { status: 'error', message: err.message || 'Gagal tarik murid.' };
+  }
+};
+
+export const assignStudentDirect = async (input: PullStudentInput): Promise<ApiResponse> => {
+  return pullStudent(input);
+};
+
+export interface FloatedStudent {
+  id: string;
+  student_name: string;
+  ic_number: string;
+  gender: string;
+  race: string;
+  role: string;
+  category: string;
+  membership_id: string;
+  phone_number: string;
+  float_status: string;
+  floated_at: string;
+  floated_by: string;
+  float_reason: string;
+  float_notes: string;
+  original_school_code: string;
+  current_school_code: string;
+  school_name: string;
+  daerah_code: string;
+  daerah_name: string;
+  negeri_code: string;
+  negeri_name: string;
+}
+
+export const getFloatedStudents = async (
+  negeriCode?: string,
+  daerahCode?: string,
+): Promise<FloatedStudent[]> => {
+  try {
+    let query = supabase
+      .from('submission_people')
+      .select(`
+        *,
+        submission:submissions(
+          school:schools(
+            school_code, name,
+            negeri:negeri_id(code, name),
+            daerah:daerah_id(code, name)
+          )
+        )
+      `)
+      .eq('float_status', 'floated')
+      .order('floated_at', { ascending: false });
+
+    if (negeriCode) {
+      const negeriId = await getNegeriId(negeriCode);
+      if (negeriId) {
+        query = query.eq('submission.school.negeri_id', negeriId);
+      }
+    }
+    if (daerahCode) {
+      const daerahId = await getDaerahId(daerahCode);
+      if (daerahId) {
+        query = query.eq('submission.school.daerah_id', daerahId);
+      }
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+
+    return data.map((row: any) => ({
+      id: row.id,
+      student_name: row.name,
+      ic_number: row.ic_number || '',
+      gender: row.gender || '',
+      race: row.race || '',
+      role: row.role || 'PESERTA',
+      category: row.category || '',
+      membership_id: row.membership_id || '',
+      phone_number: row.phone_number || '',
+      float_status: row.float_status,
+      floated_at: row.floated_at,
+      floated_by: row.floated_by,
+      float_reason: row.float_reason,
+      float_notes: row.float_notes,
+      original_school_code: row.original_school_code || '',
+      current_school_code: row.submission?.school?.school_code || '',
+      school_name: row.submission?.school?.name || '',
+      daerah_code: row.submission?.school?.daerah?.code || '',
+      daerah_name: row.submission?.school?.daerah?.name || '',
+      negeri_code: row.submission?.school?.negeri?.code || '',
+      negeri_name: row.submission?.school?.negeri?.name || '',
+    }));
+  } catch {
+    return [];
   }
 };

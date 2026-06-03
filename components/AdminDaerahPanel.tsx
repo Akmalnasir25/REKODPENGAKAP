@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User } from 'lucide-react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User, MapPin } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -17,6 +17,7 @@ import { uploadLogo, getLogoUrl } from '../services/logoService';
 import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
 import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
+import { FloatedStudentsTab } from './FloatedStudentsTab';
 
 interface AdminDaerahPanelProps {
   daerahCode: string;
@@ -115,11 +116,8 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     }
   };
 
-  // Filter data untuk daerah ini sahaja.
-  // NOTA: peserta program scope=negeri tetap dipaparkan untuk admin daerah pantau,
-  // tetapi mereka tidak boleh edit/sahkan (lihat readOnlyBadges di bawah).
-  const filteredData = data.filter(d => d.daerahCode === daerahCode);
-  const filteredSchools = schools.filter(s => s.daerahCode === daerahCode);
+  const filteredData = useMemo(() => data.filter(d => d.daerahCode === daerahCode), [data, daerahCode]);
+  const filteredSchools = useMemo(() => schools.filter(s => s.daerahCode === daerahCode), [schools, daerahCode]);
 
   // Senarai badge yang readonly untuk admin daerah:
   // - Program scope=negeri yang TIDAK perlu pengesahan daerah (terus ke negeri)
@@ -309,6 +307,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true },
+    { id: 'floated', label: 'Murid Terapung', icon: MapPin, allowed: true },
     { id: 'courses', label: 'Kursus Pemimpin', icon: Users, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
@@ -635,6 +634,18 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   onRefresh={refreshData}
                   allowUnwithdraw={true}
                   scopeLabel={`Daerah ${daerahCode}`}
+                />
+              </div>
+            )}
+
+            {tab === 'floated' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <FloatedStudentsTab
+                  schoolCode=""
+                  schoolName={`Daerah ${daerahName}`}
+                  negeriCode={negeriCode}
+                  daerahCode={daerahCode}
+                  onRefresh={refreshData}
                 />
               </div>
             )}

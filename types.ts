@@ -40,6 +40,7 @@ export interface SubmissionData {
   gender: string;
   race?: string;
   id: string; 
+  personId?: string;
   icNumber?: string;
   studentPhone?: string; 
   role?: string;

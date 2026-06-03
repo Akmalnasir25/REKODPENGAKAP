@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User, CheckCircle, ScanLine } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User, CheckCircle, ScanLine } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -8,16 +8,7 @@ import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { DaerahProgramAnalysis } from './DaerahProgramAnalysis';
-import { PengesahanTab } from './PengesahanTab';
-import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
-import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, addDaerah, deleteDaerah, updateDaerah, addAdmin, getSubmittedSchools, approveSchoolBadge, reopenSchoolBadge, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification } from '../services/supabaseApi';
-import { registerAdmin } from '../services/supabaseAuth';
-import { LoadingSpinner } from './ui/LoadingSpinner';
-import { uploadLogo, getLogoUrl } from '../services/logoService';
-import { QRAttendanceScanner } from './ui/QRVerification';
-import { WithdrawalScanner } from './WithdrawalScanner';
-import { WithdrawalsList } from './WithdrawalsList';
+import { FloatedStudentsTab } from './FloatedStudentsTab';
 import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
 
 interface AdminNegeriPanelProps {
@@ -130,18 +121,16 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       setLogoUploading(false);
     }
   };
-  // Filter data untuk negeri ini sahaja (scope utama)
-  const negeriData = data.filter(d => d.negeriCode === negeriCode);
-  const negeriSchools = schools.filter(s => s.negeriCode === negeriCode);
-  const filteredDaerah = daerahList.filter(d => d.negeriCode === negeriCode);
+  const negeriData = useMemo(() => data.filter(d => d.negeriCode === negeriCode), [data, negeriCode]);
+  const negeriSchools = useMemo(() => schools.filter(s => s.negeriCode === negeriCode), [schools, negeriCode]);
+  const filteredDaerah = useMemo(() => daerahList.filter(d => d.negeriCode === negeriCode), [daerahList, negeriCode]);
 
-  // Cascade filter: jika pengguna pilih daerah tertentu, filter lagi ke daerah itu
-  const filteredData = selectedDaerahFilter === 'ALL'
+  const filteredData = useMemo(() => selectedDaerahFilter === 'ALL'
     ? negeriData
-    : negeriData.filter(d => d.daerahCode === selectedDaerahFilter);
-  const filteredSchools = selectedDaerahFilter === 'ALL'
+    : negeriData.filter(d => d.daerahCode === selectedDaerahFilter), [negeriData, selectedDaerahFilter]);
+  const filteredSchools = useMemo(() => selectedDaerahFilter === 'ALL'
     ? negeriSchools
-    : negeriSchools.filter(s => s.daerahCode === selectedDaerahFilter);
+    : negeriSchools.filter(s => s.daerahCode === selectedDaerahFilter), [negeriSchools, selectedDaerahFilter]);
 
   // Reset filter jika daerah yang dipilih dipadam atau bertukar negeri
   useEffect(() => {
@@ -457,6 +446,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true, scoped: false },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true, scoped: false },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true, scoped: true },
+    { id: 'floated', label: 'Murid Terapung', icon: MapPin, allowed: true, scoped: true },
     { id: 'courses', label: 'Kursus Pemimpin', icon: Users, allowed: true, scoped: false },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true, scoped: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true, scoped: true },
@@ -773,13 +763,14 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
 
             {tab === 'schools' && (
               <div className="animate-[fadeIn_0.2s_ease-out] print:hidden">
-                 <AdminSchools 
-                   schools={filteredSchools} 
-                   scriptUrl={scriptUrl} 
-                   negeriCode={negeriCode}
-                   daerahCode={selectedDaerahFilter !== 'ALL' ? selectedDaerahFilter : undefined}
-                   onRefresh={refreshData} 
-                 />
+                  <AdminSchools 
+                    schools={filteredSchools} 
+                    scriptUrl={scriptUrl} 
+                    negeriCode={negeriCode}
+                    daerahCode={selectedDaerahFilter !== 'ALL' ? selectedDaerahFilter : undefined}
+                    daerahList={filteredDaerah}
+                    onRefresh={refreshData} 
+                  />
               </div>
             )}
             
@@ -1033,6 +1024,18 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                   onRefresh={refreshData}
                   allowUnwithdraw={true}
                   scopeLabel={`Negeri ${negeriName}`}
+                />
+              </div>
+            )}
+
+            {tab === 'floated' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <FloatedStudentsTab
+                  schoolCode=""
+                  schoolName={`Negeri ${negeriName}`}
+                  negeriCode={negeriCode}
+                  daerahCode={selectedDaerahFilter !== 'ALL' ? selectedDaerahFilter : undefined}
+                  onRefresh={refreshData}
                 />
               </div>
             )}

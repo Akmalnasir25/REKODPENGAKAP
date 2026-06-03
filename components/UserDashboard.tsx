@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
-import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, Sparkles, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown } from 'lucide-react';
+import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown, MapPin } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 
@@ -24,6 +24,8 @@ import { PDFExportButton } from './ui/PDFExportButton';
 import { SchoolQRGenerator, ParticipantQRGenerator } from './ui/QRVerification';
 import { WithdrawalsList } from './WithdrawalsList';
 import { SchoolLeaderRequestsTab } from './SchoolLeaderRequestsTab';
+import { FloatedStudentsTab } from './FloatedStudentsTab';
+import { FloatStudentModal } from './FloatStudentModal';
 import { countPendingLeaderRequests } from '../services/leaderApprovalService';
 import { useDeadlineChecker } from '../context/NotificationContext';
 import { logAudit } from '../services/auditService';
@@ -61,6 +63,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [showWithdrawalsView, setShowWithdrawalsView] = useState(false);
   const [showLeaderRequestsView, setShowLeaderRequestsView] = useState(false);
   const [showDataAccessView, setShowDataAccessView] = useState(false);
+  const [showFloatedView, setShowFloatedView] = useState(false);
+  const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [pendingLeaderCount, setPendingLeaderCount] = useState(0);
 
   // Auto-refresh count permintaan pemimpin pending setiap 30 saat
@@ -735,8 +739,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <SidebarItem 
                 icon={Home} 
                 label="Utama" 
-                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView && !showDataAccessView} 
-                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setShowDataAccessView(false); setIsMobileSidebarOpen(false); }} 
+                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView && !showDataAccessView && !showFloatedView} 
+                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setShowDataAccessView(false); setShowFloatedView(false); setIsMobileSidebarOpen(false); }} 
               />
 
               <SidebarItem 
@@ -765,7 +769,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 label="Akses Pemimpin"
                 badge={pendingLeaderCount}
                 isActive={showLeaderRequestsView}
-                onClick={() => { setShowLeaderRequestsView(true); setShowWithdrawalsView(false); setShowHistoryView(false); setShowArchiveView(false); setIsMobileSidebarOpen(false); }}
+                onClick={() => { setShowLeaderRequestsView(true); setShowWithdrawalsView(false); setShowHistoryView(false); setShowArchiveView(false); setShowFloatedView(false); setIsMobileSidebarOpen(false); }}
+              />
+
+              <SidebarItem
+                icon={MapPin}
+                label="Murid Diapungkan"
+                isActive={showFloatedView}
+                onClick={() => { setShowFloatedView(true); setShowLeaderRequestsView(false); setShowWithdrawalsView(false); setShowHistoryView(false); setShowArchiveView(false); setShowDataAccessView(false); setIsMobileSidebarOpen(false); }}
               />
 
               <SidebarItem
@@ -981,7 +992,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             {/* CONTENT VIEWS (SCREEN ONLY) */}
             <div className="print:hidden">
-            {showDataAccessView ? (
+            {showFloatedView ? (
+              <FloatedStudentsTab 
+                schoolCode={user.schoolCode}
+                schoolName={user.schoolName}
+                negeriCode={userProfiles.find(u => u.schoolCode === user.schoolCode)?.negeriCode || schools.find(s => s.name === user.schoolName)?.negeriCode}
+                daerahCode={userProfiles.find(u => u.schoolCode === user.schoolCode)?.daerahCode || schools.find(s => s.name === user.schoolName)?.daerahCode}
+                onRefresh={onRefresh}
+              />
+            ) : showDataAccessView ? (
                 <div className="bg-white rounded-xl shadow p-6 space-y-4">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -1466,7 +1485,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-1">
                                               {canModifyRecord(item) && !isMigrated && (
-                                                <button onClick={() => handleEditRow(item, i)} className="p-1.5 rounded text-blue-600 hover:bg-blue-50" title="Edit"><Edit2 size={14} /></button>
+                                                <>
+                                                  <button
+                                                    onClick={() => { if (item.personId) setFloatModalStudent({ personId: item.personId, studentName: item.student }); }}
+                                                    className="p-1.5 rounded text-amber-500 hover:bg-amber-50"
+                                                    title="Apungkan Murid"
+                                                  >
+                                                    <MapPin size={14} />
+                                                  </button>
+                                                  <button onClick={() => handleEditRow(item, i)} className="p-1.5 rounded text-blue-600 hover:bg-blue-50" title="Edit"><Edit2 size={14} /></button>
+                                                </>
                                               )}
                                               <button onClick={() => onDelete(item)} disabled={!canModifyRecord(item) || isMigrated} className={`p-1.5 rounded ${canModifyRecord(item) && !isMigrated ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}><Trash2 size={14} /></button>
                                             </div>
@@ -1632,6 +1660,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             onClose={() => setShowBulkImportModal(false)}
             onSuccess={onRefresh}
           />
+      )}
+
+      {floatModalStudent && (
+        <FloatStudentModal
+          studentName={floatModalStudent.studentName}
+          personId={floatModalStudent.personId}
+          schoolCode={user.schoolCode}
+          onClose={() => setFloatModalStudent(null)}
+          onFloated={() => {
+            setFloatModalStudent(null);
+            onRefresh();
+          }}
+        />
       )}
 
       {showPasswordModal && (

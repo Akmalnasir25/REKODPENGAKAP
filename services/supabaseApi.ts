@@ -199,6 +199,7 @@ export const fetchCloudData = async (
         role: p.role || 'PESERTA',
         category: p.category || '',
         shirtSize: p.shirt_size || '',
+        shirtType: p.shirt_type || '',
         unit: p.unit || '',
         makanan: p.makanan || '',
         masalahKesihatan: p.masalah_kesihatan || '',
@@ -328,6 +329,7 @@ const createSubmissionWithPeople = async (
       role,
       category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
       shirt_size: (p as any).shirtSize || null,
+      shirt_type: (p as any).shirtType || null,
       unit: (p as any).unit || (isPeserta ? 'Perdana' : null),
       makanan: (p as any).makanan || (isPeserta ? 'Biasa' : null),
       masalah_kesihatan: (p as any).masalahKesihatan || (isPeserta ? 'Tiada' : null),
@@ -1244,7 +1246,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; shirtType?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -1259,6 +1261,7 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
     if (updates.category !== undefined) updateData.category = updates.category || null;
     if (updates.shirtSize !== undefined) updateData.shirt_size = updates.shirtSize || null;
+    if (updates.shirtType !== undefined) updateData.shirt_type = updates.shirtType || null;
     if (updates.unit !== undefined) updateData.unit = updates.unit || null;
     if (updates.makanan !== undefined) updateData.makanan = updates.makanan || null;
     if (updates.masalahKesihatan !== undefined) updateData.masalah_kesihatan = updates.masalahKesihatan || null;

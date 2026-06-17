@@ -2,13 +2,25 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Wallet, Shirt, Loader, RefreshCw, Download } from 'lucide-react';
 import { SubmissionData } from '../types';
 import { getProgramSettings, ProgramSetting } from '../services/supabaseApi';
-import { buildProgramSummary, formatRM, SHIRT_SIZES, SchoolSummary } from '../services/programSummary';
+import { buildProgramSummary, formatRM, SHIRT_SIZES, SHIRT_TYPES, SchoolSummary } from '../services/programSummary';
 
 interface ProgramSummaryViewProps {
   records: SubmissionData[];
   year: number;
   mode: 'school' | 'admin';
 }
+
+// Susun saiz ikut urutan standard (budak dulu, kemudian dewasa), label lain di hujung
+const orderSizes = (sizes: string[]): string[] => {
+  const known = SHIRT_SIZES.filter(s => sizes.includes(s));
+  const others = sizes.filter(s => !SHIRT_SIZES.includes(s as any)).sort();
+  return [...known, ...others];
+};
+const orderTypes = (types: string[]): string[] => {
+  const known = SHIRT_TYPES.filter(t => types.includes(t));
+  const others = types.filter(t => !SHIRT_TYPES.includes(t as any)).sort();
+  return [...known, ...others];
+};
 
 export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records, year, mode }) => {
   const [settings, setSettings] = useState<ProgramSetting[]>([]);
@@ -28,29 +40,44 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
     [records, settings, year],
   );
 
-  // Saiz baju yang aktif (ada digunakan) untuk lajur dinamik
-  const activeShirtSizes = useMemo(() => {
-    const set = new Set<string>();
-    summary.forEach(s => Object.keys(s.shirtTotals).forEach(k => set.add(k)));
-    const ordered = [...SHIRT_SIZES.filter(sz => set.has(sz)), ...(set.has('(Belum diisi)') ? ['(Belum diisi)'] : [])];
-    return ordered;
-  }, [summary]);
-
   const grandTotalAll = summary.reduce((sum, s) => sum + s.grandTotal, 0);
   const anyPayment = summary.some(s => s.programs.some(p => p.paymentEnabled));
   const anyShirt = summary.some(s => s.programs.some(p => p.shirtEnabled));
 
+  // Agregat saiz baju seluruh skop: jenis -> saiz -> jumlah
+  const aggShirt = useMemo(() => {
+    const agg: Record<string, Record<string, number>> = {};
+    summary.forEach(s => {
+      Object.entries(s.shirtByType).forEach(([type, sizes]) => {
+        if (!agg[type]) agg[type] = {};
+        Object.entries(sizes).forEach(([size, n]) => { agg[type][size] = (agg[type][size] || 0) + n; });
+      });
+    });
+    return agg;
+  }, [summary]);
+
+  const aggSizeCols = useMemo(() => {
+    const set = new Set<string>();
+    Object.values(aggShirt).forEach(sizes => Object.keys(sizes).forEach(s => set.add(s)));
+    return orderSizes([...set]);
+  }, [aggShirt]);
+  const aggTypeRows = orderTypes(Object.keys(aggShirt));
+
   const handleExport = () => {
-    const headers = ['Sekolah', 'Program', 'Peserta', 'Pemimpin', 'Penolong', 'Jumlah (RM)', ...activeShirtSizes.map(s => `Baju ${s}`)];
+    const headers = ['Sekolah', 'Program', 'Peserta', 'Pemimpin', 'Penolong', 'Jumlah (RM)', 'Jenis Baju', 'Saiz', 'Bilangan'];
     const rows: string[] = [headers.join(',')];
     summary.forEach(school => {
       school.programs.forEach(p => {
-        const shirtCols = activeShirtSizes.map(sz => p.shirtSizes[sz] || 0);
-        rows.push([
-          `"${school.schoolName}"`, `"${p.badge}"`,
-          p.countPeserta, p.countPemimpin, p.countPenolong,
-          p.total.toFixed(2), ...shirtCols,
-        ].join(','));
+        const typeEntries = Object.entries(p.shirtByType);
+        if (typeEntries.length === 0) {
+          rows.push([`"${school.schoolName}"`, `"${p.badge}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), '', '', ''].join(','));
+        } else {
+          typeEntries.forEach(([type, sizes]) => {
+            Object.entries(sizes).forEach(([size, n]) => {
+              rows.push([`"${school.schoolName}"`, `"${p.badge}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), `"${type}"`, `"${size}"`, n].join(','));
+            });
+          });
+        }
       });
     });
     const BOM = '﻿';
@@ -77,6 +104,23 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
     );
   }
 
+  const ShirtByTypeBlock = ({ byType }: { byType: Record<string, Record<string, number>> }) => (
+    <div className="space-y-2">
+      {orderTypes(Object.keys(byType)).map(type => (
+        <div key={type}>
+          <p className="text-xs font-bold text-indigo-700">{type}</p>
+          <div className="flex flex-wrap gap-1.5 mt-1">
+            {orderSizes(Object.keys(byType[type])).map(size => (
+              <span key={size} className={`px-2 py-1 rounded text-xs font-semibold border ${size.includes('belum') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
+                {size}: <span className="font-black">{byType[type][size]}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-[fadeIn_0.3s_ease-out]">
       <div className="flex flex-wrap justify-between items-center gap-3">
@@ -93,7 +137,6 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
         </div>
       </div>
 
-      {/* Kad jumlah keseluruhan (jika ada bayaran) */}
       {anyPayment && (
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl p-5 shadow flex items-center justify-between">
           <div>
@@ -104,7 +147,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
         </div>
       )}
 
-      {/* SCHOOL MODE: papar setiap program secara terperinci */}
+      {/* SCHOOL MODE */}
       {mode === 'school' && summary.map(school => (
         <div key={school.schoolCode} className="space-y-4">
           {school.programs.map(p => (
@@ -117,7 +160,6 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                 </div>
               </div>
               <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Bayaran */}
                 {p.paymentEnabled && (
                   <div>
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Wallet size={12} /> Bayaran</p>
@@ -144,18 +186,12 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                     </table>
                   </div>
                 )}
-                {/* Saiz baju */}
                 {p.shirtEnabled && (
                   <div>
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Shirt size={12} /> Saiz Baju</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.keys(p.shirtSizes).length === 0 && <span className="text-xs text-gray-400 italic">Tiada data</span>}
-                      {[...SHIRT_SIZES, '(Belum diisi)'].filter(sz => p.shirtSizes[sz]).map(sz => (
-                        <div key={sz} className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${sz === '(Belum diisi)' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-indigo-50 text-indigo-700 border-indigo-100'}`}>
-                          {sz}: <span className="font-black">{p.shirtSizes[sz]}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Shirt size={12} /> Saiz Baju ({p.shirtCount})</p>
+                    {Object.keys(p.shirtByType).length === 0
+                      ? <span className="text-xs text-gray-400 italic">Tiada data</span>
+                      : <ShirtByTypeBlock byType={p.shirtByType} />}
                   </div>
                 )}
               </div>
@@ -164,55 +200,92 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
         </div>
       ))}
 
-      {/* ADMIN MODE: jadual ringkas semua sekolah */}
+      {/* ADMIN MODE: jadual bayaran ringkas + agregat saiz baju */}
       {mode === 'admin' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 uppercase text-xs text-slate-700 border-b">
-              <tr>
-                <th className="px-4 py-3">Sekolah</th>
-                <th className="px-4 py-3">Program</th>
-                <th className="px-4 py-3 text-center">Peserta</th>
-                <th className="px-4 py-3 text-center">Pemimpin</th>
-                <th className="px-4 py-3 text-center">Penolong</th>
-                {anyPayment && <th className="px-4 py-3 text-right">Jumlah</th>}
-                {anyShirt && activeShirtSizes.map(sz => <th key={sz} className="px-3 py-3 text-center">{sz}</th>)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {summary.map(school =>
-                school.programs.map((p, idx) => (
-                  <tr key={`${school.schoolCode}-${p.badge}`} className="hover:bg-slate-50">
-                    {idx === 0 && (
-                      <td className="px-4 py-2 font-medium text-gray-700 align-top" rowSpan={school.programs.length}>
-                        {school.schoolName}
-                        {anyPayment && <div className="text-xs text-emerald-600 font-bold mt-0.5">{formatRM(school.grandTotal)}</div>}
-                      </td>
-                    )}
-                    <td className="px-4 py-2 text-gray-600">{p.badge}</td>
-                    <td className="px-4 py-2 text-center">{p.countPeserta}</td>
-                    <td className="px-4 py-2 text-center">{p.countPemimpin}</td>
-                    <td className="px-4 py-2 text-center">{p.countPenolong}</td>
-                    {anyPayment && <td className="px-4 py-2 text-right font-semibold text-emerald-700">{p.paymentEnabled ? formatRM(p.total) : '-'}</td>}
-                    {anyShirt && activeShirtSizes.map(sz => <td key={sz} className="px-3 py-2 text-center text-gray-600">{p.shirtSizes[sz] || ''}</td>)}
-                  </tr>
-                )),
-              )}
-            </tbody>
-            {anyPayment && (
-              <tfoot className="bg-gray-800 text-white font-bold">
+        <>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 uppercase text-xs text-slate-700 border-b">
                 <tr>
-                  <td className="px-4 py-3 uppercase text-xs" colSpan={5}>Jumlah Kutipan Dijangka</td>
-                  <td className="px-4 py-3 text-right text-yellow-400">{formatRM(grandTotalAll)}</td>
-                  {anyShirt && activeShirtSizes.map(sz => {
-                    const tot = summary.reduce((s, sc) => s + (sc.shirtTotals[sz] || 0), 0);
-                    return <td key={sz} className="px-3 py-3 text-center">{tot || ''}</td>;
-                  })}
+                  <th className="px-4 py-3">Sekolah</th>
+                  <th className="px-4 py-3">Program</th>
+                  <th className="px-4 py-3 text-center">Peserta</th>
+                  <th className="px-4 py-3 text-center">Pemimpin</th>
+                  <th className="px-4 py-3 text-center">Penolong</th>
+                  {anyPayment && <th className="px-4 py-3 text-right">Jumlah</th>}
+                  {anyShirt && <th className="px-4 py-3 text-center">Baju</th>}
                 </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {summary.map(school =>
+                  school.programs.map((p, idx) => (
+                    <tr key={`${school.schoolCode}-${p.badge}`} className="hover:bg-slate-50">
+                      {idx === 0 && (
+                        <td className="px-4 py-2 font-medium text-gray-700 align-top" rowSpan={school.programs.length}>
+                          {school.schoolName}
+                          {anyPayment && <div className="text-xs text-emerald-600 font-bold mt-0.5">{formatRM(school.grandTotal)}</div>}
+                        </td>
+                      )}
+                      <td className="px-4 py-2 text-gray-600">{p.badge}</td>
+                      <td className="px-4 py-2 text-center">{p.countPeserta}</td>
+                      <td className="px-4 py-2 text-center">{p.countPemimpin}</td>
+                      <td className="px-4 py-2 text-center">{p.countPenolong}</td>
+                      {anyPayment && <td className="px-4 py-2 text-right font-semibold text-emerald-700">{p.paymentEnabled ? formatRM(p.total) : '-'}</td>}
+                      {anyShirt && <td className="px-4 py-2 text-center text-indigo-700">{p.shirtEnabled ? p.shirtCount : '-'}</td>}
+                    </tr>
+                  )),
+                )}
+              </tbody>
+              {anyPayment && (
+                <tfoot className="bg-gray-800 text-white font-bold">
+                  <tr>
+                    <td className="px-4 py-3 uppercase text-xs" colSpan={5}>Jumlah Kutipan Dijangka</td>
+                    <td className="px-4 py-3 text-right text-yellow-400">{formatRM(grandTotalAll)}</td>
+                    {anyShirt && <td className="px-4 py-3 text-center">{summary.reduce((s, sc) => s + sc.shirtCount, 0)}</td>}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {/* Agregat saiz baju (jenis × saiz) untuk seluruh skop */}
+          {anyShirt && aggTypeRows.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+              <div className="px-4 py-3 border-b bg-indigo-50 font-bold text-indigo-800 flex items-center gap-2"><Shirt size={16} /> Agregat Saiz Baju (untuk tempahan)</div>
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 uppercase text-xs text-slate-700 border-b">
+                  <tr>
+                    <th className="px-4 py-3">Jenis Baju</th>
+                    {aggSizeCols.map(sz => <th key={sz} className="px-3 py-3 text-center">{sz}</th>)}
+                    <th className="px-3 py-3 text-center bg-indigo-100">Jumlah</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {aggTypeRows.map(type => {
+                    const rowTotal = Object.values(aggShirt[type]).reduce((a, b) => a + b, 0);
+                    return (
+                      <tr key={type} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 font-medium text-gray-700">{type}</td>
+                        {aggSizeCols.map(sz => <td key={sz} className="px-3 py-2 text-center text-gray-600">{aggShirt[type][sz] || ''}</td>)}
+                        <td className="px-3 py-2 text-center font-bold bg-indigo-50 text-indigo-700">{rowTotal}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-gray-800 text-white font-bold">
+                  <tr>
+                    <td className="px-4 py-3 uppercase text-xs">Jumlah</td>
+                    {aggSizeCols.map(sz => {
+                      const tot = aggTypeRows.reduce((s, t) => s + (aggShirt[t][sz] || 0), 0);
+                      return <td key={sz} className="px-3 py-3 text-center">{tot || ''}</td>;
+                    })}
+                    <td className="px-3 py-3 text-center text-yellow-400">{aggTypeRows.reduce((s, t) => s + Object.values(aggShirt[t]).reduce((a, b) => a + b, 0), 0)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

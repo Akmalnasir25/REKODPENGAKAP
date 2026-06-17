@@ -7,7 +7,16 @@ import { ProgramSetting } from './supabaseApi';
 // (kutipan dijangka semua sekolah dalam skop).
 // ============================================================
 
-export const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'] as const;
+export const SHIRT_TYPES = [
+  'Kolar',
+  'Round Neck Lengan Pendek',
+  'Round Neck Lengan Panjang',
+  'Round Neck Muslimah',
+] as const;
+
+export const SHIRT_SIZES_KIDS = ['24', '26', '28', '30', '32'] as const; // Saiz budak (ukuran dada)
+export const SHIRT_SIZES_ADULT = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'] as const;
+export const SHIRT_SIZES = [...SHIRT_SIZES_KIDS, ...SHIRT_SIZES_ADULT] as const;
 
 export interface ProgramBreakdown {
   badge: string;
@@ -23,7 +32,8 @@ export interface ProgramBreakdown {
   total: number;
   paymentEnabled: boolean;
   shirtEnabled: boolean;
-  shirtSizes: Record<string, number>; // saiz -> bilangan
+  shirtByType: Record<string, Record<string, number>>; // jenis -> saiz -> bilangan
+  shirtCount: number; // jumlah baju keseluruhan program ini
 }
 
 export interface SchoolSummary {
@@ -31,7 +41,8 @@ export interface SchoolSummary {
   schoolCode: string;
   programs: ProgramBreakdown[];
   grandTotal: number;
-  shirtTotals: Record<string, number>;
+  shirtByType: Record<string, Record<string, number>>; // agregat sekolah
+  shirtCount: number;
 }
 
 const yearOf = (d: string): number | null => {
@@ -88,7 +99,8 @@ export const buildProgramSummary = (
         schoolCode,
         programs: [],
         grandTotal: 0,
-        shirtTotals: {},
+        shirtByType: {},
+        shirtCount: 0,
       });
     }
     const school = schoolMap.get(schoolCode)!;
@@ -105,7 +117,8 @@ export const buildProgramSummary = (
         total: 0,
         paymentEnabled: setting.paymentEnabled,
         shirtEnabled: setting.shirtEnabled,
-        shirtSizes: {},
+        shirtByType: {},
+        shirtCount: 0,
       };
       school.programs.push(prog);
     }
@@ -117,10 +130,16 @@ export const buildProgramSummary = (
 
     // Saiz baju (peserta, pemimpin, penolong sahaja — bukan penguji)
     if (setting.shirtEnabled && (isPeserta(role) || isPemimpin(role) || isPenolong(role))) {
-      const size = (rec.shirtSize || '').trim();
-      const key = size || '(Belum diisi)';
-      prog.shirtSizes[key] = (prog.shirtSizes[key] || 0) + 1;
-      school.shirtTotals[key] = (school.shirtTotals[key] || 0) + 1;
+      const type = (rec.shirtType || '').trim() || '(Jenis belum diisi)';
+      const size = (rec.shirtSize || '').trim() || '(Saiz belum diisi)';
+      const addTo = (target: Record<string, Record<string, number>>) => {
+        if (!target[type]) target[type] = {};
+        target[type][size] = (target[type][size] || 0) + 1;
+      };
+      addTo(prog.shirtByType);
+      addTo(school.shirtByType);
+      prog.shirtCount += 1;
+      school.shirtCount += 1;
     }
   });
 

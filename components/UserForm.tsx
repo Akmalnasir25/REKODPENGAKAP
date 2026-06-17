@@ -669,8 +669,26 @@ export const UserForm: React.FC<UserFormProps> = ({
                                 />
                             </div>
 
-                            {/* SAIZ BAJU (hanya jika program aktifkan; untuk peserta, pemimpin, penolong) */}
+                            {/* BAJU (hanya jika program aktifkan; untuk peserta, pemimpin, penolong) */}
                             {shirtEnabled && ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN'].includes((person as any).role) && (
+                              <>
+                              <div className="sm:col-span-4 lg:col-span-3">
+                                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Jenis Baju</label>
+                                  <select
+                                      className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                                      value={(person as any).shirtType || ''}
+                                      onChange={e => {
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, shirtType: e.target.value } : p);
+                                        setAllPeople(updated);
+                                      }}
+                                  >
+                                      <option value="">- Pilih Jenis -</option>
+                                      <option value="Kolar">Kolar</option>
+                                      <option value="Round Neck Lengan Pendek">Round Neck Lengan Pendek</option>
+                                      <option value="Round Neck Lengan Panjang">Round Neck Lengan Panjang</option>
+                                      <option value="Round Neck Muslimah">Round Neck Muslimah</option>
+                                  </select>
+                              </div>
                               <div className="sm:col-span-4 lg:col-span-2">
                                   <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Saiz Baju</label>
                                   <select
@@ -682,9 +700,15 @@ export const UserForm: React.FC<UserFormProps> = ({
                                       }}
                                   >
                                       <option value="">- Pilih Saiz -</option>
-                                      {['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'].map(s => <option key={s} value={s}>{s}</option>)}
+                                      <optgroup label="Budak (ukuran dada)">
+                                        {['24', '26', '28', '30', '32'].map(s => <option key={s} value={s}>{s}</option>)}
+                                      </optgroup>
+                                      <optgroup label="Dewasa">
+                                        {['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL'].map(s => <option key={s} value={s}>{s}</option>)}
+                                      </optgroup>
                                   </select>
                               </div>
+                              </>
                             )}
 
                             {/* CATEGORY (only for PESERTA) */}

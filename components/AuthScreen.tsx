@@ -128,11 +128,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    if (!scriptUrl && loginType !== 'user') {
-        setError('URL Database belum ditetapkan. Sila hubungi Admin.');
-        return;
-    }
 
     // Check rate limiting for login attempts
     if (authMode === 'login') {

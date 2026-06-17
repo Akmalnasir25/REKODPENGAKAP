@@ -2,8 +2,10 @@
 
 
 // Legacy Apps Script endpoint sudah ditamatkan — data kini melalui Supabase.
-// Dikekalkan sebagai string kosong kerana sesetengah prop lama masih merujuknya.
-export const DEFAULT_SERVER_URL = "";
+// Nilai sentinel bukan-kosong dikekalkan kerana beberapa guard lama masih
+// menyemak `!scriptUrl` (login admin, hantar borang, dll). Ia TIDAK digunakan
+// untuk sebarang permintaan rangkaian — Supabase mengabaikannya sepenuhnya.
+export const DEFAULT_SERVER_URL = "supabase";
 export const APP_VERSION = "";
 
 export const LOCAL_STORAGE_KEYS = {

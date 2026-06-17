@@ -30,6 +30,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
+  const [selectedSchoolFilter, setSelectedSchoolFilter] = useState(''); // '' = semua sekolah
   const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [showMakananDetail, setShowMakananDetail] = useState(false);
@@ -72,8 +73,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
   // Filter by year using the SUBMITTED data (exclude withdrawn participants)
   const yearData = useMemo(() => {
-      return submittedData.filter(d => safeGetYear(d.date) === selectedYear && !(d as any).isWithdrawn);
-  }, [submittedData, selectedYear]);
+      return submittedData.filter(d =>
+          safeGetYear(d.date) === selectedYear
+          && !(d as any).isWithdrawn
+          && (!selectedSchoolFilter || d.school === selectedSchoolFilter)
+      );
+  }, [submittedData, selectedYear, selectedSchoolFilter]);
+
+  // Senarai sekolah untuk dropdown filter (dari data yang dihantar, ikut abjad)
+  const schoolFilterOptions = useMemo(() => {
+      const set = new Set<string>();
+      submittedData.forEach(d => { if (d.school && String(d.school).trim()) set.add(String(d.school).trim()); });
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [submittedData]);
 
   // Available badges for filter dropdown
   const availableBadges = useMemo(() => {
@@ -527,7 +539,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
                         Program:
                     </label>
-                    <select 
+                    <select
                         className="p-2 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full md:w-auto"
                         value={selectedBadgeFilter}
                         onChange={(e) => setSelectedBadgeFilter(e.target.value)}
@@ -538,7 +550,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                         ))}
                     </select>
                 </div>
-                
+
+                <div className="w-px h-8 bg-gray-200 hidden md:block"></div>
+
+                <div className="flex items-center gap-2 flex-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                        Sekolah:
+                    </label>
+                    <select
+                        className="p-2 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full md:w-auto"
+                        value={selectedSchoolFilter}
+                        onChange={(e) => setSelectedSchoolFilter(e.target.value)}
+                    >
+                        <option value="">Semua Sekolah</option>
+                        {schoolFilterOptions.map((name, i) => (
+                            <option key={i} value={name}>{name}</option>
+                        ))}
+                    </select>
+                </div>
+
                 <div className="flex flex-col items-end gap-1">
                     <button
                         onClick={() => setShowDrafts(!showDrafts)}
@@ -632,6 +662,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                 <h2 className="font-bold flex items-center gap-2 text-gray-800">
                     <BarChart3 size={20} className="text-blue-600" /> Statistik Pendaftaran {showDrafts ? '(Semua)' : '(Disahkan Sahaja)'} {selectedYear}
                     {selectedBadgeFilter && <span className="text-sm font-normal text-blue-700 ml-2 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">({selectedBadgeFilter})</span>}
+                    {selectedSchoolFilter && <span className="text-sm font-normal text-emerald-700 ml-2 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">🏫 {selectedSchoolFilter}</span>}
                 </h2>
                 <div className="flex flex-wrap gap-2">
                     <PDFExportButton 

@@ -11,7 +11,7 @@ const getSubmissionYear = (value?: string | null) => {
   const year = parsed.getFullYear();
   return Number.isFinite(year) ? year : null;
 };
-import { updateParticipantId, lockSchoolBadge, submitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields } from '../services/supabaseApi';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
 import { ExportButton } from './ui/ExportButton';
@@ -93,6 +93,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Import State
   const [importSourceBadge, setImportSourceBadge] = useState('');
   const [importSourceYear, setImportSourceYear] = useState(selectedYear - 1); // Default to previous year
+  // Peranan yg hendak diimport naik. User boleh ulang import utk peranan berbeza (peserta/pemimpin/penolong/penguji).
+  const [importRole, setImportRole] = useState<'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI'>('PESERTA');
   const [selectedImportCandidates, setSelectedImportCandidates] = useState<string[]>([]);
   const [importNewIds, setImportNewIds] = useState<Record<string, string>>({});
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
@@ -121,10 +123,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const currentSchoolSettings = schools.find(s => s.name === user.schoolName);
   
-  // Get user profile from userProfiles array
+  // Get user profile from userProfiles array FIRST
   const userProfile = useMemo(() => {
     return userProfiles.find(p => p.schoolCode.toUpperCase() === user.schoolCode.toUpperCase());
   }, [userProfiles, user.schoolCode]);
+
+  // Filter badges by scope based on current school's negeri/daerah
+  const schoolNegeriCode = userProfile?.negeriCode || currentSchoolSettings?.negeriCode;
+  const schoolDaerahCode = userProfile?.daerahCode || currentSchoolSettings?.daerahCode;
+  const scopedBadges = useMemo(() => {
+    if (!badges || badges.length === 0) return [];
+    return badges.filter((badge: Badge) => {
+      const scope = badge.scope || 'daerah';
+      if (scope === 'daerah') {
+        return badge.daerahCode ? badge.daerahCode === schoolDaerahCode : true;
+      } else {
+        return badge.negeriCode ? badge.negeriCode === schoolNegeriCode : true;
+      }
+    });
+  }, [badges, schoolNegeriCode, schoolDaerahCode]);
 
   // Resolved logo (daerah > negeri > default)
   const resolvedLogo = useResolvedLogo(
@@ -357,13 +374,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       const filteredByRole = candidates.filter(d => {
           const role = (d.role || 'PESERTA').toUpperCase();
-          return role === 'PESERTA' || role === 'PENERIMA RAMBU';
+          if (importRole === 'PESERTA') return role === 'PESERTA' || role === 'PENERIMA RAMBU';
+          return role === importRole;
       });
 
-      // SAFE STRING COMPARISON for deduplication
-      const existingInTarget = myData.filter(d => d.badge === targetBadge).map(d => String(d.icNumber));
-      return filteredByRole.filter(c => !existingInTarget.includes(String(c.icNumber)));
-  }, [allData, user, selectedYear, importSourceBadge, myData, importSourceYear]);
+      // Dedup ikut IC HANYA bila IC ada (elak peserta tanpa IC '' terbuang sesama sendiri).
+      const existingIcs = new Set(myData.filter(d => d.badge === targetBadge && d.icNumber).map(d => String(d.icNumber)));
+      return filteredByRole.filter(c => !(c.icNumber && existingIcs.has(String(c.icNumber))));
+  }, [allData, user, selectedYear, importSourceBadge, myData, importSourceYear, importRole]);
 
   // --- ARCHIVE DATA (PESERTA SAHAJA) ---
   const myArchiveData = useMemo(() => {
@@ -457,8 +475,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       if (!item.rowIndex) return;
       const cleanNewId = tempIdValue.trim().toUpperCase();
       if (cleanNewId) {
-          const isDuplicate = allData.some(d => new Date(d.date).getFullYear() === selectedYear && String(d.id || '').trim().toUpperCase() === cleanNewId && d.rowIndex !== item.rowIndex);
-          if (isDuplicate) { alert(`ID '${cleanNewId}' telah digunakan.`); return; }
+          // ID sama dibenarkan untuk program berlainan — halang hanya jika bertindih dalam program + tahun yang sama.
+          const isDuplicate = allData.some(d =>
+              new Date(d.date).getFullYear() === selectedYear &&
+              d.badge === item.badge &&
+              String(d.id || '').trim().toUpperCase() === cleanNewId &&
+              d.rowIndex !== item.rowIndex
+          );
+          if (isDuplicate) { alert(`ID '${cleanNewId}' telah digunakan untuk program '${item.badge}' tahun ${selectedYear}.`); return; }
       }
       setSavingId(true);
       try {
@@ -489,7 +513,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!confirm(`Padam ${selectedForDelete.size} rekod yang dipilih?`)) return;
     setIsDeletingBulk(true);
     try {
-      const items = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean).map(d => ({ icNumber: d.icNumber, id: d.id, student: d.student }));
+      const items = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean).map(d => ({ participantId: d.participantId, icNumber: d.icNumber, id: d.id, student: d.student, badge: d.badge, schoolCode: d.schoolCode, school: d.school, date: d.date }));
       const res = await bulkDeleteSubmissions(items);
       if (res.status === 'success') {
         alert(res.message || 'Rekod berjaya dipadam.');
@@ -582,69 +606,64 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       if(!confirm(`Import ${selectedImportCandidates.length} data ke ${targetBadge}?`)) return;
       setIsSubmittingImport(true);
       
-      const candidatesToSubmit = importCandidates.filter(c => selectedImportCandidates.includes(c.icNumber || ''));
+      const candidatesToSubmit = importCandidates.filter(c => selectedImportCandidates.includes(String(c.participantId)));
       if (candidatesToSubmit.length === 0) { alert("Tiada peserta yang sah dipilih."); setIsSubmittingImport(false); return; }
 
-      const missingIc = candidatesToSubmit.find(c => !c.icNumber);
-      if (missingIc) { alert(`Peserta ${missingIc.student} tiada No. KP. Import naik disekat.`); setIsSubmittingImport(false); return; }
+      // No. KP (IC) TIDAK wajib semasa import naik — hanya No Kad Keahlian wajib.
+      const missingNewId = candidatesToSubmit.find(c => !String(importNewIds[String(c.participantId)] || '').trim());
+      if (missingNewId) { alert(`Sila isi No Kad Keahlian untuk ${missingNewId.student}.`); setIsSubmittingImport(false); return; }
 
-      const missingNewId = candidatesToSubmit.find(c => !String(importNewIds[String(c.icNumber)] || '').trim());
-      if (missingNewId) { alert(`Sila isi ID keahlian baru untuk ${missingNewId.student}.`); setIsSubmittingImport(false); return; }
-
-      const newIds = candidatesToSubmit.map(c => String(importNewIds[String(c.icNumber)] || '').trim().toUpperCase());
+      const newIds = candidatesToSubmit.map(c => String(importNewIds[String(c.participantId)] || '').trim().toUpperCase());
       const duplicateNewId = newIds.find((id, idx) => newIds.indexOf(id) !== idx);
       if (duplicateNewId) { alert(`ID keahlian baru duplicate dalam import: ${duplicateNewId}`); setIsSubmittingImport(false); return; }
 
-      const existingId = newIds.find(id => allData.some(d => String(d.id || '').trim().toUpperCase() === id));
-      if (existingId) { alert(`ID keahlian baru sudah wujud dalam sistem: ${existingId}`); setIsSubmittingImport(false); return; }
+      // ID keahlian boleh sama merentas program/tahun berlainan (orang yang sama).
+      // Hanya halang jika ID sudah wujud untuk PROGRAM + TAHUN yang sama (cohort yang sama).
+      const existingId = newIds.find(id => allData.some(d =>
+          String(d.id || '').trim().toUpperCase() === id &&
+          d.badge === targetBadge &&
+          new Date(d.date).getFullYear() === selectedYear
+      ));
+      if (existingId) { alert(`ID keahlian "${existingId}" sudah wujud untuk program '${targetBadge}' tahun ${selectedYear}. (ID sama dibenarkan untuk program lain.)`); setIsSubmittingImport(false); return; }
 
       const ref = candidatesToSubmit[0];
-      
-      // Get profile data from userProfiles, not from submissions
-      const profile = userProfiles.find(p => p.schoolCode.toUpperCase() === user.schoolCode.toUpperCase());
-      
-      const leaderInfo = { 
-          schoolName: ref.school, 
-          schoolCode: ref.schoolCode || user.schoolCode, 
-          groupNumber: profile?.groupNumber || '', 
-          principalName: profile?.principalName || '', 
-          principalPhone: profile?.principalPhone || '', 
-          leaderName: profile?.leaderName || '', 
-          race: profile?.leaderRace || '', 
-          phone: profile?.phone || '', 
-          badgeType: targetBadge 
-      };
-      
-      let importIdCounter = 0;
-      const mappedCandidates = candidatesToSubmit.map(c => ({ 
-          id: Date.now() + (++importIdCounter), 
-          name: c.student, 
-          gender: c.gender, 
-          race: c.race || '', 
-          membershipId: String(importNewIds[String(c.icNumber)] || '').trim().toUpperCase(),
-          icNumber: c.icNumber || '', 
-          phoneNumber: c.studentPhone || '', 
-          remarks: `[IMPORT NAIK DARI ${importSourceBadge} ${importSourceYear}] ID baru diisi semasa import` 
-      }));
-      
-      const participants: Participant[] = mappedCandidates;
-      const assistants: Participant[] = [];
-      const examiners: Participant[] = [];
-      
-      // Force date to be Jan 1st of the SELECTED YEAR (Target Year)
-      const targetDate = `${selectedYear}-01-01`;
 
-      try { 
-          await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, targetDate); 
-          alert("Berjaya import naik program dengan ID keahlian baru."); 
-          setShowImportModal(false); 
+      // Bina rekod utk bulkSubmitRegistration. Peranan ditetapkan ikut pilihan import (importRole).
+      // bulkSubmitRegistration akan isi kategori/unit secara automatik:
+      //   PESERTA -> kategori (default Pengakap Kanak-kanak) + unit (default Perdana)
+      //   PEMIMPIN/PENOLONG PEMIMPIN/PENGUJI -> kategori null (bukan jenis pengakap)
+      const records = candidatesToSubmit.map(c => ({
+          student: c.student,
+          icNumber: c.icNumber || '',
+          membershipId: String(importNewIds[String(c.participantId)] || '').trim().toUpperCase(),
+          gender: c.gender,
+          race: c.race || '',
+          phoneNumber: c.studentPhone || '',
+          role: importRole,
+          category: c.category || undefined,
+          unit: c.unit || undefined,
+          remarks: `[IMPORT NAIK DARI ${importSourceBadge} ${importSourceYear}] ID baru diisi semasa import`,
+      }));
+
+      try {
+          const res = await bulkSubmitRegistration(scriptUrl, {
+              schoolName: ref.school,
+              schoolCode: ref.schoolCode || user.schoolCode,
+              badgeType: targetBadge,
+              year: selectedYear,
+              role: importRole,
+              records,
+          });
+          if (res.status !== 'success') throw new Error(res.message);
+          alert(`Berjaya import naik ${records.length} ${importRole} ke ${targetBadge}.`);
+          setShowImportModal(false);
           setSelectedImportCandidates([]);
           setImportNewIds({});
-          onRefresh(); 
-      } catch (e) { 
-          alert("Gagal."); 
-      } finally { 
-          setIsSubmittingImport(false); 
+          onRefresh();
+      } catch (e) {
+          alert("Gagal.");
+      } finally {
+          setIsSubmittingImport(false);
       }
   };
 
@@ -1098,30 +1117,54 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </div>
                     
                     {availableYears.map(startYear => {
-                        // Filter students who HAVE A RECORD in startYear (Year 1)
-                        const cohortStudents = myHistoryData.filter(row => row.history[startYear]);
-                        
+                        // Kumpulkan pelajar dalam kohort mengikut TAHUN PERTAMA rekod mereka (Tahun 1).
+                        // Logik ini GENERIK untuk semua program (Keris atau mana-mana program lain)
+                        // kerana ia berdasarkan tahun rekod, bukan nama badge.
+                        // Contoh: pelajar dengan rekod 2025 & 2026 hanya muncul dalam blok 2025
+                        // (paparan 2025 -> 2026), BUKAN juga sebagai blok baharu 2026.
+                        // Pelajar yang baru bermula 2026 (tiada rekod 2025) muncul dalam blok 2026.
+                        const cohortStudents = myHistoryData.filter(row => {
+                            const years = Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y));
+                            if (years.length === 0) return false;
+                            return Math.min(...years) === startYear;
+                        });
+
                         if (cohortStudents.length === 0) return null;
+
+                        // Julat tahun DINAMIK: dari tahun pertama hingga tahun terakhir yang ada
+                        // rekod dalam kohort ini. Program berbeza ada tempoh berbeza (1, 2, 3
+                        // tahun atau lebih) — jadi bilangan lajur tidak dikunci pada 3 tahun.
+                        let maxYear = startYear;
+                        cohortStudents.forEach(row => {
+                            Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y)).forEach(y => {
+                                if (y > maxYear) maxYear = y;
+                            });
+                        });
+                        const yearColumns: number[] = [];
+                        for (let y = startYear; y <= maxYear; y++) yearColumns.push(y);
 
                         return (
                             <div key={startYear} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                 <div className="bg-blue-900 px-4 py-3 flex justify-between items-center text-white">
                                     <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-wider">
-                                        <History size={16} className="text-amber-400"/> Sesi {startYear} - {startYear + 2}
+                                        <History size={16} className="text-amber-400"/>
+                                        {yearColumns.length > 1 ? `Sesi ${startYear} - ${maxYear}` : `Sesi ${startYear}`}
                                     </h3>
                                     <span className="text-xs bg-white/10 px-2 py-0.5 rounded font-mono border border-white/20">
                                         {cohortStudents.length} Pelajar
                                     </span>
                                 </div>
-                                
+
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left border-separate border-spacing-0">
                                         <thead className="bg-slate-50 uppercase text-xs text-slate-800">
                                             <tr>
                                                 <th className="px-4 py-3 border-b border-slate-200">Maklumat Peserta</th>
-                                                <th className="px-4 py-3 w-40 text-center border-b border-r border-slate-200">{startYear} (Tahun 1)</th>
-                                                <th className="px-4 py-3 w-40 text-center border-b border-r border-slate-200">{startYear + 1} (Tahun 2)</th>
-                                                <th className="px-4 py-3 w-40 text-center border-b border-slate-200">{startYear + 2} (Tahun 3)</th>
+                                                {yearColumns.map((y, idx) => (
+                                                    <th key={y} className={`px-4 py-3 w-40 text-center border-b border-slate-200 ${idx < yearColumns.length - 1 ? 'border-r' : ''}`}>
+                                                        {y} (Tahun {idx + 1})
+                                                    </th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white">
@@ -1133,23 +1176,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                                             <span className="text-xs text-gray-500 font-mono">{row.ic}</span>
                                                         </div>
                                                     </td>
-                                                    
-                                                    {/* YEAR 1 */}
-                                                    <td className="px-2 py-2 border-r border-gray-100 align-top relative">
-                                                        <HistoryCard data={row.history[startYear]} year={startYear} />
-                                                        <div className="absolute top-1/2 -right-3 -mt-2 z-10 text-slate-300"><ArrowRight size={16} strokeWidth={3} /></div>
-                                                    </td>
 
-                                                    {/* YEAR 2 */}
-                                                    <td className="px-2 py-2 border-r border-gray-100 align-top relative">
-                                                        <HistoryCard data={row.history[startYear + 1]} year={startYear + 1} />
-                                                        <div className="absolute top-1/2 -right-3 -mt-2 z-10 text-slate-300"><ArrowRight size={16} strokeWidth={3} /></div>
-                                                    </td>
-
-                                                    {/* YEAR 3 */}
-                                                    <td className="px-2 py-2 align-top">
-                                                        <HistoryCard data={row.history[startYear + 2]} year={startYear + 2} />
-                                                    </td>
+                                                    {yearColumns.map((y, idx) => (
+                                                        <td key={y} className={`px-2 py-2 align-top relative ${idx < yearColumns.length - 1 ? 'border-r border-gray-100' : ''}`}>
+                                                            <HistoryCard data={row.history[y]} year={y} />
+                                                            {idx < yearColumns.length - 1 && (
+                                                                <div className="absolute top-1/2 -right-3 -mt-2 z-10 text-slate-300"><ArrowRight size={16} strokeWidth={3} /></div>
+                                                            )}
+                                                        </td>
+                                                    ))}
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -1588,11 +1623,20 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <button onClick={() => setShowImportModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
                 <h3 className="font-bold text-lg mb-4 flex gap-2 items-center text-indigo-700 border-b pb-2"><ArrowDownToLine className="text-indigo-600" /> Import Naik Program ({selectedYear})</h3>
                 
-                <div className="bg-indigo-50 p-4 rounded-lg mb-4 text-sm border border-indigo-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-indigo-50 p-4 rounded-lg mb-4 text-sm border border-indigo-100 grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Tahun Asal</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importSourceYear} onChange={(e) => { setImportSourceYear(parseInt(e.target.value)); setSelectedImportCandidates([]); setImportNewIds({}); }}>
                             {availableYears.filter(y => y < selectedYear).map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Peranan</div>
+                        <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importRole} onChange={(e) => { setImportRole(e.target.value as any); setSelectedImportCandidates([]); setImportNewIds({}); }}>
+                            <option value="PESERTA">Peserta</option>
+                            <option value="PEMIMPIN">Pemimpin</option>
+                            <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                            <option value="PENGUJI">Penguji</option>
                         </select>
                     </div>
                     <div>
@@ -1611,12 +1655,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </div>
                 </div>
 
+                <p className="text-xs text-gray-500 italic mb-3">Import dilakukan mengikut <b>satu peranan</b> setiap kali. Untuk bawa masuk peranan lain (cth Pemimpin/Penguji), ulang proses ini & tukar pilihan <b>Peranan</b>.</p>
+
                 {importSourceBadge && (
                     <div className="max-h-96 overflow-y-auto border rounded-lg mb-4">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-100 uppercase text-xs text-gray-600 sticky top-0">
                                 <tr>
-                                    <th className="px-4 py-2 text-center w-10"><input type="checkbox" onChange={(e) => { if (e.target.checked) setSelectedImportCandidates(importCandidates.map(c => String(c.icNumber))); else setSelectedImportCandidates([]); }} checked={importCandidates.length > 0 && selectedImportCandidates.length === importCandidates.length}/></th>
+                                    <th className="px-4 py-2 text-center w-10"><input type="checkbox" onChange={(e) => { if (e.target.checked) setSelectedImportCandidates(importCandidates.map(c => String(c.participantId))); else setSelectedImportCandidates([]); }} checked={importCandidates.length > 0 && selectedImportCandidates.length === importCandidates.length}/></th>
                                     <th className="px-4 py-2">Nama</th>
                                     <th className="px-4 py-2 text-center">No. KP</th>
                                     <th className="px-4 py-2 text-center">ID Lama</th>
@@ -1625,15 +1671,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {importCandidates.map((c, i) => {
-                                    const icKey = String(c.icNumber || '');
-                                    const selected = selectedImportCandidates.includes(icKey);
+                                    const key = String(c.participantId || '');
+                                    const selected = selectedImportCandidates.includes(key);
                                     return (
-                                    <tr key={i} className="hover:bg-indigo-50/50">
-                                        <td className="px-4 py-2 text-center"><input type="checkbox" checked={selected} onChange={(e) => { if(e.target.checked) setSelectedImportCandidates(prev => [...prev, icKey]); else setSelectedImportCandidates(prev => prev.filter(ic => ic !== icKey)); }} className="w-4 h-4 text-indigo-600 rounded"/></td>
+                                    <tr key={key || i} className="hover:bg-indigo-50/50">
+                                        <td className="px-4 py-2 text-center"><input type="checkbox" checked={selected} onChange={(e) => { if(e.target.checked) setSelectedImportCandidates(prev => [...prev, key]); else setSelectedImportCandidates(prev => prev.filter(k => k !== key)); }} className="w-4 h-4 text-indigo-600 rounded"/></td>
                                         <td className="px-4 py-2 font-bold text-gray-800 uppercase">{c.student}</td>
-                                        <td className="px-4 py-2 text-center font-mono">{c.icNumber || <span className="text-red-600 font-bold">TIADA KP</span>}</td>
+                                        <td className="px-4 py-2 text-center font-mono">{c.icNumber || <span className="text-gray-400 italic text-xs">tiada (tidak wajib)</span>}</td>
                                         <td className="px-4 py-2 text-center font-mono text-gray-500">{c.id || '-'}</td>
-                                        <td className="px-4 py-2"><input disabled={!selected} value={importNewIds[icKey] || ''} onChange={(e) => setImportNewIds(prev => ({ ...prev, [icKey]: e.target.value.toUpperCase() }))} placeholder="ID baru wajib" className="w-full p-2 border rounded text-xs font-mono disabled:bg-gray-100" /></td>
+                                        <td className="px-4 py-2"><input disabled={!selected} value={importNewIds[key] || ''} onChange={(e) => setImportNewIds(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }))} placeholder="No Kad Keahlian (wajib)" className="w-full p-2 border rounded text-xs font-mono disabled:bg-gray-100" /></td>
                                     </tr>
                                 )})}
                                 {importCandidates.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-400 italic">Tiada calon.</td></tr>}
@@ -1649,18 +1695,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
       )}
 
-      {showBulkImportModal && (
-          <BulkImportModal
-            scriptUrl={scriptUrl}
-            schoolName={user.schoolName}
-            schoolCode={user.schoolCode}
-            badges={badges}
-            currentYear={selectedYear}
-            existingData={allData}
-            onClose={() => setShowBulkImportModal(false)}
-            onSuccess={onRefresh}
-          />
-      )}
+       {showBulkImportModal && (
+           <BulkImportModal
+             scriptUrl={scriptUrl}
+             schoolName={user.schoolName}
+             schoolCode={user.schoolCode}
+             badges={scopedBadges}
+             currentYear={selectedYear}
+             existingData={allData}
+             onClose={() => setShowBulkImportModal(false)}
+             onSuccess={onRefresh}
+           />
+       )}
 
       {floatModalStudent && (
         <FloatStudentModal

@@ -46,12 +46,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   const submittedData = useMemo(() => deduplicateRecords(data, schools, showDrafts), [data, schools, showDrafts]);
 
   // Count Pending Approvals (Submitted/Locked by user but NOT Approved by Admin)
+  // HANYA tahun semasa — selaras dengan tab Pengesahan yang hanya papar tahun semasa.
+  // (Elak banner "menunggu pengesahan" untuk status lama tahun lepas yang tidak
+  // muncul dalam senarai pengesahan.)
   const pendingCount = useMemo(() => {
+    const yearSuffix = `_${currentYear}`;
     let count = 0;
     schools.forEach(s => {
-        // Safety check for s
         if(s && s.lockedBadges) {
             s.lockedBadges.forEach(badgeKey => {
+                if(!badgeKey.endsWith(yearSuffix)) return; // abaikan tahun lain
                 if(!s.approvedBadges || !s.approvedBadges.includes(badgeKey)) {
                     count++;
                 }
@@ -59,7 +63,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
         }
     });
     return count;
-  }, [schools]);
+  }, [schools, currentYear]);
 
   const availableYears = useMemo(() => {
     // Use raw data for years to avoid empty dropdowns if nothing submitted yet

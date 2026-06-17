@@ -3,7 +3,7 @@ import { Lock, School, Medal, Users, Plus, Trash2, Save, CheckCircle, ArrowLeft,
 import { LeaderInfo, Participant, BadgeType, UserSession, Badge, School as SchoolType, SubmissionData } from '../types';
 import { APP_VERSION, LOGO_URL, LOCAL_STORAGE_KEYS } from '../constants';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { submitRegistration } from '../services/supabaseApi';
+import { submitRegistration, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 import { PrivacyNotice } from './ui/PrivacyNotice';
 
@@ -75,29 +75,56 @@ export const UserForm: React.FC<UserFormProps> = ({
   const [parentalConsent, setParentalConsent] = useState(false);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
 
-  const safeBadges: Badge[] = Array.isArray(badgeTypes) && badgeTypes.length > 0
-    ? badgeTypes
-    : [
-        { name: BadgeType.KERIS_GANGSA, isOpen: true },
-        { name: BadgeType.KERIS_PERAK, isOpen: true },
-        { name: BadgeType.KERIS_EMAS, isOpen: true }
-      ];
+  // Tahun pendaftaran — benarkan daftar untuk tahun lampau (backdated) bagi peserta yang belum direkod.
+  const thisYear = new Date().getFullYear();
+  const [registrationYear, setRegistrationYear] = useState(thisYear);
+  const yearOptions = [thisYear, thisYear - 1, thisYear - 2, thisYear - 3];
 
   // Determine permissions
   const currentSchoolSettings = userSession ? schools.find(s => s.name === userSession.schoolName) : null;
   const baseAllowStudents = currentSchoolSettings?.allowStudents ?? currentSchoolSettings?.allowEdit ?? false;
   const baseAllowAssistants = currentSchoolSettings?.allowAssistants ?? currentSchoolSettings?.allowEdit ?? false;
   const baseAllowExaminers = currentSchoolSettings?.allowExaminers ?? currentSchoolSettings?.allowEdit ?? false;
-  const currentYear = new Date().getFullYear();
+  // Tahun kohort = tahun pendaftaran dipilih (boleh backdated). Semua semakan kebenaran/kunci/pendua ikut tahun ini.
+  const currentYear = registrationYear;
   const selectedBadgePermissionKey = leaderInfo.badgeType ? `${leaderInfo.badgeType}_${currentYear}` : '';
   const selectedBadgePermissions = selectedBadgePermissionKey ? currentSchoolSettings?.badgeEditPermissions?.[selectedBadgePermissionKey] : undefined;
   const allowStudents = selectedBadgePermissions?.students ?? baseAllowStudents;
   const allowAssistants = selectedBadgePermissions?.assistants ?? baseAllowAssistants;
   const allowExaminers = selectedBadgePermissions?.examiners ?? baseAllowExaminers;
-  
   const lockedBadges = currentSchoolSettings?.lockedBadges || [];
 
-  // EFFECT 1: Load cached leader info on mount (scoped by school code)
+  // FILTER BADGES BY SCOPE based on current school's negeri/daerah
+  const schoolNegeriCode = currentSchoolSettings?.negeriCode;
+  const schoolDaerahCode = currentSchoolSettings?.daerahCode;
+
+  // Tetapan program (saiz baju) untuk badge dipilih + tahun + skop sekolah
+  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
+  useEffect(() => {
+    let active = true;
+    getProgramSettings(currentYear).then(s => { if (active) setProgramSettings(s); });
+    return () => { active = false; };
+  }, [currentYear]);
+  const selectedProgramSetting = programSettings.find(s =>
+    s.badgeName === leaderInfo.badgeType &&
+    ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
+     (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
+  const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
+  const filteredBadges = (badgeTypes || []).filter((badge: Badge) => {
+    const scope = badge.scope || 'daerah';
+    if (scope === 'daerah') {
+      // Daerah-level badges: must match school's daerah, or if badge has no daerahCode, show to all (fallback)
+      return badge.daerahCode ? badge.daerahCode === schoolDaerahCode : true;
+    } else {
+      // Negeri-level badges: must match school's negeri, or if badge has no negeriCode, show to all (fallback)
+      return badge.negeriCode ? badge.negeriCode === schoolNegeriCode : true;
+    }
+  });
+  const safeBadges: Badge[] = filteredBadges.length > 0 ? filteredBadges : [
+    { name: BadgeType.KERIS_GANGSA, isOpen: true },
+    { name: BadgeType.KERIS_PERAK, isOpen: true },
+    { name: BadgeType.KERIS_EMAS, isOpen: true }
+  ];
   useEffect(() => {
       if (!userSession?.schoolCode) return;
       const cacheKey = `${LOCAL_STORAGE_KEYS.LEADER_CACHE}_${userSession.schoolCode}`;
@@ -264,7 +291,9 @@ export const UserForm: React.FC<UserFormProps> = ({
         const participants = allPeople.filter(p => (p as any).role === 'PESERTA' && p.name.trim());
         const assistants = allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN') && p.name.trim());
         const examiners = allPeople.filter(p => (p as any).role === 'PENGUJI' && p.name.trim());
-        const result = await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, undefined);
+        // customDate = tarikh tahun kohort dipilih (membolehkan pendaftaran backdated).
+        const cohortDate = `${registrationYear}-01-01`;
+        const result = await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, cohortDate);
         if (result.status === 'error') {
             alert("Ralat: " + (result.message || 'Gagal menyimpan data.'));
         } else {
@@ -479,6 +508,22 @@ export const UserForm: React.FC<UserFormProps> = ({
                             <p className="text-red-500 text-xs mt-1 font-bold">Program ini telah ditutup. Sila pilih program lain.</p>
                          )}
                     </div>
+
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2"><GraduationCap size={16}/> Tahun Pendaftaran</label>
+                        <select
+                            className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition"
+                            value={registrationYear}
+                            onChange={e => setRegistrationYear(Number(e.target.value))}
+                        >
+                            {yearOptions.map(y => (
+                                <option key={y} value={y}>{y}{y === thisYear ? ' (Tahun semasa)' : ' (Backdated)'}</option>
+                            ))}
+                        </select>
+                        {registrationYear !== thisYear && (
+                            <p className="text-amber-600 text-xs mt-1 font-bold">⚠️ Anda mendaftar untuk tahun lampau {registrationYear}. Data akan direkod di bawah kohort {registrationYear}.</p>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -623,6 +668,24 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     }}
                                 />
                             </div>
+
+                            {/* SAIZ BAJU (hanya jika program aktifkan; untuk peserta, pemimpin, penolong) */}
+                            {shirtEnabled && ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN'].includes((person as any).role) && (
+                              <div className="sm:col-span-4 lg:col-span-2">
+                                  <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Saiz Baju</label>
+                                  <select
+                                      className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
+                                      value={(person as any).shirtSize || ''}
+                                      onChange={e => {
+                                        const updated = allPeople.map(p => p.id === person.id ? { ...p, shirtSize: e.target.value } : p);
+                                        setAllPeople(updated);
+                                      }}
+                                  >
+                                      <option value="">- Pilih Saiz -</option>
+                                      {['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL'].map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                              </div>
+                            )}
 
                             {/* CATEGORY (only for PESERTA) */}
                             {(person as any).role === 'PESERTA' && (

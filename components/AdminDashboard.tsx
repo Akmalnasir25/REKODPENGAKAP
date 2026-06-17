@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { SubmissionData, School, Badge, UserProfile } from '../types';
 import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin, X } from 'lucide-react';
+import { ProgramSummaryView } from './ProgramSummaryView';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { BulkWhatsApp } from './ui/BulkWhatsApp';
@@ -876,6 +877,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
             <AdvancedAnalytics data={displayedData} year={selectedYear} />
             </>
+        )}
+
+        {/* RUMUSAN BAYARAN & SAIZ BAJU */}
+        {activeTab !== 'archive' && (
+            <ProgramSummaryView records={yearData} year={selectedYear} mode="admin" />
         )}
 
         {/* DETAILED DATA TABLE */}

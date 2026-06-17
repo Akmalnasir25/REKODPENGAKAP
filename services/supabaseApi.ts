@@ -198,6 +198,7 @@ export const fetchCloudData = async (
         studentPhone: p.phone_number || '',
         role: p.role || 'PESERTA',
         category: p.category || '',
+        shirtSize: p.shirt_size || '',
         unit: p.unit || '',
         makanan: p.makanan || '',
         masalahKesihatan: p.masalah_kesihatan || '',
@@ -326,6 +327,7 @@ const createSubmissionWithPeople = async (
       phone_number: formatPhoneNumber(p.phoneNumber),
       role,
       category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
+      shirt_size: (p as any).shirtSize || null,
       unit: (p as any).unit || (isPeserta ? 'Perdana' : null),
       makanan: (p as any).makanan || (isPeserta ? 'Biasa' : null),
       masalah_kesihatan: (p as any).masalahKesihatan || (isPeserta ? 'Tiada' : null),
@@ -1242,7 +1244,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -1256,6 +1258,7 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber || null;
     if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
     if (updates.category !== undefined) updateData.category = updates.category || null;
+    if (updates.shirtSize !== undefined) updateData.shirt_size = updates.shirtSize || null;
     if (updates.unit !== undefined) updateData.unit = updates.unit || null;
     if (updates.makanan !== undefined) updateData.makanan = updates.makanan || null;
     if (updates.masalahKesihatan !== undefined) updateData.masalah_kesihatan = updates.masalahKesihatan || null;
@@ -1561,6 +1564,118 @@ export const getActiveSchoolsForAssign = async (): Promise<AssignSchoolOption[]>
     });
   } catch {
     return [];
+  }
+};
+
+// ============================================================
+// PROGRAM SETTINGS (Yuran & Saiz Baju per program/skop/tahun)
+// ============================================================
+
+export interface ProgramSetting {
+  badgeName: string;
+  scope: 'negeri' | 'daerah';
+  negeriCode?: string | null;
+  daerahCode?: string | null;
+  year: number;
+  paymentEnabled: boolean;
+  feePeserta: number | null;
+  feePemimpin: number | null;
+  feePenolong: number | null;
+  shirtEnabled: boolean;
+}
+
+// Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
+// skop + kod negeri/daerah untuk padanan di frontend.
+export const getProgramSettings = async (year?: number): Promise<ProgramSetting[]> => {
+  try {
+    let query = supabase
+      .from('program_settings')
+      .select(`
+        year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled,
+        badge:badge_id(name, scope),
+        negeri:negeri_id(code),
+        daerah:daerah_id(code)
+      `);
+    if (year !== undefined) query = query.eq('year', year);
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data.map((r: any) => {
+      const badge = Array.isArray(r.badge) ? r.badge[0] : r.badge;
+      const negeri = Array.isArray(r.negeri) ? r.negeri[0] : r.negeri;
+      const daerah = Array.isArray(r.daerah) ? r.daerah[0] : r.daerah;
+      return {
+        badgeName: badge?.name || '',
+        scope: (badge?.scope || 'daerah') as 'negeri' | 'daerah',
+        negeriCode: negeri?.code || null,
+        daerahCode: daerah?.code || null,
+        year: r.year,
+        paymentEnabled: !!r.payment_enabled,
+        feePeserta: r.fee_peserta !== null && r.fee_peserta !== undefined ? Number(r.fee_peserta) : null,
+        feePemimpin: r.fee_pemimpin !== null && r.fee_pemimpin !== undefined ? Number(r.fee_pemimpin) : null,
+        feePenolong: r.fee_penolong !== null && r.fee_penolong !== undefined ? Number(r.fee_penolong) : null,
+        shirtEnabled: !!r.shirt_enabled,
+      };
+    });
+  } catch {
+    return [];
+  }
+};
+
+export interface UpsertProgramSettingInput {
+  badgeName: string;
+  year: number;
+  scope: 'negeri' | 'daerah';
+  negeriCode?: string;
+  daerahCode?: string;
+  paymentEnabled: boolean;
+  feePeserta: number | null;
+  feePemimpin: number | null;
+  feePenolong: number | null;
+  shirtEnabled: boolean;
+}
+
+// Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
+export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Promise<ApiResponse> => {
+  try {
+    const badge = await getBadgeByName(input.badgeName);
+    const negeriId = input.scope === 'negeri' && input.negeriCode ? await getNegeriId(input.negeriCode) : null;
+    const daerahId = input.scope === 'daerah' && input.daerahCode ? await getDaerahId(input.daerahCode) : null;
+
+    if (input.scope === 'negeri' && !negeriId) return { status: 'error', message: 'Negeri tidak dijumpai.' };
+    if (input.scope === 'daerah' && !daerahId) return { status: 'error', message: 'Daerah tidak dijumpai.' };
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const payload = {
+      badge_id: badge.id,
+      negeri_id: negeriId,
+      daerah_id: daerahId,
+      year: input.year,
+      payment_enabled: input.paymentEnabled,
+      fee_peserta: input.paymentEnabled ? input.feePeserta : null,
+      fee_pemimpin: input.paymentEnabled ? input.feePemimpin : null,
+      fee_penolong: input.paymentEnabled ? input.feePenolong : null,
+      shirt_enabled: input.shirtEnabled,
+      created_by: user?.id || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Cari rekod sedia ada (ikut badge + tahun + skop)
+    let existingQuery = supabase.from('program_settings').select('id').eq('badge_id', badge.id).eq('year', input.year);
+    existingQuery = negeriId ? existingQuery.eq('negeri_id', negeriId) : existingQuery.is('negeri_id', null);
+    existingQuery = daerahId ? existingQuery.eq('daerah_id', daerahId) : existingQuery.is('daerah_id', null);
+    const { data: existing } = await existingQuery.maybeSingle();
+
+    if (existing) {
+      const { error } = await supabase.from('program_settings').update(payload).eq('id', existing.id);
+      if (error) return { status: 'error', message: error.message };
+    } else {
+      const { error } = await supabase.from('program_settings').insert(payload);
+      if (error) return { status: 'error', message: error.message };
+    }
+    return { status: 'success', message: 'Tetapan program disimpan.' };
+  } catch (err: any) {
+    return { status: 'error', message: err.message || 'Gagal simpan tetapan program.' };
   }
 };
 

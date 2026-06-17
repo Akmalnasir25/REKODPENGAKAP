@@ -1,9 +1,9 @@
 
 
-import React, { useState } from 'react';
-import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval } from '../services/supabaseApi';
+import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting } from '../services/supabaseApi';
 import { Badge } from '../types';
 
 interface AdminBadgesProps {
@@ -28,6 +28,75 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [editBadgeValue, setEditBadgeValue] = useState('');
   const [savingBadgeName, setSavingBadgeName] = useState<string | null>(null);
   const [updatingDaerahApproval, setUpdatingDaerahApproval] = useState<string | null>(null);
+
+  // Tetapan Yuran & Saiz Baju per program
+  const currentYear = new Date().getFullYear();
+  const [allSettings, setAllSettings] = useState<ProgramSetting[]>([]);
+  const [settingsModalBadge, setSettingsModalBadge] = useState<Badge | null>(null);
+  const [settingsYear, setSettingsYear] = useState(currentYear);
+  const [formPaymentEnabled, setFormPaymentEnabled] = useState(false);
+  const [formFeePeserta, setFormFeePeserta] = useState('');
+  const [formFeePemimpin, setFormFeePemimpin] = useState('');
+  const [formFeePenolong, setFormFeePenolong] = useState('');
+  const [formShirtEnabled, setFormShirtEnabled] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const loadSettings = async () => {
+    const data = await getProgramSettings();
+    setAllSettings(data);
+  };
+  useEffect(() => { loadSettings(); }, []);
+
+  const scopeOf = (b: Badge) => b.scope || scopeContext?.type || 'daerah';
+  const negeriOf = (b: Badge) => b.negeriCode || scopeContext?.negeriCode;
+  const daerahOf = (b: Badge) => b.daerahCode || scopeContext?.daerahCode;
+
+  const findSetting = (b: Badge, year: number): ProgramSetting | undefined =>
+    allSettings.find(s =>
+      s.badgeName === b.name && s.year === year &&
+      ((s.scope === 'negeri' && s.negeriCode === negeriOf(b)) ||
+       (s.scope === 'daerah' && s.daerahCode === daerahOf(b))));
+
+  const openSettingsModal = (b: Badge, year: number) => {
+    const s = findSetting(b, year);
+    setSettingsModalBadge(b);
+    setSettingsYear(year);
+    setFormPaymentEnabled(s?.paymentEnabled || false);
+    setFormFeePeserta(s?.feePeserta != null ? String(s.feePeserta) : '');
+    setFormFeePemimpin(s?.feePemimpin != null ? String(s.feePemimpin) : '');
+    setFormFeePenolong(s?.feePenolong != null ? String(s.feePenolong) : '');
+    setFormShirtEnabled(s?.shirtEnabled || false);
+  };
+
+  const handleSaveSettings = async () => {
+    if (!settingsModalBadge) return;
+    const b = settingsModalBadge;
+    setSavingSettings(true);
+    try {
+      const res = await upsertProgramSetting({
+        badgeName: b.name,
+        year: settingsYear,
+        scope: scopeOf(b),
+        negeriCode: negeriOf(b),
+        daerahCode: daerahOf(b),
+        paymentEnabled: formPaymentEnabled,
+        feePeserta: formFeePeserta.trim() ? Number(formFeePeserta) : null,
+        feePemimpin: formFeePemimpin.trim() ? Number(formFeePemimpin) : null,
+        feePenolong: formFeePenolong.trim() ? Number(formFeePenolong) : null,
+        shirtEnabled: formShirtEnabled,
+      });
+      if (res.status === 'success') {
+        await loadSettings();
+        setSettingsModalBadge(null);
+      } else {
+        alert('Gagal: ' + res.message);
+      }
+    } catch (e) {
+      alert('Ralat sambungan server.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleToggleDaerahApproval = async (badge: Badge) => {
     setUpdatingDaerahApproval(badge.name);
@@ -285,7 +354,22 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button 
+                    {(() => {
+                        const s = findSetting(b, currentYear);
+                        const active = s && (s.paymentEnabled || s.shirtEnabled);
+                        return (
+                            <button
+                                onClick={() => openSettingsModal(b, currentYear)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold border transition ${active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
+                                title="Tetapan yuran & saiz baju"
+                            >
+                                <Wallet size={12} /> Yuran & Baju
+                                {s?.paymentEnabled && <span className="bg-emerald-200 text-emerald-800 px-1 rounded">RM</span>}
+                                {s?.shirtEnabled && <Shirt size={11} />}
+                            </button>
+                        );
+                    })()}
+                    <button
                         onClick={() => handleToggle(b)}
                         disabled={togglingBadge === b.name}
                         className={`p-1 rounded hover:bg-gray-200 transition ${b.isOpen ? 'text-green-600' : 'text-gray-400'}`}
@@ -307,6 +391,81 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         ))}
         {safeBadges.length === 0 && <p className="text-center text-gray-400 p-4">Tiada program dalam database.</p>}
       </div>
+
+      {/* Modal Tetapan Yuran & Saiz Baju */}
+      {settingsModalBadge && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSettingsModalBadge(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="bg-emerald-600 px-5 py-4 flex justify-between items-center">
+              <h3 className="font-bold text-white flex items-center gap-2"><Wallet size={16} /> Yuran &amp; Saiz Baju</h3>
+              <button onClick={() => setSettingsModalBadge(null)} className="text-white/70 hover:text-white"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <p className="text-sm font-bold text-emerald-800">{settingsModalBadge.name}</p>
+                <p className="text-xs text-emerald-600 mt-0.5">
+                  Skop: {scopeOf(settingsModalBadge) === 'negeri' ? 'Negeri' : 'Daerah'} {negeriOf(settingsModalBadge) || daerahOf(settingsModalBadge) || ''}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
+                <select
+                  value={settingsYear}
+                  onChange={(e) => openSettingsModal(settingsModalBadge, Number(e.target.value))}
+                  className="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none"
+                >
+                  {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              {/* BAYARAN */}
+              <div className="border rounded-lg p-3">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="font-bold text-gray-700 flex items-center gap-2"><Wallet size={16} className="text-emerald-600" /> Kenakan Bayaran</span>
+                  <input type="checkbox" checked={formPaymentEnabled} onChange={(e) => setFormPaymentEnabled(e.target.checked)} className="w-5 h-5 accent-emerald-600" />
+                </label>
+                {formPaymentEnabled && (
+                  <div className="mt-3 space-y-2">
+                    {[
+                      { label: 'Yuran Peserta (RM)', val: formFeePeserta, set: setFormFeePeserta, ph: 'Cth: 65' },
+                      { label: 'Yuran Pemimpin (RM) — kosong = tak caj', val: formFeePemimpin, set: setFormFeePemimpin, ph: 'Kosongkan jika percuma' },
+                      { label: 'Yuran Penolong Pemimpin (RM) — kosong = tak caj', val: formFeePenolong, set: setFormFeePenolong, ph: 'Kosongkan jika percuma' },
+                    ].map(f => (
+                      <div key={f.label}>
+                        <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">{f.label}</label>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={f.val}
+                          onChange={(e) => f.set(e.target.value)}
+                          placeholder={f.ph}
+                          className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SAIZ BAJU */}
+              <div className="border rounded-lg p-3">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="font-bold text-gray-700 flex items-center gap-2"><Shirt size={16} className="text-indigo-600" /> Perlukan Saiz Baju</span>
+                  <input type="checkbox" checked={formShirtEnabled} onChange={(e) => setFormShirtEnabled(e.target.checked)} className="w-5 h-5 accent-indigo-600" />
+                </label>
+                <p className="text-[11px] text-gray-400 mt-1">Jika aktif, medan saiz baju (XS–4XL) muncul dalam borang pendaftaran untuk peserta, pemimpin & penolong pemimpin.</p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setSettingsModalBadge(null)} className="flex-1 py-2.5 border border-gray-200 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">Batal</button>
+                <button onClick={handleSaveSettings} disabled={savingSettings} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition disabled:opacity-50 flex items-center justify-center gap-2">
+                  {savingSettings ? <LoadingSpinner size="sm" color="border-white" /> : <Check size={16} />} Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
-import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown, MapPin } from 'lucide-react';
+import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown, MapPin, Wallet } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 
@@ -18,6 +18,7 @@ import { ExportButton } from './ui/ExportButton';
 import { SortableTable } from './ui/SortableTable';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { UserProfilePage } from './UserProfilePage';
+import { ProgramSummaryView } from './ProgramSummaryView';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
@@ -64,6 +65,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [showLeaderRequestsView, setShowLeaderRequestsView] = useState(false);
   const [showDataAccessView, setShowDataAccessView] = useState(false);
   const [showFloatedView, setShowFloatedView] = useState(false);
+  const [showPaymentView, setShowPaymentView] = useState(false);
   const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [pendingLeaderCount, setPendingLeaderCount] = useState(0);
 
@@ -407,11 +409,34 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // --- HISTORY DATA LOGIC (PESERTA ONLY) ---
   const myHistoryData = useMemo(() => {
       const schoolData = allData.filter(d => (d.schoolCode === user.schoolCode) || (d.school === user.schoolName));
+      const isPesertaRole = (item: SubmissionData) => {
+          const role = (item.role || '').toUpperCase();
+          return role === 'PESERTA' || role === 'PENERIMA RAMBU';
+      };
+
+      // PRA-PROSES: padankan IC kanonik mengikut NAMA.
+      // Banyak rekod tahun lama diimport TANPA IC, manakala tahun terkini ADA IC.
+      // Tanpa ini, murid sama berpecah jadi dua baris (kunci 'NAMA' vs 'IC_NAMA'),
+      // menyebabkan No Keahlian tahun lama (cth 2025) langsung tak dipaparkan.
+      // Jika satu nama hanya ada SATU IC merentas semua rekod, gabungkan semuanya.
+      const nameToIcs = new Map<string, Set<string>>();
+      schoolData.forEach(item => {
+          if (!isPesertaRole(item)) return;
+          const nm = item.student ? String(item.student).trim().toUpperCase() : '';
+          if (!nm) return;
+          const ic = item.icNumber ? String(item.icNumber).trim() : '';
+          if (!nameToIcs.has(nm)) nameToIcs.set(nm, new Set());
+          if (ic.length > 5) nameToIcs.get(nm)!.add(ic);
+      });
+      const canonicalIcForName = (nm: string): string => {
+          const ics = nameToIcs.get(nm);
+          return ics && ics.size === 1 ? Array.from(ics)[0] : '';
+      };
+
       const studentMap = new Map<string, { name: string, ic: string, history: Record<number, { id: string, badge: string }> }>();
       schoolData.forEach(item => {
           // ONLY include PESERTA and PENERIMA RAMBU (exclude PENGUJI, PENOLONG PEMIMPIN, PEMIMPIN, etc.)
-          const role = (item.role || '').toUpperCase();
-          if (role !== 'PESERTA' && role !== 'PENERIMA RAMBU') return;
+          if (!isPesertaRole(item)) return;
 
           // NOTA: Jangan tapis ikut program di sini. Simpan REKOD PENUH murid
           // (semua program/tahun) supaya paparan boleh tunjuk progresi merentas
@@ -419,19 +444,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           // dilakukan di peringkat pemilihan murid (cohortStudents).
 
           // SAFE STRING CONVERSION
-          const icStr = item.icNumber ? String(item.icNumber) : '';
+          const icStr = item.icNumber ? String(item.icNumber).trim() : '';
           const studentName = item.student ? String(item.student) : '';
-          
+
           if (!studentName.trim()) return;
 
-          const key = icStr.length > 5 ? `${icStr.trim()}_${studentName.trim().toUpperCase()}` : `${studentName.trim().toUpperCase()}`;
-          if (!studentMap.has(key)) studentMap.set(key, { name: studentName.toUpperCase(), ic: icStr || '-', history: {} });
+          const nm = studentName.trim().toUpperCase();
+          // Kunci: guna IC kanonik nama jika ada (gabungkan rekod tanpa IC dgn rekod ber-IC),
+          // jika nama ada lebih dari satu IC (kemungkinan nama serupa) guna IC rekod itu sendiri,
+          // jika langsung tiada IC guna nama sahaja.
+          const canonIc = canonicalIcForName(nm);
+          const keyIc = canonIc || (icStr.length > 5 ? icStr : '');
+          const key = keyIc ? `${keyIc}_${nm}` : nm;
+
+          if (!studentMap.has(key)) studentMap.set(key, { name: nm, ic: keyIc || '-', history: {} });
           const entry = studentMap.get(key)!;
+          if ((entry.ic === '-' || !entry.ic) && keyIc) entry.ic = keyIc;
           const y = new Date(item.date).getFullYear();
-          // Store all
+          // Store all (jika ada lebih satu program pada tahun sama, rekod terkemudian menang)
           entry.history[y] = { id: item.id || '-', badge: item.badge };
       });
-      
+
       // Return ALL prepared data sorted
       return Array.from(studentMap.values()).sort((a,b) => a.name.localeCompare(b.name));
   }, [allData, user]);
@@ -540,10 +573,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const handleBulkDelete = async () => {
     if (selectedForDelete.size === 0) return;
-    if (!confirm(`Padam ${selectedForDelete.size} rekod yang dipilih?`)) return;
+    const selItems = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean);
+    const yrOf = (d: any) => { try { return new Date(d.date).getFullYear(); } catch { return '?'; } };
+    const programs = [...new Set(selItems.map(d => `${d.badge} ${yrOf(d)}`))];
+    const schoolsAff = [...new Set(selItems.map(d => d.school).filter(Boolean))];
+    const preview = selItems.slice(0, 8).map(d => `• ${d.student}`).join('\n');
+    const more = selItems.length > 8 ? `\n…dan ${selItems.length - 8} lagi` : '';
+    if (!confirm(
+      `⚠️ ANDA PASTI MAHU PADAM ${selItems.length} REKOD PESERTA?\n\n` +
+      `Program: ${programs.join(', ')}\n` +
+      `Sekolah: ${schoolsAff.join(', ')}\n\n` +
+      `${preview}${more}\n\n` +
+      `Rekod ini akan dikeluarkan dari senarai pendaftaran.`
+    )) return;
+    // Pengesahan kedua untuk padaman banyak (elak tersilap padam pukal).
+    if (selItems.length >= 5) {
+      if (!confirm(`SEKALI LAGI: Sahkan padam ${selItems.length} rekod untuk ${programs.join(', ')}?\n\nTindakan ini tidak boleh diundur dengan mudah.`)) return;
+    }
     setIsDeletingBulk(true);
     try {
-      const items = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean).map(d => ({ participantId: d.participantId, icNumber: d.icNumber, id: d.id, student: d.student, badge: d.badge, schoolCode: d.schoolCode, school: d.school, date: d.date }));
+      const items = selItems.map(d => ({ participantId: d.participantId, icNumber: d.icNumber, id: d.id, student: d.student, badge: d.badge, schoolCode: d.schoolCode, school: d.school, date: d.date }));
       const res = await bulkDeleteSubmissions(items);
       if (res.status === 'success') {
         alert(res.message || 'Rekod berjaya dipadam.');
@@ -787,9 +836,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div className="p-4 space-y-1 overflow-y-auto flex-1">
               <SidebarItem 
                 icon={Home} 
-                label="Utama" 
-                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView && !showDataAccessView && !showFloatedView} 
-                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setShowDataAccessView(false); setShowFloatedView(false); setIsMobileSidebarOpen(false); }} 
+                label="Utama"
+                isActive={!showHistoryView && !showArchiveView && !showWithdrawalsView && !showDataAccessView && !showFloatedView && !showPaymentView}
+                onClick={() => { setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setShowDataAccessView(false); setShowFloatedView(false); setShowPaymentView(false); setIsMobileSidebarOpen(false); }}
+              />
+
+              <SidebarItem
+                icon={Wallet}
+                label="Rumusan Bayaran"
+                isActive={showPaymentView}
+                onClick={() => { setShowPaymentView(true); setShowHistoryView(false); setShowArchiveView(false); setShowWithdrawalsView(false); setShowDataAccessView(false); setShowFloatedView(false); setShowLeaderRequestsView(false); setIsMobileSidebarOpen(false); }}
               />
 
               <SidebarItem 
@@ -1306,6 +1362,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         ))}
                     </div>
                 </div>
+            ) : showPaymentView ? (
+                // --- RUMUSAN BAYARAN & SAIZ BAJU ---
+                <ProgramSummaryView records={myData} year={selectedYear} mode="school" />
             ) : (
                 // --- DASHBOARD HOME VIEW ---
                 <>

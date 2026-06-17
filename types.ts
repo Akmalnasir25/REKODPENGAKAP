@@ -13,6 +13,7 @@ export interface Participant {
   makanan?: 'Biasa' | 'Vegetarian';
   masalahKesihatan?: 'Alahan' | 'Asma' | 'Gastrik' | 'Penyakit Jantung' | 'Migrain' | 'Penyakit Kronik' | 'Lain-lain' | 'Tiada';
   masalahKesihatanLain?: string;
+  shirtSize?: string;
   remarks: string;
 }
 
@@ -49,6 +50,7 @@ export interface SubmissionData {
   principalPhone?: string;
   leader?: string;
   category?: string;
+  shirtSize?: string;
   unit?: string;
   makanan?: string;
   masalahKesihatan?: string;

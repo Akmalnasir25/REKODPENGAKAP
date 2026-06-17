@@ -77,7 +77,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     const interval = setInterval(refresh, 30000);
     return () => clearInterval(interval);
   }, [user.schoolId, showLeaderRequestsView]);
-  const [historyBadgeFilter, setHistoryBadgeFilter] = useState(''); // Filter for history view
+  const [historyBadgeFilter, setHistoryBadgeFilter] = useState(''); // Filter program untuk Semak Rekod
+  const [historySesiFilter, setHistorySesiFilter] = useState(''); // Filter sesi (tahun mula) untuk Semak Rekod
   
   // Modals
   const [showRambuModal, setShowRambuModal] = useState(false);
@@ -432,6 +433,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       // Return ALL prepared data sorted
       return Array.from(studentMap.values()).sort((a,b) => a.name.localeCompare(b.name));
   }, [allData, user, historyBadgeFilter]);
+
+  // Senarai SESI (tahun mula) yang ada rekod untuk program yang dipilih.
+  // Bergantung pada myHistoryData yang sudah ditapis ikut program (historyBadgeFilter).
+  const availableSessions = useMemo(() => {
+      const set = new Set<number>();
+      myHistoryData.forEach(row => {
+          const years = Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y));
+          if (years.length > 0) set.add(Math.min(...years));
+      });
+      return Array.from(set).sort((a, b) => b - a);
+  }, [myHistoryData]);
 
   // Determine if specific record modification is allowed based on granular permissions
   const approvedBadges = currentSchoolSettings?.approvedBadges || [];
@@ -1100,23 +1112,50 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             <History size={20} className="text-blue-900"/> Semakan Keahlian Mengikut Sesi
                         </h2>
                         
-                        {/* Badge Filter */}
-                        <div className="flex items-center gap-2">
+                        {/* Filter Program & Sesi (kedua-duanya wajib dipilih) */}
+                        <div className="flex flex-wrap items-center gap-2">
                             <Filter size={16} className="text-gray-500"/>
+                            {/* PROGRAM */}
                             <select
                                 value={historyBadgeFilter}
-                                onChange={(e) => setHistoryBadgeFilter(e.target.value)}
+                                onChange={(e) => { setHistoryBadgeFilter(e.target.value); setHistorySesiFilter(''); }}
                                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                             >
-                                <option value="">Semua Program</option>
+                                <option value="">-- Pilih Program --</option>
                                 {badges.map(b => (
                                     <option key={b.name} value={b.name}>{b.name}</option>
+                                ))}
+                            </select>
+                            {/* SESI (tahun mula) */}
+                            <select
+                                value={historySesiFilter}
+                                onChange={(e) => setHistorySesiFilter(e.target.value)}
+                                disabled={!historyBadgeFilter}
+                                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                            >
+                                <option value="">-- Pilih Sesi --</option>
+                                {availableSessions.map(y => (
+                                    <option key={y} value={y}>Sesi {y}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
                     
-                    {availableYears.map(startYear => {
+                    {!historyBadgeFilter ? (
+                        <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                            <Filter size={28} className="mx-auto mb-3 opacity-40" />
+                            <p className="italic">Sila pilih <b>Program</b> dan <b>Sesi</b> untuk memaparkan rekod.</p>
+                        </div>
+                    ) : availableSessions.length === 0 ? (
+                        <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                            <p className="italic">Tiada rekod dijumpai untuk program ini.</p>
+                        </div>
+                    ) : !historySesiFilter ? (
+                        <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                            <Filter size={28} className="mx-auto mb-3 opacity-40" />
+                            <p className="italic">Sila pilih <b>Sesi</b> untuk memaparkan rekod.</p>
+                        </div>
+                    ) : [Number(historySesiFilter)].map(startYear => {
                         // Kumpulkan pelajar dalam kohort mengikut TAHUN PERTAMA rekod mereka (Tahun 1).
                         // Logik ini GENERIK untuk semua program (Keris atau mana-mana program lain)
                         // kerana ia berdasarkan tahun rekod, bukan nama badge.
@@ -1193,7 +1232,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             </div>
                         );
                     })}
-                    {myHistoryData.length === 0 && <p className="text-center py-12 text-gray-400 italic">Tiada rekod keahlian dijumpai.</p>}
                 </div>
             ) : showArchiveView ? (
                 // --- ARCHIVE VIEW ---

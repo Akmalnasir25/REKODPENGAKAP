@@ -434,13 +434,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       return Array.from(studentMap.values()).sort((a,b) => a.name.localeCompare(b.name));
   }, [allData, user, historyBadgeFilter]);
 
-  // Senarai SESI (tahun mula) yang ada rekod untuk program yang dipilih.
-  // Bergantung pada myHistoryData yang sudah ditapis ikut program (historyBadgeFilter).
+  // Senarai SESI (tahun) yang ada rekod untuk program yang dipilih.
+  // Sesi = tahun tumpuan (cth: 2026). Bergantung pada myHistoryData yang
+  // sudah ditapis ikut program (historyBadgeFilter).
   const availableSessions = useMemo(() => {
       const set = new Set<number>();
       myHistoryData.forEach(row => {
-          const years = Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y));
-          if (years.length > 0) set.add(Math.min(...years));
+          Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y)).forEach(y => set.add(y));
       });
       return Array.from(set).sort((a, b) => b - a);
   }, [myHistoryData]);
@@ -1155,39 +1155,40 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             <Filter size={28} className="mx-auto mb-3 opacity-40" />
                             <p className="italic">Sila pilih <b>Sesi</b> untuk memaparkan rekod.</p>
                         </div>
-                    ) : [Number(historySesiFilter)].map(startYear => {
-                        // Kumpulkan pelajar dalam kohort mengikut TAHUN PERTAMA rekod mereka (Tahun 1).
-                        // Logik ini GENERIK untuk semua program (Keris atau mana-mana program lain)
-                        // kerana ia berdasarkan tahun rekod, bukan nama badge.
-                        // Contoh: pelajar dengan rekod 2025 & 2026 hanya muncul dalam blok 2025
-                        // (paparan 2025 -> 2026), BUKAN juga sebagai blok baharu 2026.
-                        // Pelajar yang baru bermula 2026 (tiada rekod 2025) muncul dalam blok 2026.
-                        const cohortStudents = myHistoryData.filter(row => {
-                            const years = Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y));
-                            if (years.length === 0) return false;
-                            return Math.min(...years) === startYear;
-                        });
+                    ) : [Number(historySesiFilter)].map(sesiYear => {
+                        // SESI = tahun tumpuan yang dipilih (cth: 2026).
+                        // Paparkan peserta program yang ADA REKOD pada tahun sesi ini.
+                        // Logik ini GENERIK untuk semua program (berdasarkan tahun rekod,
+                        // bukan nama badge).
+                        const cohortStudents = myHistoryData.filter(row => Boolean(row.history[sesiYear]));
 
-                        if (cohortStudents.length === 0) return null;
+                        if (cohortStudents.length === 0) return (
+                            <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+                                <p className="italic">Tiada rekod untuk sesi {sesiYear}.</p>
+                            </div>
+                        );
 
-                        // Julat tahun DINAMIK: dari tahun pertama hingga tahun terakhir yang ada
-                        // rekod dalam kohort ini. Program berbeza ada tempoh berbeza (1, 2, 3
-                        // tahun atau lebih) — jadi bilangan lajur tidak dikunci pada 3 tahun.
-                        let maxYear = startYear;
+                        // Julat tahun DINAMIK: tunjuk SEMUA tahun berkaitan murid yang dipaparkan
+                        // (rekod terawal hingga terkini), bukan hanya bermula dari tahun sesi.
+                        // Contoh: sesi 2026, jika ada rekod 2025/2026/2027 — semua dipaparkan.
+                        let minYear = sesiYear;
+                        let maxYear = sesiYear;
                         cohortStudents.forEach(row => {
                             Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y)).forEach(y => {
+                                if (y < minYear) minYear = y;
                                 if (y > maxYear) maxYear = y;
                             });
                         });
                         const yearColumns: number[] = [];
-                        for (let y = startYear; y <= maxYear; y++) yearColumns.push(y);
+                        for (let y = minYear; y <= maxYear; y++) yearColumns.push(y);
 
                         return (
-                            <div key={startYear} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div key={sesiYear} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                                 <div className="bg-blue-900 px-4 py-3 flex justify-between items-center text-white">
                                     <h3 className="font-bold text-sm uppercase flex items-center gap-2 tracking-wider">
                                         <History size={16} className="text-amber-400"/>
-                                        {yearColumns.length > 1 ? `Sesi ${startYear} - ${maxYear}` : `Sesi ${startYear}`}
+                                        Sesi {sesiYear}
+                                        {yearColumns.length > 1 && <span className="text-amber-300 normal-case font-normal">(rekod {minYear} - {maxYear})</span>}
                                     </h3>
                                     <span className="text-xs bg-white/10 px-2 py-0.5 rounded font-mono border border-white/20">
                                         {cohortStudents.length} Pelajar
@@ -1200,8 +1201,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                             <tr>
                                                 <th className="px-4 py-3 border-b border-slate-200">Maklumat Peserta</th>
                                                 {yearColumns.map((y, idx) => (
-                                                    <th key={y} className={`px-4 py-3 w-40 text-center border-b border-slate-200 ${idx < yearColumns.length - 1 ? 'border-r' : ''}`}>
-                                                        {y} (Tahun {idx + 1})
+                                                    <th key={y} className={`px-4 py-3 w-40 text-center border-b border-slate-200 ${idx < yearColumns.length - 1 ? 'border-r' : ''} ${y === sesiYear ? 'bg-amber-100 text-amber-900' : ''}`}>
+                                                        {y}{y === sesiYear && <span className="block text-[9px] font-bold tracking-wide">• SESI DIPILIH</span>}
                                                     </th>
                                                 ))}
                                             </tr>
@@ -1217,7 +1218,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                                     </td>
 
                                                     {yearColumns.map((y, idx) => (
-                                                        <td key={y} className={`px-2 py-2 align-top relative ${idx < yearColumns.length - 1 ? 'border-r border-gray-100' : ''}`}>
+                                                        <td key={y} className={`px-2 py-2 align-top relative ${idx < yearColumns.length - 1 ? 'border-r border-gray-100' : ''} ${y === sesiYear ? 'bg-amber-50/60' : ''}`}>
                                                             <HistoryCard data={row.history[y]} year={y} />
                                                             {idx < yearColumns.length - 1 && (
                                                                 <div className="absolute top-1/2 -right-3 -mt-2 z-10 text-slate-300"><ArrowRight size={16} strokeWidth={3} /></div>

@@ -31,22 +31,6 @@
           "destination": "/index.html"
         }
       ]
-    },
-    {
-      "target": "ppmdaftar",
-      "public": "redirect",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "redirects": [
-        {
-          "source": "**",
-          "destination": "https://scoutnadi.web.app/:1",
-          "type": 301
-        }
-      ]
     }
   ]
 }

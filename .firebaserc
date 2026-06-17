@@ -5,9 +5,6 @@
   "targets": {
     "pendaftaranppmkiu": {
       "hosting": {
-        "ppmdaftar": [
-          "ppmdaftar"
-        ],
         "rekodpengakap": [
           "rekodpengakap"
         ],

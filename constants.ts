@@ -1,7 +1,9 @@
 
 
 
-export const DEFAULT_SERVER_URL = "https://script.google.com/macros/s/AKfycbzAAmcB5O3e1q6wn8Whx4PilN9WUSfrgwgc7X57zSmum-OtUW54_K6AZ0UtCVIMFPbJ/exec";
+// Legacy Apps Script endpoint sudah ditamatkan — data kini melalui Supabase.
+// Dikekalkan sebagai string kosong kerana sesetengah prop lama masih merujuknya.
+export const DEFAULT_SERVER_URL = "";
 export const APP_VERSION = "";
 
 export const LOCAL_STORAGE_KEYS = {

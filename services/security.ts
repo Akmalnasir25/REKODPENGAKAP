@@ -133,20 +133,6 @@ export const validateCSRFToken = (token: string): boolean => {
   }
 };
 
-// Fetch server-issued CSRF token from Apps Script endpoint
-export const fetchServerCsrf = async (scriptUrl: string): Promise<string | null> => {
-  if (!scriptUrl) return null;
-  try {
-    const resp = await fetch(`${scriptUrl}?action=get_csrf&t=${Date.now()}`, { method: 'GET', mode: 'cors', credentials: 'omit' });
-    const j = await resp.json();
-    if (j && j.status === 'success' && j.csrfToken) return j.csrfToken;
-    return null;
-  } catch (e) {
-    console.warn('fetchServerCsrf failed', e);
-    return null;
-  }
-};
-
 // Session Management with Timeout
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 const SESSION_ACTIVITY_KEY = 'SESSION_LAST_ACTIVITY';

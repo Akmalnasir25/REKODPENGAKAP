@@ -8,7 +8,7 @@ import { loginUser as loginUserSupabase, registerSchoolUser, resetPassword as re
 import { registerLeader, loginLeader, resetLeaderPasswordByIC, saveLeaderSession } from '../services/leaderAuthService';
 import { UserSession, School, Negeri, Daerah } from '../types';
 import { APP_VERSION, LOGO_URL } from '../constants';
-import { checkLoginAttempts, recordLoginAttempt, fetchServerCsrf } from '../services/security';
+import { checkLoginAttempts, recordLoginAttempt } from '../services/security';
 import { PrivacyNotice } from './ui/PrivacyNotice';
 
 interface AuthScreenProps {

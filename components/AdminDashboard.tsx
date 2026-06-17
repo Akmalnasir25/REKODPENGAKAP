@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { SubmissionData, School, Badge, UserProfile } from '../types';
-import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin, X } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { BulkWhatsApp } from './ui/BulkWhatsApp';
@@ -73,10 +73,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
   // Filter by year using the SUBMITTED data (exclude withdrawn participants)
   const yearData = useMemo(() => {
+      const schoolQuery = selectedSchoolFilter.trim().toLowerCase();
       return submittedData.filter(d =>
           safeGetYear(d.date) === selectedYear
           && !(d as any).isWithdrawn
-          && (!selectedSchoolFilter || d.school === selectedSchoolFilter)
+          && (!schoolQuery || String(d.school || '').toLowerCase().includes(schoolQuery))
       );
   }, [submittedData, selectedYear, selectedSchoolFilter]);
 
@@ -557,16 +558,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
                         Sekolah:
                     </label>
-                    <select
-                        className="p-2 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full md:w-auto"
-                        value={selectedSchoolFilter}
-                        onChange={(e) => setSelectedSchoolFilter(e.target.value)}
-                    >
-                        <option value="">Semua Sekolah</option>
-                        {schoolFilterOptions.map((name, i) => (
-                            <option key={i} value={name}>{name}</option>
-                        ))}
-                    </select>
+                    <div className="relative w-full md:w-64">
+                        <input
+                            type="text"
+                            list="schoolFilterList"
+                            value={selectedSchoolFilter}
+                            onChange={(e) => setSelectedSchoolFilter(e.target.value)}
+                            placeholder="Taip atau pilih sekolah..."
+                            className="p-2 pr-7 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full"
+                        />
+                        {selectedSchoolFilter && (
+                            <button
+                                type="button"
+                                onClick={() => setSelectedSchoolFilter('')}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-0.5"
+                                title="Kosongkan"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                        <datalist id="schoolFilterList">
+                            {schoolFilterOptions.map((name, i) => (
+                                <option key={i} value={name} />
+                            ))}
+                        </datalist>
+                    </div>
                 </div>
 
                 <div className="flex flex-col items-end gap-1">

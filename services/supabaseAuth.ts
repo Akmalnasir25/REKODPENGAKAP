@@ -281,8 +281,10 @@ export const changePassword = async (newPassword: string): Promise<AuthResult> =
 
 export const resetPassword = async (email: string): Promise<AuthResult> => {
   try {
+    // Hantar pengguna balik ke root app. Supabase akan tambah token recovery
+    // dalam URL fragment (#access_token=...&type=recovery) yang dikesan di App.tsx.
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/#/reset-password`,
+      redirectTo: `${window.location.origin}/`,
     });
 
     if (error) {

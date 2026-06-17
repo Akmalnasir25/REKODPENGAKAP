@@ -6,6 +6,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { AdminNegeriPanel } from './components/AdminNegeriPanel';
 import { AdminDaerahPanel } from './components/AdminDaerahPanel';
 import { AuthScreen } from './components/AuthScreen';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { UserDashboard } from './components/UserDashboard';
 import { MaintenancePage } from './components/MaintenancePage';
 import { DeveloperPanel } from './components/DeveloperPanel';
@@ -107,11 +108,12 @@ function AppContent() {
 
   useEffect(() => {
     const hasAccepted = localStorage.getItem('PDPA_CONSENT_ACCEPTED');
-    if (!hasAccepted) {
+    const isLoggedIn = userSession || adminSession || leaderSession || isDeveloperMode;
+    if (!hasAccepted && isLoggedIn) {
       const timer = setTimeout(() => setShowPrivacyConsent(true), 1500);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [userSession, adminSession, leaderSession, isDeveloperMode]);
 
   // Access Control State
   const [accessState, setAccessState] = useState({
@@ -123,6 +125,10 @@ function AppContent() {
 
   // View State
   const [view, setView] = useState<'auth' | 'user_dashboard' | 'user_form' | 'admin' | 'developer' | 'developer_admin' | 'developer_hierarchy' | 'leader_auth' | 'leader_dashboard'>('auth');
+
+  // Password recovery (pautan reset dari email) State
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [recoveryLinkError, setRecoveryLinkError] = useState<string | null>(null);
 
   // URL Router Sync - push view changes to URL hash
   const navigateTo = (newView: typeof view) => {
@@ -208,7 +214,44 @@ function AppContent() {
   useEffect(() => {
     const initialize = async () => {
         let activeUrl = DEFAULT_SERVER_URL;
-        
+
+        // 0. Check Password Recovery Link (dari email reset password)
+        // Supabase implicit flow letak token dalam URL fragment: #access_token=...&type=recovery
+        // atau #error=...&error_code=otp_expired bila pautan tamat tempoh.
+        {
+          const rawHash = window.location.hash.replace(/^#/, '');
+          const hashParams = new URLSearchParams(rawHash);
+          const recoveryType = hashParams.get('type');
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          const hashError = hashParams.get('error') || hashParams.get('error_code');
+
+          if (recoveryType === 'recovery' || hashError) {
+            // Bersihkan token dari URL supaya tidak terdedah / tidak ganggu router
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+            const { supabase } = await import('./services/supabaseClient');
+            // Pastikan tiada sesi lama mengganggu skrin reset
+            try { await supabase.auth.signOut(); } catch (_) {}
+
+            if (recoveryType === 'recovery' && accessToken) {
+              const { error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+              });
+              if (error) {
+                setRecoveryLinkError('Pautan reset tidak sah atau telah tamat tempoh. Sila minta pautan baharu.');
+              }
+            } else {
+              setRecoveryLinkError('Pautan reset telah tamat tempoh atau tidak sah. Sila minta pautan baharu.');
+            }
+
+            setRecoveryMode(true);
+            setIsInitializing(false);
+            return;
+          }
+        }
+
         // 1. Check URL Config
         const urlParams = new URLSearchParams(window.location.search);
         const urlScriptParam = urlParams.get('scriptUrl');
@@ -649,6 +692,25 @@ function AppContent() {
                   </div>
                   <p className="text-white mt-4 font-mono text-sm animate-pulse tracking-widest uppercase">Memuatkan Sistem...</p>
               </div>
+          );
+      }
+
+      // Skrin reset kata laluan (selepas klik pautan dari email)
+      if (recoveryMode) {
+          return (
+              <ResetPasswordScreen
+                  linkError={recoveryLinkError}
+                  onDone={async () => {
+                      try {
+                          const { supabase } = await import('./services/supabaseClient');
+                          await supabase.auth.signOut();
+                      } catch (_) {}
+                      setRecoveryMode(false);
+                      setRecoveryLinkError(null);
+                      replaceViewInHash('auth');
+                      setView('auth');
+                  }}
+              />
           );
       }
 

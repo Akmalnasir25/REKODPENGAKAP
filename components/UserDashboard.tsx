@@ -412,10 +412,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           // ONLY include PESERTA and PENERIMA RAMBU (exclude PENGUJI, PENOLONG PEMIMPIN, PEMIMPIN, etc.)
           const role = (item.role || '').toUpperCase();
           if (role !== 'PESERTA' && role !== 'PENERIMA RAMBU') return;
-          
-          // Filter by badge if historyBadgeFilter is set
-          if (historyBadgeFilter && item.badge !== historyBadgeFilter) return;
-          
+
+          // NOTA: Jangan tapis ikut program di sini. Simpan REKOD PENUH murid
+          // (semua program/tahun) supaya paparan boleh tunjuk progresi merentas
+          // tahun (cth: Keris Perak 2025 -> Keris Emas 2026). Penapisan program
+          // dilakukan di peringkat pemilihan murid (cohortStudents).
+
           // SAFE STRING CONVERSION
           const icStr = item.icNumber ? String(item.icNumber) : '';
           const studentName = item.student ? String(item.student) : '';
@@ -432,18 +434,34 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       
       // Return ALL prepared data sorted
       return Array.from(studentMap.values()).sort((a,b) => a.name.localeCompare(b.name));
-  }, [allData, user, historyBadgeFilter]);
+  }, [allData, user]);
 
-  // Senarai SESI (tahun) yang ada rekod untuk program yang dipilih.
-  // Sesi = tahun tumpuan (cth: 2026). Bergantung pada myHistoryData yang
-  // sudah ditapis ikut program (historyBadgeFilter).
+  // Senarai PROGRAM yang benar-benar ada untuk sekolah ini (dari data sebenar).
+  // Nilai diambil terus dari rekod supaya padanan filter tepat.
+  const availableProgramsForSchool = useMemo(() => {
+      const set = new Set<string>();
+      myHistoryData.forEach(row => {
+          Object.values(row.history).forEach(rec => {
+              if (rec.badge && String(rec.badge).trim()) set.add(String(rec.badge).trim());
+          });
+      });
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [myHistoryData]);
+
+  // Senarai SESI (tahun) yang ada rekod bagi PROGRAM yang dipilih.
+  // Sesi = tahun tumpuan (cth: 2026). Hanya tahun di mana program dipilih
+  // benar-benar wujud yang disenaraikan.
   const availableSessions = useMemo(() => {
+      if (!historyBadgeFilter) return [];
       const set = new Set<number>();
       myHistoryData.forEach(row => {
-          Object.keys(row.history).map(Number).filter(y => !Number.isNaN(y)).forEach(y => set.add(y));
+          Object.entries(row.history).forEach(([yStr, rec]) => {
+              const y = Number(yStr);
+              if (!Number.isNaN(y) && rec.badge === historyBadgeFilter) set.add(y);
+          });
       });
       return Array.from(set).sort((a, b) => b - a);
-  }, [myHistoryData]);
+  }, [myHistoryData, historyBadgeFilter]);
 
   // Determine if specific record modification is allowed based on granular permissions
   const approvedBadges = currentSchoolSettings?.approvedBadges || [];
@@ -1122,8 +1140,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                             >
                                 <option value="">-- Pilih Program --</option>
-                                {badges.map(b => (
-                                    <option key={b.name} value={b.name}>{b.name}</option>
+                                {availableProgramsForSchool.map(name => (
+                                    <option key={name} value={name}>{name}</option>
                                 ))}
                             </select>
                             {/* SESI (tahun mula) */}
@@ -1157,10 +1175,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         </div>
                     ) : [Number(historySesiFilter)].map(sesiYear => {
                         // SESI = tahun tumpuan yang dipilih (cth: 2026).
-                        // Paparkan peserta program yang ADA REKOD pada tahun sesi ini.
-                        // Logik ini GENERIK untuk semua program (berdasarkan tahun rekod,
-                        // bukan nama badge).
-                        const cohortStudents = myHistoryData.filter(row => Boolean(row.history[sesiYear]));
+                        // Pilih murid yang menyertai PROGRAM dipilih pada tahun sesi ini.
+                        // (Rekod penuh murid disimpan, jadi tahun lain & program lain
+                        // tetap dipaparkan sebagai progresi.)
+                        const cohortStudents = myHistoryData.filter(row =>
+                            row.history[sesiYear] && row.history[sesiYear].badge === historyBadgeFilter
+                        );
 
                         if (cohortStudents.length === 0) return (
                             <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">

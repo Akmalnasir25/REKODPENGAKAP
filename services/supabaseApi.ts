@@ -40,6 +40,29 @@ const getSchoolByCodeOrName = async (schoolCode?: string, schoolName?: string) =
   return data;
 };
 
+// Hadkan operasi padam kpd submission untuk sekolah + program (badge) + tahun yg SAMA sahaja,
+// supaya rekod tidak terpadam merentas program/tahun lain. Pulangkan null jika skop tak dapat ditentukan.
+const getScopedSubmissionIds = async (
+  schoolCode?: string, schoolName?: string, badgeName?: string, year?: number
+): Promise<string[] | null> => {
+  try {
+    if (!badgeName || (!schoolCode && !schoolName)) return null;
+    const school = await getSchoolByCodeOrName(schoolCode, schoolName);
+    if (!school) return null;
+    const badge = await getBadgeByName(badgeName);
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('id')
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('submission_year', year || currentYear());
+    if (error) throw error;
+    return (data || []).map((s: any) => s.id);
+  } catch {
+    return null;
+  }
+};
+
 export const getNegeriId = async (code: string) => {
   const { data, error } = await supabase.from('negeri').select('id').eq('code', normalize(code)).maybeSingle();
   if (error) throw error;
@@ -288,22 +311,28 @@ const createSubmissionWithPeople = async (
     return cleaned;
   };
 
-  const rows = people.filter(p => p.name?.trim()).map(p => ({
-    submission_id: submission.id,
-    name: normalize(p.name),
-    gender: p.gender || null,
-    race: p.race || null,
-    membership_id: normalize(p.membershipId),
-    ic_number: formatIcNumber(p.icNumber),
-    phone_number: formatPhoneNumber(p.phoneNumber),
-    role: (p as any).role || 'PESERTA',
-    category: (p as any).kategori || null,
-    unit: (p as any).unit || null,
-    makanan: (p as any).makanan || null,
-    masalah_kesihatan: (p as any).masalahKesihatan || null,
-    masalah_kesihatan_lain: (p as any).masalahKesihatanLain || null,
-    remarks: p.remarks || null,
-  }));
+  const rows = people.filter(p => p.name?.trim()).map(p => {
+    const role = (p as any).role || 'PESERTA';
+    const isPeserta = role === 'PESERTA' || role === 'PENERIMA RAMBU';
+    // Jaring keselamatan peringkat akar: PESERTA mesti ada kategori & unit walau caller terlupa hantar.
+    // (Pemimpin/Penolong/Penguji: kategori & unit kekal null — bukan jenis pengakap.)
+    return {
+      submission_id: submission.id,
+      name: normalize(p.name),
+      gender: p.gender || null,
+      race: p.race || null,
+      membership_id: normalize(p.membershipId),
+      ic_number: formatIcNumber(p.icNumber),
+      phone_number: formatPhoneNumber(p.phoneNumber),
+      role,
+      category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
+      unit: (p as any).unit || (isPeserta ? 'Perdana' : null),
+      makanan: (p as any).makanan || (isPeserta ? 'Biasa' : null),
+      masalah_kesihatan: (p as any).masalahKesihatan || (isPeserta ? 'Tiada' : null),
+      masalah_kesihatan_lain: (p as any).masalahKesihatanLain || null,
+      remarks: p.remarks || null,
+    };
+  });
 
   if (rows.length > 0) {
     const { error: peopleError } = await supabase.from('submission_people').insert(rows);
@@ -413,7 +442,21 @@ export const bulkSubmitRegistration = async (
 
 export const deleteSubmission = async (_url: string, submission: SubmissionData, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    let query = supabase.from('submission_people').update({ is_deleted: true });
+    // 1) Utamakan padam ikut ID rekod tepat (submission_people.id) — hanya 1 rekod, 1 program + tahun.
+    const exactId = submission.participantId || submission.personId;
+    if (exactId) {
+      const { error } = await supabase.from('submission_people').update({ is_deleted: true }).eq('id', exactId);
+      if (error) throw error;
+      return { status: 'success', message: 'Rekod berjaya dipadam.' };
+    }
+
+    // 2) Fallback: hadkan skop kpd sekolah + program (badge) + tahun yg sama (bukan semua tahun/program).
+    const year = submission.date ? new Date(submission.date).getFullYear() : currentYear();
+    const subIds = await getScopedSubmissionIds(submission.schoolCode, submission.school, submission.badge, year);
+    if (!subIds || subIds.length === 0) {
+      return { status: 'error', message: 'Tidak dapat menentukan program/tahun rekod. Padaman dibatalkan untuk elak padam rekod lain.' };
+    }
+    let query = supabase.from('submission_people').update({ is_deleted: true }).in('submission_id', subIds);
     if (submission.icNumber) query = query.eq('ic_number', submission.icNumber);
     else if (submission.id) query = query.eq('membership_id', submission.id);
     else query = query.eq('name', submission.student);
@@ -908,6 +951,19 @@ export const recordAttendanceVerification = async (record: { schoolCode: string;
     if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
     const badge = await getBadgeByName(record.badge);
     const { data: { user } } = await supabase.auth.getUser();
+    
+    // Check for duplicate (school + badge + year)
+    const { count } = await supabase
+      .from('attendance_verifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('year', record.year);
+      
+    if (count && count > 0) {
+      return { status: 'error', message: `Sekolah ini telah disahkan untuk program ini pada tahun ${record.year}.` };
+    }
+
     const { error } = await supabase.from('attendance_verifications').insert({
       school_id: school.id,
       badge_id: badge.id,
@@ -969,10 +1025,11 @@ export const unwithdrawParticipant = async (participantId: string): Promise<ApiR
   }
 };
 
-export const getAttendanceVerifications = async (year?: number, daerahCode?: string, negeriCode?: string): Promise<any[]> => {
+export const getAttendanceVerifications = async (year?: number, daerahCode?: string, negeriCode?: string, badgeId?: string): Promise<any[]> => {
   try {
     let query = supabase.from('attendance_verifications').select('*, school:school_id(name, school_code, negeri:negeri_id(code), daerah:daerah_id(code)), badge:badge_id(name)').order('verified_at', { ascending: false });
     if (year) query = query.eq('year', year);
+    if (badgeId) query = query.eq('badge_id', badgeId);
     const { data, error } = await query;
     if (error) throw error;
     let results = data || [];
@@ -1000,14 +1057,26 @@ export const deleteAttendanceVerification = async (id: string): Promise<ApiRespo
   }
 };
 
-export const bulkDeleteSubmissions = async (items: Array<{ icNumber?: string; id?: string; student: string }>): Promise<ApiResponse> => {
+export const bulkDeleteSubmissions = async (
+  items: Array<{ participantId?: string; icNumber?: string; id?: string; student: string; badge?: string; schoolCode?: string; school?: string; date?: string }>
+): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
 
     let deleted = 0;
     for (const item of items) {
-      let query = supabase.from('submission_people').update({ is_deleted: true });
+      // 1) Utamakan padam ikut ID rekod tepat (submission_people.id).
+      if (item.participantId) {
+        const { error } = await supabase.from('submission_people').update({ is_deleted: true }).eq('id', item.participantId);
+        if (!error) deleted++;
+        continue;
+      }
+      // 2) Fallback berskop: sekolah + program (badge) + tahun yg sama sahaja.
+      const year = item.date ? new Date(item.date).getFullYear() : currentYear();
+      const subIds = await getScopedSubmissionIds(item.schoolCode, item.school, item.badge, year);
+      if (!subIds || subIds.length === 0) continue; // skip jika skop tak pasti — elak padam merentas program/tahun
+      let query = supabase.from('submission_people').update({ is_deleted: true }).in('submission_id', subIds);
       if (item.icNumber) query = query.eq('ic_number', item.icNumber);
       else if (item.id) query = query.eq('membership_id', normalize(item.id));
       else query = query.eq('name', normalize(item.student));
@@ -1354,9 +1423,10 @@ export const floatAndAssignStudent = async (input: FloatAndAssignStudentInput): 
 
 export const pullStudent = async (input: PullStudentInput): Promise<ApiResponse> => {
   try {
+    // Ambil rekod murid + badge & tahun submission ASAL (submission_people tiada kolum badge).
     const { data: person } = await supabase
       .from('submission_people')
-      .select('*')
+      .select('*, submission:submissions(submission_year, badges(name))')
       .eq('id', input.personId)
       .maybeSingle();
 
@@ -1366,26 +1436,47 @@ export const pullStudent = async (input: PullStudentInput): Promise<ApiResponse>
     const school = await getSchoolByCodeOrName(input.targetSchoolCode);
     if (!school) return { status: 'error', message: `Sekolah '${input.targetSchoolCode}' tidak dijumpai.` };
 
-    const badgeId = await getBadgeByName(person.badge || 'Keris Gangsa');
+    // Kekalkan badge & tahun ASAL murid (bukan default Keris Gangsa / tahun semasa).
+    const badgeName = (person as any).submission?.badges?.name || 'Keris Gangsa';
+    const year = (person as any).submission?.submission_year || new Date().getFullYear();
+    const badge = await getBadgeByName(badgeName);
 
-    const { data: newSub } = await supabase
+    // Guna semula submission sedia ada di sekolah sasaran (badge + tahun sama), atau cipta baru.
+    let targetSubId: string;
+    const { data: existingSub } = await supabase
       .from('submissions')
-      .insert({
-        school_id: school.id,
-        badge_id: badgeId.id,
-        submission_year: new Date().getFullYear(),
-        status: 'draft',
-        source: 'manual',
-      })
       .select('id')
-      .single();
+      .eq('school_id', school.id).eq('badge_id', badge.id).eq('submission_year', year)
+      .limit(1).maybeSingle();
+    if (existingSub) {
+      targetSubId = existingSub.id;
+    } else {
+      const { data: newSub, error: subErr } = await supabase
+        .from('submissions')
+        .insert({
+          school_id: school.id,
+          badge_id: badge.id,
+          submission_year: year,
+          status: 'draft',
+          source: 'manual',
+        })
+        .select('id')
+        .single();
+      if (subErr || !newSub) return { status: 'error', message: `Gagal cipta submission di sekolah sasaran: ${subErr?.message || 'tidak diketahui'}` };
+      targetSubId = newSub.id;
+    }
 
-    if (!newSub) return { status: 'error', message: 'Gagal cipta submission baru.' };
+    // Normalkan kategori: constraint DB hanya benarkan nilai sah atau NULL.
+    // String kosong '' (yang biasa disimpan) akan melanggar constraint, jadi
+    // tukar kepada NULL bila kategori tiada/tidak sah.
+    const VALID_CATEGORIES = ['Pengakap Kanak-kanak', 'Pengakap Muda', 'Pengakap Remaja', 'Kelana'];
+    const resolvedCategory = String(input.newCategory || person.category || '').trim();
+    const safeCategory = VALID_CATEGORIES.includes(resolvedCategory) ? resolvedCategory : null;
 
     const { error: insertErr } = await supabase
       .from('submission_people')
       .insert({
-        submission_id: newSub.id,
+        submission_id: targetSubId,
         name: person.name,
         gender: person.gender,
         race: person.race,
@@ -1393,7 +1484,7 @@ export const pullStudent = async (input: PullStudentInput): Promise<ApiResponse>
         ic_number: person.ic_number,
         phone_number: person.phone_number,
         role: input.newRole || person.role,
-        category: input.newCategory || person.category,
+        category: safeCategory,
         unit: person.unit,
         makanan: person.makanan,
         masalah_kesihatan: person.masalah_kesihatan,

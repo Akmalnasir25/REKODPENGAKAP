@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, MapPin, Calendar, Phone, FileText, UserPlus, Loader, User, School as SchoolIcon, RefreshCw, Undo2, Download } from 'lucide-react';
-import { getFloatedStudents, pullStudent, unfloatStudent, FloatedStudent } from '../services/supabaseApi';
+import { Users, Search, MapPin, Calendar, Phone, FileText, UserPlus, Loader, User, School as SchoolIcon, RefreshCw, Undo2, Download, X, ArrowRightLeft } from 'lucide-react';
+import { getFloatedStudents, pullStudent, unfloatStudent, getActiveSchoolsForAssign, FloatedStudent, AssignSchoolOption } from '../services/supabaseApi';
 
 export interface FloatedStudentsTabProps {
   schoolCode?: string;
@@ -23,6 +23,64 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
   const [showPullModal, setShowPullModal] = useState<FloatedStudent | null>(null);
   const [newRole, setNewRole] = useState('PESERTA');
   const [newCategory, setNewCategory] = useState('Pengakap Kanak-Kanak');
+
+  // Admin: pindah murid ke sekolah sasaran (pilih negeri -> daerah -> sekolah)
+  const [showAssignModal, setShowAssignModal] = useState<FloatedStudent | null>(null);
+  const [assignSchools, setAssignSchools] = useState<AssignSchoolOption[]>([]);
+  const [assignSchoolsLoading, setAssignSchoolsLoading] = useState(false);
+  const [assignNegeri, setAssignNegeri] = useState('');
+  const [assignDaerah, setAssignDaerah] = useState('');
+  const [assignSchool, setAssignSchool] = useState('');
+  const [assignRole, setAssignRole] = useState('PESERTA');
+  const [assignCategory, setAssignCategory] = useState('Pengakap Kanak-Kanak');
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+
+  const openAssignModal = async (student: FloatedStudent) => {
+    setShowAssignModal(student);
+    setAssignNegeri(''); setAssignDaerah(''); setAssignSchool('');
+    setAssignRole(student.role || 'PESERTA');
+    setAssignCategory(student.category || 'Pengakap Kanak-Kanak');
+    if (assignSchools.length === 0) {
+      setAssignSchoolsLoading(true);
+      const data = await getActiveSchoolsForAssign();
+      setAssignSchools(data);
+      setAssignSchoolsLoading(false);
+    }
+  };
+
+  // Pilihan negeri/daerah/sekolah berdasarkan senarai sekolah yang dimuatkan
+  const assignNegeriOptions = Array.from(
+    new Map(assignSchools.filter(s => s.negeri_code).map(s => [s.negeri_code, s.negeri_name || s.negeri_code])).entries()
+  ).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  const assignDaerahOptions = Array.from(
+    new Map(assignSchools.filter(s => s.negeri_code === assignNegeri && s.daerah_code).map(s => [s.daerah_code, s.daerah_name || s.daerah_code])).entries()
+  ).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  const assignSchoolOptions = assignSchools
+    .filter(s => s.negeri_code === assignNegeri && s.daerah_code === assignDaerah)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const handleAssign = async () => {
+    if (!showAssignModal || !assignSchool) return;
+    const targetName = assignSchools.find(s => s.school_code === assignSchool)?.name || assignSchool;
+    if (!confirm(`Pindahkan murid "${showAssignModal.student_name}" ke ${targetName}?\n\nPeranan: ${assignRole}\nKategori: ${assignCategory}`)) return;
+    setAssigningId(showAssignModal.id);
+    const res = await pullStudent({
+      personId: showAssignModal.id,
+      targetSchoolCode: assignSchool,
+      newRole: assignRole,
+      newCategory: assignCategory,
+      pulledBy: 'ADMIN',
+    });
+    setAssigningId(null);
+    if (res.status === 'success') {
+      setShowAssignModal(null);
+      alert(res.message);
+      fetchData();
+      onRefresh?.();
+    } else {
+      alert(res.message || 'Gagal pindahkan murid.');
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -231,17 +289,28 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="flex items-start gap-2 shrink-0">
+                <div className="flex flex-col sm:flex-row items-end sm:items-start gap-2 shrink-0">
                   {isAdmin ? (
-                    <button
-                      onClick={() => handleUnfloat(s)}
-                      disabled={unfloatingId === s.id}
-                      className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition disabled:opacity-50 flex items-center gap-1"
-                      title="Batalkan apungan dan kembalikan murid ke sekolah asal"
-                    >
-                      {unfloatingId === s.id ? <Loader size={12} className="animate-spin" /> : <Undo2 size={12} />}
-                      Batal Apung
-                    </button>
+                    <>
+                      <button
+                        onClick={() => openAssignModal(s)}
+                        disabled={assigningId === s.id}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition disabled:opacity-50 flex items-center gap-1"
+                        title="Pindahkan murid ke sekolah sasaran (negeri/daerah/sekolah)"
+                      >
+                        {assigningId === s.id ? <Loader size={12} className="animate-spin" /> : <ArrowRightLeft size={12} />}
+                        Pindah ke Sekolah
+                      </button>
+                      <button
+                        onClick={() => handleUnfloat(s)}
+                        disabled={unfloatingId === s.id}
+                        className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition disabled:opacity-50 flex items-center gap-1"
+                        title="Batalkan apungan dan kembalikan murid ke sekolah asal"
+                      >
+                        {unfloatingId === s.id ? <Loader size={12} className="animate-spin" /> : <Undo2 size={12} />}
+                        Batal Apung
+                      </button>
+                    </>
                   ) : schoolCode ? (
                     <button
                       onClick={() => { setShowPullModal(s); setNewRole(s.role || 'PESERTA'); setNewCategory(s.category || 'Pengakap Kanak-Kanak'); }}
@@ -317,6 +386,116 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
                 <button onClick={handlePull} disabled={pullingId === showPullModal.id} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition disabled:opacity-50 flex items-center justify-center gap-2">
                   {pullingId === showPullModal.id ? <Loader size={14} className="animate-spin" /> : <UserPlus size={14} />}
                   Tarik Masuk
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Modal (Admin: pindah ke sekolah sasaran) */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowAssignModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+            <div className="bg-emerald-600 px-5 py-4 flex justify-between items-center">
+              <h3 className="font-bold text-white flex items-center gap-2"><ArrowRightLeft size={16} /> Pindah Murid ke Sekolah</h3>
+              <button onClick={() => setShowAssignModal(null)} className="text-white/70 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <p className="text-sm font-bold text-emerald-800">{showAssignModal.student_name}</p>
+                <p className="text-xs text-emerald-600 mt-1">
+                  Dari: {showAssignModal.school_name} ({showAssignModal.original_school_code})
+                </p>
+              </div>
+
+              {assignSchoolsLoading ? (
+                <div className="flex justify-center py-6"><Loader className="animate-spin text-slate-400" size={24} /></div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Negeri Sasaran</label>
+                    <select
+                      value={assignNegeri}
+                      onChange={(e) => { setAssignNegeri(e.target.value); setAssignDaerah(''); setAssignSchool(''); }}
+                      className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none"
+                    >
+                      <option value="">-- Pilih Negeri --</option>
+                      {assignNegeriOptions.map(([code, name]) => (
+                        <option key={code} value={code!}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Daerah Sasaran</label>
+                    <select
+                      value={assignDaerah}
+                      onChange={(e) => { setAssignDaerah(e.target.value); setAssignSchool(''); }}
+                      disabled={!assignNegeri}
+                      className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <option value="">-- Pilih Daerah --</option>
+                      {assignDaerahOptions.map(([code, name]) => (
+                        <option key={code} value={code!}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Sekolah Sasaran</label>
+                    <select
+                      value={assignSchool}
+                      onChange={(e) => setAssignSchool(e.target.value)}
+                      disabled={!assignDaerah}
+                      className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      <option value="">-- Pilih Sekolah --</option>
+                      {assignSchoolOptions.map((s) => (
+                        <option key={s.school_code} value={s.school_code}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Peranan</label>
+                    <select
+                      value={assignRole}
+                      onChange={(e) => setAssignRole(e.target.value)}
+                      className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none"
+                    >
+                      <option value="PESERTA">Peserta</option>
+                      <option value="PEMIMPIN">Pemimpin</option>
+                      <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                      <option value="PENGUJI">Penguji</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Kategori</label>
+                    <select
+                      value={assignCategory}
+                      onChange={(e) => setAssignCategory(e.target.value)}
+                      className="w-full p-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none"
+                    >
+                      <option value="Pengakap Kanak-Kanak">Pengakap Kanak-Kanak</option>
+                      <option value="Pengakap Muda">Pengakap Muda</option>
+                      <option value="Pengakap Remaja">Pengakap Remaja</option>
+                      <option value="Kelana">Kelana</option>
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={() => setShowAssignModal(null)} className="flex-1 py-2.5 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
+                  Batal
+                </button>
+                <button onClick={handleAssign} disabled={!assignSchool || assigningId === showAssignModal.id} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition disabled:opacity-50 flex items-center justify-center gap-2">
+                  {assigningId === showAssignModal.id ? <Loader size={14} className="animate-spin" /> : <ArrowRightLeft size={14} />}
+                  Pindahkan
                 </button>
               </div>
             </div>

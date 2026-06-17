@@ -10,6 +10,16 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { DaerahProgramAnalysis } from './DaerahProgramAnalysis';
 import { FloatedStudentsTab } from './FloatedStudentsTab';
 import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
+import { PengesahanTab } from './PengesahanTab';
+import { WithdrawalScanner } from './WithdrawalScanner';
+import { WithdrawalsList } from './WithdrawalsList';
+import { QRAttendanceScanner } from './ui/QRVerification';
+import { LoadingSpinner } from './ui/LoadingSpinner';
+import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
+import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, addDaerah, updateDaerah, deleteDaerah } from '../services/supabaseApi';
+import { registerAdmin } from '../services/supabaseAuth';
+import { getLogoUrl, uploadLogo } from '../services/logoService';
 
 interface AdminNegeriPanelProps {
   negeriCode: string;
@@ -63,22 +73,79 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
+  const [selectedAttendanceBadgeId, setSelectedAttendanceBadgeId] = useState<string>('');
+  const [registeredSchools, setRegisteredSchools] = useState<any[]>([]);
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
     try {
-      const records = await getAttendanceVerifications(new Date().getFullYear(), undefined, negeriCode);
+      const records = await getAttendanceVerifications(new Date().getFullYear(), undefined, negeriCode, selectedAttendanceBadgeId || undefined);
       setAttendanceRecords(records);
     } catch (e) {
       console.error('Failed to load attendance:', e);
     } finally {
       setAttendanceLoading(false);
     }
-  }, [negeriCode]);
+  }, [negeriCode, selectedAttendanceBadgeId]);
+
+  // Load registered schools for selected badge (from school_badge_status)
+  useEffect(() => {
+    if (!selectedAttendanceBadgeId) {
+      setRegisteredSchools([]);
+      return;
+    }
+    (async () => {
+      try {
+        const { supabase } = await import('../services/supabaseClient');
+        const { data, error } = await supabase
+          .from('school_badge_status')
+          .select('school_id, status, school:school_id(id, name, school_code, negeri:negeri_id(code), daerah:daerah_id(code))')
+          .eq('badge_id', selectedAttendanceBadgeId)
+          .eq('year', new Date().getFullYear())
+          .in('status', ['submitted', 'approved', 'locked', 'reopened']);
+        if (error) throw error;
+        // Filter by negeri
+        const filtered = (data || []).filter((r: any) => r.school?.negeri?.code === negeriCode);
+        setRegisteredSchools(filtered);
+      } catch (e) {
+        console.error('Failed to load registered schools:', e);
+        setRegisteredSchools([]);
+      }
+    })();
+  }, [selectedAttendanceBadgeId, negeriCode]);
 
   useEffect(() => {
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
+
+  // Calculate attendance statistics
+  const attendanceStats = useMemo(() => {
+    if (!selectedAttendanceBadgeId) {
+      return { scanned: 0, notScanned: 0, total: 0, percentage: 0, totalParticipants: 0, scannedSchools: [], notScannedSchools: [] };
+    }
+    const scannedSchoolIds = new Set(attendanceRecords.map((r: any) => r.school?.school_code).filter(Boolean));
+    const registeredSchoolList = registeredSchools.map((r: any) => ({
+      id: r.school.id,
+      code: r.school.school_code,
+      name: r.school.name,
+      daerah: r.school?.daerah?.code || '-',
+    }));
+    const scannedSchools = registeredSchoolList.filter((s: any) => scannedSchoolIds.has(s.code));
+    const notScannedSchools = registeredSchoolList.filter((s: any) => !scannedSchoolIds.has(s.code));
+    const total = registeredSchoolList.length;
+    const scanned = scannedSchools.length;
+    const totalParticipants = attendanceRecords.reduce((sum, r) => sum + (r.participant_count || 0), 0);
+    const percentage = total > 0 ? Math.round((scanned / total) * 100) : 0;
+    return {
+      scanned,
+      notScanned: notScannedSchools.length,
+      total,
+      percentage,
+      totalParticipants,
+      scannedSchools,
+      notScannedSchools,
+    };
+  }, [attendanceRecords, registeredSchools, selectedAttendanceBadgeId]);
 
   const handleDeleteAttendance = async (record: any) => {
     if (!confirm(`Padam rekod kehadiran untuk ${record.school?.name || ''} (${record.badge?.name || ''})?`)) return;
@@ -124,6 +191,18 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const negeriData = useMemo(() => data.filter(d => d.negeriCode === negeriCode), [data, negeriCode]);
   const negeriSchools = useMemo(() => schools.filter(s => s.negeriCode === negeriCode), [schools, negeriCode]);
   const filteredDaerah = useMemo(() => daerahList.filter(d => d.negeriCode === negeriCode), [daerahList, negeriCode]);
+
+  // Filter badges for attendance dropdown based on admin scope
+  const attendanceBadges = useMemo(() => {
+    // Admin negeri hanya lihat badges dengan scope 'negeri' untuk negeri ini
+    return badges.filter((b: any) => {
+      const scope = b.scope || 'daerah';
+      if (scope === 'negeri') {
+        return !b.negeriCode || b.negeriCode === negeriCode;
+      }
+      return false; // Jangan tunjuk scope daerah
+    });
+  }, [badges, negeriCode]);
 
   const filteredData = useMemo(() => selectedDaerahFilter === 'ALL'
     ? negeriData
@@ -794,13 +873,14 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
             )}
 
             {tab === 'attendance' && (
-              <div className="animate-[fadeIn_0.2s_ease-out]">
+              <div className="animate-[fadeIn_0.2s_ease-out] space-y-6">
+                {/* Header & Scanner Tools */}
                 <div className="bg-white rounded-xl shadow p-6">
                   <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">
                     <ScanLine size={20} className="text-green-600" /> Pengesahan Kehadiran QR
                   </h2>
                   <p className="text-sm text-slate-500 mb-4">
-                    Imbas QR code sekolah untuk mengesahkan kehadiran peserta dalam {negeriName}. Selepas scan, jumlah peserta berdaftar akan dipaparkan.
+                    Imbas QR code sekolah untuk mengesahkan kehadiran peserta dalam {negeriName}. Selepas scan, jumlah peserta berdaftar akan dipaparkan secara automatik.
                   </p>
 
                   <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between gap-3">
@@ -824,91 +904,201 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                       await loadAttendanceRecords();
                     }}
                   />
+                </div>
 
-                  <div className="mt-8 border-t pt-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                        <CheckCircle size={16} className="text-green-500" /> Ringkasan Kehadiran Hari Ini
-                      </h3>
-                      <button onClick={loadAttendanceRecords} disabled={attendanceLoading} className="text-blue-600 hover:bg-blue-50 p-1 rounded transition">
-                        <RefreshCw size={14} className={attendanceLoading ? 'animate-spin' : ''} />
-                      </button>
-                    </div>
-                    {(() => {
-                      const todayStr = new Date().toDateString();
-                      const todayRecords = attendanceRecords.filter((r: any) => new Date(r.verified_at).toDateString() === todayStr);
-                      if (attendanceLoading) return <p className="text-xs text-slate-400 italic">Memuatkan rekod kehadiran...</p>;
-                      if (todayRecords.length === 0) return <p className="text-xs text-slate-400 italic">Belum ada kehadiran disahkan hari ini.</p>;
-                      const uniqueSchools = new Set(todayRecords.map((r: any) => `${r.school?.school_code || ''}|${r.badge?.name || ''}`));
-                      const totalSchools = uniqueSchools.size;
-                      const totalParticipants = todayRecords.reduce((sum: number, r: any) => sum + (r.participant_count || 0), 0);
+                {/* Badge Filter with Full Statistics */}
+                <div className="bg-white rounded-xl shadow p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <BarChart3 size={18} className="text-indigo-600" /> Statistik Kehadiran Mengikut Program
+                    </h3>
+                    <button onClick={loadAttendanceRecords} disabled={attendanceLoading} className="text-blue-600 hover:bg-blue-50 p-2 rounded-full transition">
+                      <RefreshCw size={14} className={attendanceLoading ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
 
-                      // Group by badge/program
-                      const byBadge: Record<string, { schools: Set<string>; participants: number; daerahs: Set<string> }> = {};
-                      for (const r of todayRecords) {
-                        const badgeName = r.badge?.name || 'Tidak Diketahui';
-                        if (!byBadge[badgeName]) byBadge[badgeName] = { schools: new Set(), participants: 0, daerahs: new Set() };
-                        byBadge[badgeName].schools.add(r.school?.school_code || '');
-                        byBadge[badgeName].participants += r.participant_count || 0;
-                        if (r.school?.daerah?.code) byBadge[badgeName].daerahs.add(r.school.daerah.code);
-                      }
-                      const programList = Object.entries(byBadge).sort((a, b) => b[1].participants - a[1].participants);
+                  <div className="mb-6">
+                    <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Pilih Program/Badge</label>
+                    <select
+                      value={selectedAttendanceBadgeId}
+                      onChange={(e) => setSelectedAttendanceBadgeId(e.target.value)}
+                      className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                      <option value="">-- Sila Pilih Program --</option>
+                      {attendanceBadges.map((b: any) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                      return (
-                        <div>
-                          <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div className="bg-green-50 rounded-lg p-4 text-center">
-                              <p className="text-2xl font-bold text-green-700">{totalSchools}</p>
-                              <p className="text-xs text-green-600 font-medium">Sekolah/Program Hadir</p>
-                            </div>
-                            <div className="bg-blue-50 rounded-lg p-4 text-center">
-                              <p className="text-2xl font-bold text-blue-700">{totalParticipants}</p>
-                              <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
-                            </div>
+                  {selectedAttendanceBadgeId ? (
+                    attendanceLoading ? (
+                      <div className="text-center py-8">
+                        <LoadingSpinner size="lg" color="border-indigo-500" />
+                        <p className="text-xs text-slate-400 mt-3">Memuatkan statistik...</p>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                          <div className="bg-green-50 rounded-lg p-4 text-center border border-green-100">
+                            <p className="text-2xl font-bold text-green-700">{attendanceStats.scanned}</p>
+                            <p className="text-xs text-green-600 font-medium">Dah Scan</p>
                           </div>
+                          <div className="bg-orange-50 rounded-lg p-4 text-center border border-orange-100">
+                            <p className="text-2xl font-bold text-orange-700">{attendanceStats.notScanned}</p>
+                            <p className="text-xs text-orange-600 font-medium">Belum Scan</p>
+                          </div>
+                          <div className="bg-indigo-50 rounded-lg p-4 text-center border border-indigo-100">
+                            <p className="text-2xl font-bold text-indigo-700">{attendanceStats.percentage}%</p>
+                            <p className="text-xs text-indigo-600 font-medium">Kemajuan</p>
+                          </div>
+                          <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-100">
+                            <p className="text-2xl font-bold text-blue-700">{attendanceStats.totalParticipants}</p>
+                            <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
+                          </div>
+                        </div>
 
-                          <div className="mb-4">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Pecahan ikut Program</p>
-                            <div className="space-y-1">
-                              {programList.map(([badgeName, info], i) => (
-                                <div key={i} className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded px-3 py-2">
-                                  <span className="text-xs font-bold text-purple-900">{badgeName}</span>
-                                  <span className="text-xs text-purple-700">
-                                    <strong>{info.schools.size}</strong> sekolah · <strong>{info.daerahs.size}</strong> daerah · <strong>{info.participants}</strong> peserta
-                                  </span>
+                        {/* Progress Bar */}
+                        <div className="mb-6">
+                          <div className="flex justify-between text-xs text-slate-600 mb-1">
+                            <span>Kemajuan Scan ({attendanceStats.scanned} / {attendanceStats.total} Sekolah)</span>
+                            <span className="font-bold">{attendanceStats.percentage}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-green-500 to-indigo-600 h-3 rounded-full transition-all duration-500"
+                              style={{ width: `${attendanceStats.percentage}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Tab: Dah Scan / Belum Scan */}
+                        <div className="border-b border-slate-200 mb-4">
+                          <nav className="flex gap-6">
+                            <button
+                              className="py-2 px-1 border-b-2 border-green-500 text-green-700 font-bold text-sm flex items-center gap-2"
+                              onClick={() => {
+                                const el = document.getElementById('scanned-tab');
+                                el?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                            >
+                              <CheckCircle size={14} /> Dah Scan ({attendanceStats.scanned})
+                            </button>
+                            <button
+                              className="py-2 px-1 border-b-2 border-orange-500 text-orange-700 font-bold text-sm flex items-center gap-2"
+                              onClick={() => {
+                                const el = document.getElementById('not-scanned-tab');
+                                el?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                            >
+                              <AlertTriangle size={14} /> Belum Scan ({attendanceStats.notScanned})
+                            </button>
+                          </nav>
+                        </div>
+
+                        {/* Dah Scan List */}
+                        <div id="scanned-tab" className="mb-6">
+                          <h4 className="text-xs font-bold text-slate-700 uppercase mb-3 flex items-center gap-2">
+                            <CheckCircle size={12} className="text-green-500" /> Sekolah Yang Dah Scan
+                          </h4>
+                          {attendanceStats.scannedSchools.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded">Belum ada sekolah yang telah scan kehadiran untuk program ini.</p>
+                          ) : (
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {attendanceStats.scannedSchools.map((s: any, i: number) => {
+                                const record = attendanceRecords.find((r: any) => r.school?.school_code === s.code);
+                                return (
+                                  <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-4 py-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
+                                      <p className="text-[10px] text-slate-500">
+                                        <span className="font-mono">{s.code}</span> · {s.daerah} · <span className="text-green-700 font-bold">{record?.participant_count || 0} peserta</span>
+                                      </p>
+                                    </div>
+                                    <span className="text-[10px] text-green-600 font-mono">
+                                      {record && new Date(record.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Belum Scan List */}
+                        <div id="not-scanned-tab">
+                          <h4 className="text-xs font-bold text-slate-700 uppercase mb-3 flex items-center gap-2">
+                            <AlertTriangle size={12} className="text-orange-500" /> Sekolah Yang Belum Scan
+                          </h4>
+                          {attendanceStats.notScannedSchools.length === 0 ? (
+                            <p className="text-xs text-green-600 italic p-4 bg-green-50 rounded border border-green-100 font-bold">🎉 Semua sekolah telah scan kehadiran untuk program ini!</p>
+                          ) : (
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {attendanceStats.notScannedSchools.map((s: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-lg px-4 py-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
+                                    <p className="text-[10px] text-slate-500">
+                                      <span className="font-mono">{s.code}</span> · {s.daerah}
+                                    </p>
+                                  </div>
+                                  <span className="text-[10px] text-orange-600 font-bold">Belum Scan</span>
                                 </div>
                               ))}
                             </div>
-                          </div>
-
-                          <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Senarai Scan</p>
-                          <div className="space-y-2 max-h-60 overflow-y-auto">
-                            {todayRecords.map((r: any, i: number) => (
-                              <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
-                                <div>
-                                  <p className="text-xs font-bold text-slate-800">{r.school?.name || '-'}</p>
-                                  <p className="text-[10px] text-slate-500">{r.badge?.name || '-'} | {r.school?.daerah?.code || '-'} | {r.participant_count || 0} peserta</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] text-green-600 font-mono">
-                                    {new Date(r.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                  <button
-                                    onClick={() => handleDeleteAttendance(r)}
-                                    disabled={deletingAttendanceId === r.id}
-                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded p-1 transition disabled:opacity-50"
-                                    title="Padam pengesahan kehadiran"
-                                  >
-                                    {deletingAttendanceId === r.id ? <LoadingSpinner size="sm" color="border-red-500" /> : <Trash2 size={12} />}
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          )}
                         </div>
-                      );
-                    })()}
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-center py-12">
+                      <ScanLine size={48} className="mx-auto text-slate-200 mb-3" />
+                      <p className="text-sm text-slate-400">Sila pilih program di atas untuk lihat statistik kehadiran penuh.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Today's Records */}
+                <div className="bg-white rounded-xl shadow p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                      <CheckCircle size={16} className="text-green-500" /> Senarai Scan Hari Ini
+                    </h3>
                   </div>
+                  {(() => {
+                    const todayStr = new Date().toDateString();
+                    const todayRecords = attendanceRecords.filter((r: any) => new Date(r.verified_at).toDateString() === todayStr);
+                    if (attendanceLoading) return <p className="text-xs text-slate-400 italic">Memuatkan rekod...</p>;
+                    if (todayRecords.length === 0) return <p className="text-xs text-slate-400 italic">Belum ada kehadiran disahkan hari ini.</p>;
+                    return (
+                      <div className="space-y-2 max-h-80 overflow-y-auto">
+                        {todayRecords.map((r: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">{r.school?.name || '-'}</p>
+                              <p className="text-[10px] text-slate-500">{r.badge?.name || '-'} | {r.school?.daerah?.code || '-'} | {r.participant_count || 0} peserta</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-green-600 font-mono">
+                                {new Date(r.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <button
+                                onClick={() => handleDeleteAttendance(r)}
+                                disabled={deletingAttendanceId === r.id}
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded p-1 transition disabled:opacity-50"
+                                title="Padam pengesahan kehadiran"
+                              >
+                                {deletingAttendanceId === r.id ? <LoadingSpinner size="sm" color="border-red-500" /> : <Trash2 size={12} />}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -1035,6 +1225,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                   schoolName={`Negeri ${negeriName}`}
                   negeriCode={negeriCode}
                   daerahCode={selectedDaerahFilter !== 'ALL' ? selectedDaerahFilter : undefined}
+                  isAdmin
                   onRefresh={refreshData}
                 />
               </div>

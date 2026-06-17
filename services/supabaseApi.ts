@@ -1529,6 +1529,41 @@ export const assignStudentDirect = async (input: PullStudentInput): Promise<ApiR
   return pullStudent(input);
 };
 
+export interface AssignSchoolOption {
+  school_code: string;
+  name: string;
+  negeri_code: string | null;
+  negeri_name: string | null;
+  daerah_code: string | null;
+  daerah_name: string | null;
+}
+
+// Senarai sekolah aktif (dengan negeri & daerah) untuk pemilih sasaran pindah murid.
+export const getActiveSchoolsForAssign = async (): Promise<AssignSchoolOption[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('school_code, name, negeri:negeri_id(code,name), daerah:daerah_id(code,name)')
+      .eq('is_active', true)
+      .order('name');
+    if (error || !data) return [];
+    return data.map((s: any) => {
+      const negeri = Array.isArray(s.negeri) ? s.negeri[0] : s.negeri;
+      const daerah = Array.isArray(s.daerah) ? s.daerah[0] : s.daerah;
+      return {
+        school_code: s.school_code,
+        name: s.name,
+        negeri_code: negeri?.code || null,
+        negeri_name: negeri?.name || null,
+        daerah_code: daerah?.code || null,
+        daerah_name: daerah?.name || null,
+      };
+    });
+  } catch {
+    return [];
+  }
+};
+
 export interface FloatedStudent {
   id: string;
   student_name: string;

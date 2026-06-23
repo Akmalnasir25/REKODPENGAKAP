@@ -280,9 +280,26 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         {safeBadges.map((b, i) => (
           <div key={i} className="p-3 border-b last:border-0 bg-white rounded mb-1 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 group hover:bg-purple-50 transition">
             <div className="flex items-center gap-3">
-                <span className={`px-2 py-1 rounded text-xs font-bold ${b.isOpen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {b.isOpen ? 'BUKA' : 'TUTUP'}
-                </span>
+                {(() => {
+                  // Tamat tempoh: masih BUKA tetapi tarikh akhir sudah lepas (pendaftaran dibenarkan pada hari deadline)
+                  let expired = false;
+                  if (b.isOpen && b.deadline) {
+                    const today = new Date(); today.setHours(0, 0, 0, 0);
+                    const d = new Date(b.deadline); d.setHours(0, 0, 0, 0);
+                    expired = !isNaN(d.getTime()) && d < today;
+                  }
+                  const cls = !b.isOpen
+                    ? 'bg-red-100 text-red-700'
+                    : expired
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-green-100 text-green-700';
+                  const label = !b.isOpen ? 'TUTUP' : expired ? 'TAMAT TEMPOH' : 'BUKA';
+                  return (
+                    <span className={`px-2 py-1 rounded text-xs font-bold ${cls}`} title={expired ? `Tarikh akhir (${b.deadline}) sudah lepas — pendaftaran ditutup automatik` : undefined}>
+                      {label}
+                    </span>
+                  );
+                })()}
                 {editingBadge === b.name ? (
                   <div className="flex items-center gap-1.5">
                     <input

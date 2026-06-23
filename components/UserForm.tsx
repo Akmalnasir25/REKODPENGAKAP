@@ -7,6 +7,19 @@ import { submitRegistration, getProgramSettings, ProgramSetting } from '../servi
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 import { PrivacyNotice } from './ui/PrivacyNotice';
 
+// Program dikira tutup jika di-tutup manual (isOpen false) ATAU tarikh hari ini
+// sudah melepasi tarikh akhir. Pendaftaran masih dibenarkan pada hari tarikh akhir itu sendiri.
+const isBadgeClosed = (b?: { isOpen: boolean; deadline?: string | null }): boolean => {
+  if (!b) return true;
+  if (!b.isOpen) return true;
+  if (b.deadline) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const d = new Date(b.deadline); d.setHours(0, 0, 0, 0);
+    if (!isNaN(d.getTime()) && d < today) return true; // tarikh akhir sudah lepas
+  }
+  return false;
+};
+
 interface UserFormProps {
   schools: SchoolType[];
   badgeTypes: Badge[];
@@ -214,9 +227,9 @@ export const UserForm: React.FC<UserFormProps> = ({
     e.preventDefault();
     if (!scriptUrl) { alert("URL Database belum diset."); return; }
     
-    // Check if selected badge is open globally
+    // Check if selected badge is open globally (status TUTUP atau tarikh akhir sudah lepas)
     const selectedBadge = safeBadges.find(b => b.name === leaderInfo.badgeType);
-    if (selectedBadge && !selectedBadge.isOpen) {
+    if (selectedBadge && isBadgeClosed(selectedBadge)) {
         alert(`Maaf, pendaftaran untuk '${leaderInfo.badgeType}' telah ditutup.`);
         return;
     }
@@ -495,18 +508,28 @@ export const UserForm: React.FC<UserFormProps> = ({
 
                                 const lockKey = `${badge.name}_${currentYear}`;
                                 const isLocked = lockedBadges.includes(lockKey);
+                                const closed = isBadgeClosed(badge);
                                 return (
-                                <option key={idx} value={badge.name} disabled={!badge.isOpen || isLocked} className={!badge.isOpen || isLocked ? 'text-gray-400' : ''}>
-                                    {badge.name} {isLocked ? '(TELAH DIHANTAR)' : ''}
+                                <option key={idx} value={badge.name} disabled={closed || isLocked} className={closed || isLocked ? 'text-gray-400' : ''}>
+                                    {badge.name} {isLocked ? '(TELAH DIHANTAR)' : closed && badge.isOpen ? '(TAMAT TEMPOH)' : ''}
                                 </option>
                             )})}
                         </select>
                          {leaderInfo.badgeType && lockedBadges.includes(`${leaderInfo.badgeType}_${currentYear}`) && (
                              <p className="text-red-500 text-xs mt-1 font-bold">Pendaftaran program ini telah anda hantar. Sila hubungi Admin jika perlu ubah.</p>
                          )}
-                         {leaderInfo.badgeType && safeBadges.find(b => b.name === leaderInfo.badgeType && !b.isOpen) && (
-                            <p className="text-red-500 text-xs mt-1 font-bold">Program ini telah ditutup. Sila pilih program lain.</p>
-                         )}
+                         {leaderInfo.badgeType && (() => {
+                            const sel = safeBadges.find(b => b.name === leaderInfo.badgeType);
+                            if (!sel || !isBadgeClosed(sel)) return null;
+                            const expired = sel.isOpen && sel.deadline; // tutup kerana tarikh akhir lepas
+                            return (
+                              <p className="text-red-500 text-xs mt-1 font-bold">
+                                {expired
+                                  ? `Pendaftaran program ini telah tamat tempoh (tarikh akhir: ${sel.deadline}). Sila pilih program lain.`
+                                  : 'Program ini telah ditutup. Sila pilih program lain.'}
+                              </p>
+                            );
+                         })()}
                     </div>
 
                     <div>

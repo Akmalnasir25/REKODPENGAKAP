@@ -655,7 +655,14 @@ function AppContent() {
   };
 
   const handleDeleteData = async (item: SubmissionData) => {
-      if(!confirm(`Padam rekod peserta: ${item.student}?`)) return;
+      const yr = item.date ? new Date(item.date).getFullYear() : '';
+      if(!confirm(
+        `⚠️ ANDA PASTI MAHU PADAM REKOD INI?\n\n` +
+        `Peserta: ${item.student}\n` +
+        `Program: ${item.badge}${yr ? ' ' + yr : ''}\n` +
+        `Sekolah: ${item.school || ''}\n\n` +
+        `Rekod hanya dipadam untuk program & tahun ini sahaja.`
+      )) return;
       try {
         const result = await deleteSubmission(scriptUrl, item);
         if (result.status === 'success') {
@@ -820,7 +827,15 @@ function AppContent() {
                         participantId: p.id,
                       }));
                       setDashboardData(submissions);
-                      setBadges((d.badges || []).map((b: any) => ({ name: b.name, isOpen: b.is_open })));
+                      setBadges((d.badges || []).map((b: any) => ({
+                        name: b.name,
+                        isOpen: b.is_open,
+                        deadline: b.deadline ? String(b.deadline).slice(0, 10) : b.deadline,
+                        scope: b.scope || 'daerah',
+                        negeriCode: b.negeri?.code,
+                        daerahCode: b.daerah?.code,
+                        requiresDaerahApproval: !!b.requires_daerah_approval,
+                      })));
                       setUserProfiles((d.schoolProfiles || []).map((p: any) => ({
                         schoolCode: p.school?.school_code || '',
                         schoolName: p.school?.name || '',

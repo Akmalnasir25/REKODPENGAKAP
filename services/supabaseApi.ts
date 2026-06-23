@@ -234,7 +234,9 @@ export const fetchCloudData = async (
     const badges: Badge[] = (badgesRes.data || []).map((b: any) => ({
       name: b.name,
       isOpen: b.is_open,
-      deadline: b.deadline,
+      // Normalisasi kepada yyyy-MM-dd supaya <input type="date"> dapat papar
+      // (nilai lama mungkin timestamp penuh seperti "2026-06-30T00:00:00+00:00").
+      deadline: b.deadline ? String(b.deadline).slice(0, 10) : b.deadline,
       scope: b.scope || 'daerah',
       negeriCode: b.negeri?.code,
       daerahCode: b.daerah?.code,
@@ -843,7 +845,10 @@ export const toggleRegistration = async (_url: string, statusOrBadge: boolean | 
 
 export const updateBadgeDeadline = async (_url: string, badgeName: string, deadline: string | null, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const { error } = await supabase.from('badges').update({ deadline: deadline ? toDateOnly(deadline) : null }).eq('name', badgeName.trim());
+    // Simpan sebagai tarikh sahaja (yyyy-MM-dd). Input <type="date"> sudah beri format ini;
+    // hindari toDateOnly() yang pulangkan timestamp ISO penuh menyebabkan input papar kosong.
+    const dateOnly = deadline ? deadline.slice(0, 10) : null;
+    const { error } = await supabase.from('badges').update({ deadline: dateOnly }).eq('name', badgeName.trim());
     if (error) throw error;
     return { status: 'success', message: 'Tarikh akhir berjaya dikemaskini.' };
   } catch (error: any) {

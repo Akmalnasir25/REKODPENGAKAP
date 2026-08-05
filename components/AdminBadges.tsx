@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt, Layers } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting } from '../services/supabaseApi';
 import { Badge } from '../types';
@@ -39,6 +39,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formFeePemimpin, setFormFeePemimpin] = useState('');
   const [formFeePenolong, setFormFeePenolong] = useState('');
   const [formShirtEnabled, setFormShirtEnabled] = useState(false);
+  const [formSiriEnabled, setFormSiriEnabled] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
@@ -66,6 +67,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormFeePemimpin(s?.feePemimpin != null ? String(s.feePemimpin) : '');
     setFormFeePenolong(s?.feePenolong != null ? String(s.feePenolong) : '');
     setFormShirtEnabled(s?.shirtEnabled || false);
+    setFormSiriEnabled(s?.siriEnabled || false);
   };
 
   const handleSaveSettings = async () => {
@@ -84,6 +86,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         feePemimpin: formFeePemimpin.trim() ? Number(formFeePemimpin) : null,
         feePenolong: formFeePenolong.trim() ? Number(formFeePenolong) : null,
         shirtEnabled: formShirtEnabled,
+        siriEnabled: formSiriEnabled,
       });
       if (res.status === 'success') {
         await loadSettings();
@@ -373,16 +376,17 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                 <div className="flex items-center gap-2">
                     {(() => {
                         const s = findSetting(b, currentYear);
-                        const active = s && (s.paymentEnabled || s.shirtEnabled);
+                        const active = s && (s.paymentEnabled || s.shirtEnabled || s.siriEnabled);
                         return (
                             <button
                                 onClick={() => openSettingsModal(b, currentYear)}
                                 className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold border transition ${active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
-                                title="Tetapan yuran & saiz baju"
+                                title="Tetapan yuran, saiz baju & siri"
                             >
                                 <Wallet size={12} /> Yuran & Baju
                                 {s?.paymentEnabled && <span className="bg-emerald-200 text-emerald-800 px-1 rounded">RM</span>}
                                 {s?.shirtEnabled && <Shirt size={11} />}
+                                {s?.siriEnabled && <Layers size={11} />}
                             </button>
                         );
                     })()}
@@ -471,6 +475,15 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                   <input type="checkbox" checked={formShirtEnabled} onChange={(e) => setFormShirtEnabled(e.target.checked)} className="w-5 h-5 accent-indigo-600" />
                 </label>
                 <p className="text-[11px] text-gray-400 mt-1">Jika aktif, medan saiz baju (XS–4XL) muncul dalam borang pendaftaran untuk peserta, pemimpin & penolong pemimpin.</p>
+              </div>
+
+              {/* SIRI */}
+              <div className="border rounded-lg p-3">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="font-bold text-gray-700 flex items-center gap-2"><Layers size={16} className="text-purple-600" /> Aktifkan Siri</span>
+                  <input type="checkbox" checked={formSiriEnabled} onChange={(e) => setFormSiriEnabled(e.target.checked)} className="w-5 h-5 accent-purple-600" />
+                </label>
+                <p className="text-[11px] text-gray-400 mt-1">Jika aktif, sekolah boleh tandakan peserta ikut siri (Siri 1, Siri 2, dst) — program ini dijalankan berperingkat. Program tetap sama, siri hanya mengasingkan paparan &amp; statistik.</p>
               </div>
 
               <div className="flex gap-2 pt-1">

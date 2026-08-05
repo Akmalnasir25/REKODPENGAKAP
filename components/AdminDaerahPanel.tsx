@@ -53,6 +53,8 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
   const [selectedAttendanceBadgeId, setSelectedAttendanceBadgeId] = useState<string>('');
+  const [selectedAttendanceSiri, setSelectedAttendanceSiri] = useState<number | ''>('');
+  const [attendanceScanSiri, setAttendanceScanSiri] = useState(1);
   const [registeredSchools, setRegisteredSchools] = useState<any[]>([]);
   const [daerahLogoUrl, setDaerahLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -108,12 +110,24 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
 
+  // Siri yang wujud dalam rekod kehadiran bagi program dipilih — kawal keterlihatan penapis Siri.
+  const availableAttendanceSiris = useMemo(() => {
+    const set = new Set<number>();
+    attendanceRecords.forEach((r: any) => set.add(r.siri || 1));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [attendanceRecords]);
+
+  const attendanceRecordsFiltered = useMemo(() => {
+    if (selectedAttendanceSiri === '') return attendanceRecords;
+    return attendanceRecords.filter((r: any) => (r.siri || 1) === selectedAttendanceSiri);
+  }, [attendanceRecords, selectedAttendanceSiri]);
+
   // Calculate attendance statistics
   const attendanceStats = useMemo(() => {
     if (!selectedAttendanceBadgeId) {
       return { scanned: 0, notScanned: 0, total: 0, percentage: 0, totalParticipants: 0, scannedSchools: [], notScannedSchools: [] };
     }
-    const scannedSchoolIds = new Set(attendanceRecords.map((r: any) => r.school?.school_code).filter(Boolean));
+    const scannedSchoolIds = new Set(attendanceRecordsFiltered.map((r: any) => r.school?.school_code).filter(Boolean));
     const registeredSchoolList = registeredSchools.map((r: any) => ({
       id: r.school.id,
       code: r.school.school_code,
@@ -123,7 +137,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     const notScannedSchools = registeredSchoolList.filter((s: any) => !scannedSchoolIds.has(s.code));
     const total = registeredSchoolList.length;
     const scanned = scannedSchools.length;
-    const totalParticipants = attendanceRecords.reduce((sum, r) => sum + (r.participant_count || 0), 0);
+    const totalParticipants = attendanceRecordsFiltered.reduce((sum, r) => sum + (r.participant_count || 0), 0);
     const percentage = total > 0 ? Math.round((scanned / total) * 100) : 0;
     return {
       scanned,
@@ -134,7 +148,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
       scannedSchools,
       notScannedSchools,
     };
-  }, [attendanceRecords, registeredSchools, selectedAttendanceBadgeId]);
+  }, [attendanceRecordsFiltered, registeredSchools, selectedAttendanceBadgeId]);
 
   // Load daerah logo on mount
   useEffect(() => {
@@ -591,6 +605,18 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                     <WithdrawalScanner onWithdrawn={() => refreshData()} />
                   </div>
 
+                  <div className="mb-3 flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-600 uppercase">Siri untuk scan seterusnya:</label>
+                    <select
+                      value={attendanceScanSiri}
+                      onChange={(e) => setAttendanceScanSiri(Number(e.target.value))}
+                      className="p-1.5 border border-slate-200 rounded text-xs font-bold text-purple-700 bg-purple-50"
+                    >
+                      {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                    </select>
+                    <span className="text-[11px] text-slate-400">(kekalkan Siri 1 jika program tidak berperingkat)</span>
+                  </div>
+
                   <QRAttendanceScanner
                     verifierName={adminSession.fullName || adminSession.username}
                     onVerified={async (record) => {
@@ -599,6 +625,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                         badge: record.badge,
                         year: record.year,
                         participantCount: record.totalParticipants,
+                        siri: attendanceScanSiri,
                       });
                       if (res.status !== 'success') alert('Gagal simpan kehadiran ke server: ' + (res.message || 'Ralat tidak diketahui'));
                       await loadAttendanceRecords();
@@ -621,7 +648,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                     <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Pilih Program/Badge</label>
                     <select
                       value={selectedAttendanceBadgeId}
-                      onChange={(e) => setSelectedAttendanceBadgeId(e.target.value)}
+                      onChange={(e) => { setSelectedAttendanceBadgeId(e.target.value); setSelectedAttendanceSiri(''); }}
                       className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       <option value="">-- Sila Pilih Program --</option>
@@ -631,6 +658,19 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                         </option>
                       ))}
                     </select>
+                    {availableAttendanceSiris.length > 1 && (
+                      <div className="mt-2">
+                        <label className="block text-xs font-bold text-purple-600 uppercase mb-1">Penapis Siri</label>
+                        <select
+                          value={selectedAttendanceSiri}
+                          onChange={(e) => setSelectedAttendanceSiri(e.target.value ? Number(e.target.value) : '')}
+                          className="w-full p-2 border border-purple-200 rounded-lg text-sm bg-purple-50 text-purple-700 font-bold focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="">Semua Siri</option>
+                          {availableAttendanceSiris.map(s => <option key={s} value={s}>Siri {s}</option>)}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   {selectedAttendanceBadgeId ? (
@@ -709,13 +749,14 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                           ) : (
                             <div className="space-y-2 max-h-60 overflow-y-auto">
                               {attendanceStats.scannedSchools.map((s: any, i: number) => {
-                                const record = attendanceRecords.find((r: any) => r.school?.school_code === s.code);
+                                const record = attendanceRecordsFiltered.find((r: any) => r.school?.school_code === s.code);
                                 return (
                                   <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-4 py-2">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
                                       <p className="text-[10px] text-slate-500">
                                         <span className="font-mono">{s.code}</span> · <span className="text-green-700 font-bold">{record?.participant_count || 0} peserta</span>
+                                        {(record?.siri || 1) > 1 && <span className="text-purple-600 font-bold"> · Siri {record.siri}</span>}
                                       </p>
                                     </div>
                                     <span className="text-[10px] text-green-600 font-mono">
@@ -779,7 +820,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                           <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
                             <div>
                               <p className="text-xs font-bold text-slate-800">{r.school?.name || '-'}</p>
-                              <p className="text-[10px] text-slate-500">{r.badge?.name || '-'} | {r.participant_count || 0} peserta</p>
+                              <p className="text-[10px] text-slate-500">{r.badge?.name || '-'}{(r.siri || 1) > 1 ? ` (Siri ${r.siri})` : ''} | {r.participant_count || 0} peserta</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] text-green-600 font-mono">

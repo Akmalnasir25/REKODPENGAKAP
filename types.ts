@@ -15,6 +15,7 @@ export interface Participant {
   masalahKesihatanLain?: string;
   shirtSize?: string;
   shirtType?: string;
+  siri?: number;
   remarks: string;
 }
 
@@ -53,6 +54,7 @@ export interface SubmissionData {
   category?: string;
   shirtSize?: string;
   shirtType?: string;
+  siri?: number;
   unit?: string;
   makanan?: string;
   masalahKesihatan?: string;

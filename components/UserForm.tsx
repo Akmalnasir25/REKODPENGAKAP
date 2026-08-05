@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, School, Medal, Users, Plus, Trash2, Save, CheckCircle, ArrowLeft, AlertOctagon, UserCheck, GraduationCap } from 'lucide-react';
+import { Lock, School, Medal, Users, Plus, Trash2, Save, CheckCircle, ArrowLeft, AlertOctagon, UserCheck, GraduationCap, Layers } from 'lucide-react';
 import { LeaderInfo, Participant, BadgeType, UserSession, Badge, School as SchoolType, SubmissionData } from '../types';
 import { APP_VERSION, LOGO_URL, LOCAL_STORAGE_KEYS } from '../constants';
 import { LoadingSpinner } from './ui/LoadingSpinner';
@@ -92,6 +92,9 @@ export const UserForm: React.FC<UserFormProps> = ({
   const thisYear = new Date().getFullYear();
   const [registrationYear, setRegistrationYear] = useState(thisYear);
   const yearOptions = [thisYear, thisYear - 1, thisYear - 2, thisYear - 3];
+  // Siri (program berperingkat) — hanya relevan bila program dipilih aktifkan siri_enabled.
+  const [registrationSiri, setRegistrationSiri] = useState(1);
+  const siriOptions = [1, 2, 3, 4, 5];
 
   // Determine permissions
   const currentSchoolSettings = userSession ? schools.find(s => s.name === userSession.schoolName) : null;
@@ -123,6 +126,11 @@ export const UserForm: React.FC<UserFormProps> = ({
     ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
      (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
   const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
+  const siriEnabled = !!selectedProgramSetting?.siriEnabled;
+  // Reset ke Siri 1 bila tukar ke program yang tak aktifkan siri, supaya tak tersalah simpan siri lama.
+  useEffect(() => {
+    if (!siriEnabled) setRegistrationSiri(1);
+  }, [siriEnabled]);
   const filteredBadges = (badgeTypes || []).filter((badge: Badge) => {
     const scope = badge.scope || 'daerah';
     if (scope === 'daerah') {
@@ -300,10 +308,11 @@ export const UserForm: React.FC<UserFormProps> = ({
 
     setSubmitting(true);
     try {
-        // Split allPeople by role
-        const participants = allPeople.filter(p => (p as any).role === 'PESERTA' && p.name.trim());
-        const assistants = allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN') && p.name.trim());
-        const examiners = allPeople.filter(p => (p as any).role === 'PENGUJI' && p.name.trim());
+        // Split allPeople by role; tag siri (bila program aktifkan) untuk semua peserta dalam borang ini.
+        const withSiri = (list: typeof allPeople) => siriEnabled ? list.map(p => ({ ...p, siri: registrationSiri })) : list;
+        const participants = withSiri(allPeople.filter(p => (p as any).role === 'PESERTA' && p.name.trim()));
+        const assistants = withSiri(allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN') && p.name.trim()));
+        const examiners = withSiri(allPeople.filter(p => (p as any).role === 'PENGUJI' && p.name.trim()));
         // customDate = tarikh tahun kohort dipilih (membolehkan pendaftaran backdated).
         const cohortDate = `${registrationYear}-01-01`;
         const result = await submitRegistration(scriptUrl, leaderInfo, participants, assistants, examiners, cohortDate);
@@ -547,6 +556,22 @@ export const UserForm: React.FC<UserFormProps> = ({
                             <p className="text-amber-600 text-xs mt-1 font-bold">⚠️ Anda mendaftar untuk tahun lampau {registrationYear}. Data akan direkod di bawah kohort {registrationYear}.</p>
                         )}
                     </div>
+
+                    {siriEnabled && (
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1 flex items-center gap-2"><Layers size={16}/> Siri</label>
+                        <select
+                            className="w-full p-3 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400 outline-none transition"
+                            value={registrationSiri}
+                            onChange={e => setRegistrationSiri(Number(e.target.value))}
+                        >
+                            {siriOptions.map(s => (
+                                <option key={s} value={s}>Siri {s}</option>
+                            ))}
+                        </select>
+                        <p className="text-gray-400 text-xs mt-1">Program ini dijalankan berperingkat. Pilih siri yang berkenaan untuk semua peserta dalam borang ini.</p>
+                    </div>
+                    )}
                 </div>
             </div>
 

@@ -200,6 +200,7 @@ export const fetchCloudData = async (
         category: p.category || '',
         shirtSize: p.shirt_size || '',
         shirtType: p.shirt_type || '',
+        siri: p.siri || 1,
         unit: p.unit || '',
         makanan: p.makanan || '',
         masalahKesihatan: p.masalah_kesihatan || '',
@@ -332,6 +333,7 @@ const createSubmissionWithPeople = async (
       category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
       shirt_size: (p as any).shirtSize || null,
       shirt_type: (p as any).shirtType || null,
+      siri: (p as any).siri || 1,
       unit: (p as any).unit || (isPeserta ? 'Perdana' : null),
       makanan: (p as any).makanan || (isPeserta ? 'Biasa' : null),
       masalah_kesihatan: (p as any).masalahKesihatan || (isPeserta ? 'Tiada' : null),
@@ -405,7 +407,7 @@ export const bulkSubmitRegistration = async (
     badgeType: string;
     year: number;
     role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
-    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string; }>;
+    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; siri?: number; remarks?: string; }>;
   },
   _csrfToken?: string
 ): Promise<ApiResponse> => {
@@ -436,6 +438,7 @@ export const bulkSubmitRegistration = async (
         makanan: isPeserta ? (r.makanan || 'Biasa') : '',
         masalahKesihatan: isPeserta ? (r.masalahKesihatan || 'Tiada') : '',
         masalahKesihatanLain: isPeserta ? (r.masalahKesihatanLain || '') : '',
+        siri: r.siri || 1,
         remarks: r.remarks || '',
         role,
       };
@@ -954,23 +957,25 @@ export const loginDeveloper = async (_url: string, _username: string, _password:
   return { status: 'error', message: 'Guna loginAdminSupabase dari supabaseAuth.ts dengan role developer.' };
 };
 
-export const recordAttendanceVerification = async (record: { schoolCode: string; badge: string; year: number; participantCount: number }): Promise<ApiResponse> => {
+export const recordAttendanceVerification = async (record: { schoolCode: string; badge: string; year: number; participantCount: number; siri?: number }): Promise<ApiResponse> => {
   try {
     const school = await getSchoolByCodeOrName(record.schoolCode);
     if (!school) return { status: 'error', message: 'Sekolah tidak dijumpai.' };
     const badge = await getBadgeByName(record.badge);
     const { data: { user } } = await supabase.auth.getUser();
-    
-    // Check for duplicate (school + badge + year)
+    const siri = record.siri || 1;
+
+    // Check for duplicate (school + badge + year + siri)
     const { count } = await supabase
       .from('attendance_verifications')
       .select('id', { count: 'exact', head: true })
       .eq('school_id', school.id)
       .eq('badge_id', badge.id)
-      .eq('year', record.year);
-      
+      .eq('year', record.year)
+      .eq('siri', siri);
+
     if (count && count > 0) {
-      return { status: 'error', message: `Sekolah ini telah disahkan untuk program ini pada tahun ${record.year}.` };
+      return { status: 'error', message: `Sekolah ini telah disahkan untuk program ini${siri > 1 ? ` (Siri ${siri})` : ''} pada tahun ${record.year}.` };
     }
 
     const { error } = await supabase.from('attendance_verifications').insert({
@@ -979,6 +984,7 @@ export const recordAttendanceVerification = async (record: { schoolCode: string;
       year: record.year,
       verified_by: user?.id || null,
       participant_count: record.participantCount,
+      siri,
       source: 'qr_school_scan',
     });
     if (error) throw error;
@@ -1251,7 +1257,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; shirtType?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -1267,6 +1273,7 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.category !== undefined) updateData.category = updates.category || null;
     if (updates.shirtSize !== undefined) updateData.shirt_size = updates.shirtSize || null;
     if (updates.shirtType !== undefined) updateData.shirt_type = updates.shirtType || null;
+    if (updates.siri !== undefined) updateData.siri = updates.siri || 1;
     if (updates.unit !== undefined) updateData.unit = updates.unit || null;
     if (updates.makanan !== undefined) updateData.makanan = updates.makanan || null;
     if (updates.masalahKesihatan !== undefined) updateData.masalah_kesihatan = updates.masalahKesihatan || null;
@@ -1284,6 +1291,19 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     return { status: 'success', message: 'Rekod berjaya dikemaskini.' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal kemaskini rekod.' };
+  }
+};
+
+// Tandakan siri (pukal) untuk senarai peserta sedia ada — cth "Set Siri 2".
+// Rujuk docs/rancangan-siri.md #4 (laluan "Tandakan sedia ada").
+export const setParticipantsSiri = async (personIds: string[], siri: number): Promise<ApiResponse> => {
+  try {
+    if (!personIds.length) return { status: 'error', message: 'Tiada peserta dipilih.' };
+    const { error } = await supabase.from('submission_people').update({ siri }).in('id', personIds);
+    if (error) throw error;
+    return { status: 'success', message: `${personIds.length} peserta ditandakan Siri ${siri}.` };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal tandakan siri.' };
   }
 };
 
@@ -1590,6 +1610,7 @@ export interface ProgramSetting {
   feePemimpin: number | null;
   feePenolong: number | null;
   shirtEnabled: boolean;
+  siriEnabled: boolean;
 }
 
 // Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
@@ -1599,7 +1620,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled,
+        year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1622,6 +1643,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         feePemimpin: r.fee_pemimpin !== null && r.fee_pemimpin !== undefined ? Number(r.fee_pemimpin) : null,
         feePenolong: r.fee_penolong !== null && r.fee_penolong !== undefined ? Number(r.fee_penolong) : null,
         shirtEnabled: !!r.shirt_enabled,
+        siriEnabled: !!r.siri_enabled,
       };
     });
   } catch {
@@ -1640,6 +1662,7 @@ export interface UpsertProgramSettingInput {
   feePemimpin: number | null;
   feePenolong: number | null;
   shirtEnabled: boolean;
+  siriEnabled: boolean;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
@@ -1664,6 +1687,7 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       fee_pemimpin: input.paymentEnabled ? input.feePemimpin : null,
       fee_penolong: input.paymentEnabled ? input.feePenolong : null,
       shirt_enabled: input.shirtEnabled,
+      siri_enabled: input.siriEnabled,
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
     };

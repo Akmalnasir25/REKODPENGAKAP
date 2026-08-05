@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
-import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown, MapPin, Wallet } from 'lucide-react';
+import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown, MapPin, Wallet, Layers } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 
@@ -11,7 +11,7 @@ const getSubmissionYear = (value?: string | null) => {
   const year = parsed.getFullYear();
   return Number.isFinite(year) ? year : null;
 };
-import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields } from '../services/supabaseApi';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
 import { ExportButton } from './ui/ExportButton';
@@ -57,6 +57,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   useDeadlineChecker(badges);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
+  const [selectedSiriFilter, setSelectedSiriFilter] = useState<number | ''>('');
   
   // Views
   const [showHistoryView, setShowHistoryView] = useState(false);
@@ -101,6 +102,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [selectedImportCandidates, setSelectedImportCandidates] = useState<string[]>([]);
   const [importNewIds, setImportNewIds] = useState<Record<string, string>>({});
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
+  // Siri sasaran (bila program target aktifkan siri) — rujuk docs/rancangan-siri.md #4
+  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
+  const [importTargetSiri, setImportTargetSiri] = useState(1);
+  useEffect(() => { getProgramSettings(selectedYear).then(setProgramSettings); }, [selectedYear]);
 
   // Password State
   const [oldPassword, setOldPassword] = useState('');
@@ -118,6 +123,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Bulk delete state
   const [selectedForDelete, setSelectedForDelete] = useState<Set<number>>(new Set());
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+  const [isSettingSiri, setIsSettingSiri] = useState(false);
+  const [bulkSiriTarget, setBulkSiriTarget] = useState(1);
 
   // Edit participant state
   const [editingRow, setEditingRow] = useState<number | null>(null);
@@ -263,6 +270,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     if (selectedBadgeFilter) {
         data = data.filter(item => item.badge === selectedBadgeFilter);
     }
+    if (selectedSiriFilter !== '') {
+        data = data.filter(item => (item.siri || 1) === selectedSiriFilter);
+    }
     if (searchQuery) {
         const lowerQuery = searchQuery.toLowerCase();
         data = data.filter(item => 
@@ -288,7 +298,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         if (ra !== rb) return ra - rb;
         return (a.student || '').localeCompare(b.student || '');
     });
-  }, [myData, searchQuery, selectedBadgeFilter]);
+  }, [myData, searchQuery, selectedBadgeFilter, selectedSiriFilter]);
 
   // Compute filtered stats (based on badge filter + search)
   const filteredStats = useMemo(() => {
@@ -359,6 +369,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const match = Object.entries(progressionMap).find(([, source]) => sourceBadge.toLowerCase().includes(source.toLowerCase()));
       return match ? match[0] : '';
   };
+
+  // Siri diaktifkan untuk program TARGET import ini? (ikut skop badge target + tahun sasaran)
+  const importTargetSiriEnabled = useMemo(() => {
+      const targetBadgeName = getImportTargetBadge(importSourceBadge);
+      if (!targetBadgeName) return false;
+      const targetBadge = badges.find(b => b.name === targetBadgeName);
+      if (!targetBadge) return false;
+      const scope = targetBadge.scope || 'daerah';
+      return programSettings.some(s =>
+          s.badgeName === targetBadgeName && s.year === selectedYear &&
+          ((scope === 'negeri' && s.negeriCode === targetBadge.negeriCode) ||
+           (scope === 'daerah' && s.daerahCode === targetBadge.daerahCode)) &&
+          s.siriEnabled);
+  }, [importSourceBadge, badges, programSettings, selectedYear]);
+  useEffect(() => { if (!importTargetSiriEnabled) setImportTargetSiri(1); }, [importTargetSiriEnabled]);
 
   // --- IMPORT / MIGRATION LOGIC (USER SIDE) ---
   const importCandidates = useMemo(() => {
@@ -604,6 +629,34 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     } catch (e) { alert('Ralat server.'); } finally { setIsDeletingBulk(false); }
   };
 
+  // Program mana yang aktifkan siri untuk tahun dipapar — kawal keterlihatan aksi "Set Siri" (pukal).
+  const siriEnabledBadgeNames = useMemo(() => {
+    const set = new Set<string>();
+    programSettings.forEach(s => { if (s.year === selectedYear && s.siriEnabled) set.add(s.badgeName); });
+    return set;
+  }, [programSettings, selectedYear]);
+
+  const handleBulkSetSiri = async (siri: number) => {
+    if (selectedForDelete.size === 0) return;
+    const selItems = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean);
+    const eligible = selItems.filter(d => siriEnabledBadgeNames.has(d.badge));
+    const skipped = selItems.length - eligible.length;
+    if (eligible.length === 0) { alert('Tiada peserta dipilih yang program-nya aktifkan Siri.'); return; }
+    const personIds = eligible.map(d => d.participantId).filter((id): id is string => !!id);
+    if (!confirm(`Tandakan ${personIds.length} peserta sebagai Siri ${siri}?${skipped > 0 ? `\n(${skipped} peserta lain diabaikan kerana program mereka tak aktifkan Siri.)` : ''}`)) return;
+    setIsSettingSiri(true);
+    try {
+      const res = await setParticipantsSiri(personIds, siri);
+      if (res.status === 'success') {
+        alert(res.message || 'Berjaya ditandakan.');
+        setSelectedForDelete(new Set());
+        onRefresh();
+      } else {
+        alert('Gagal: ' + (res.message || 'Ralat tidak diketahui.'));
+      }
+    } catch (e) { alert('Ralat server.'); } finally { setIsSettingSiri(false); }
+  };
+
   // Edit participant handlers
   const handleEditRow = (item: SubmissionData, index: number) => {
     setEditingRow(index);
@@ -721,6 +774,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           role: importRole,
           category: c.category || undefined,
           unit: c.unit || undefined,
+          siri: importTargetSiriEnabled ? importTargetSiri : 1,
           remarks: `[IMPORT NAIK DARI ${importSourceBadge} ${importSourceYear}] ID baru diisi semasa import`,
       }));
 
@@ -1379,10 +1433,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                         <p className="text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-1"><Filter size={12}/> Program</p>
-                        <select className="w-full p-1.5 border rounded font-bold text-slate-800 text-sm bg-slate-50" value={selectedBadgeFilter} onChange={(e) => setSelectedBadgeFilter(e.target.value)}>
+                        <select className="w-full p-1.5 border rounded font-bold text-slate-800 text-sm bg-slate-50" value={selectedBadgeFilter} onChange={(e) => { setSelectedBadgeFilter(e.target.value); setSelectedSiriFilter(''); }}>
                             <option value="">Semua Program</option>
                             {availableBadges.map((b, i) => <option key={i} value={b}>{b}</option>)}
                         </select>
+                        {selectedBadgeFilter && siriEnabledBadgeNames.has(selectedBadgeFilter) && (
+                            <select className="w-full p-1.5 border rounded font-bold text-purple-700 text-xs bg-purple-50 mt-1.5" value={selectedSiriFilter} onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')}>
+                                <option value="">Semua Siri</option>
+                                {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                            </select>
+                        )}
                     </div>
 
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 col-span-1 md:col-span-2 grid grid-cols-3 divide-x divide-gray-100">
@@ -1491,11 +1551,24 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     <div className="overflow-x-auto">
                         {/* Bulk delete toolbar */}
                         {selectedForDelete.size > 0 && (
-                          <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between">
+                          <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between flex-wrap gap-2">
                             <span className="text-xs font-bold text-red-700">{selectedForDelete.size} rekod dipilih</span>
-                            <button onClick={handleBulkDelete} disabled={isDeletingBulk} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-700 disabled:opacity-50">
-                              {isDeletingBulk ? <LoadingSpinner size="sm" color="border-white" /> : <Trash2 size={12} />} Padam Dipilih
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {siriEnabledBadgeNames.size > 0 && (
+                                <div className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
+                                  <Layers size={12} className="text-purple-600" />
+                                  <select value={bulkSiriTarget} onChange={(e) => setBulkSiriTarget(Number(e.target.value))} className="bg-transparent text-xs font-bold text-purple-700 outline-none">
+                                    {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                  </select>
+                                  <button onClick={() => handleBulkSetSiri(bulkSiriTarget)} disabled={isSettingSiri} className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 disabled:opacity-50">
+                                    {isSettingSiri ? <LoadingSpinner size="sm" color="border-white" /> : `Set Siri ${bulkSiriTarget}`}
+                                  </button>
+                                </div>
+                              )}
+                              <button onClick={handleBulkDelete} disabled={isDeletingBulk} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-red-700 disabled:opacity-50">
+                                {isDeletingBulk ? <LoadingSpinner size="sm" color="border-white" /> : <Trash2 size={12} />} Padam Dipilih
+                              </button>
+                            </div>
                           </div>
                         )}
                         <table className="w-full text-sm text-left">
@@ -1771,6 +1844,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Target</div>
                         <div className="bg-white border rounded px-3 py-2 text-gray-700 text-xs uppercase font-bold">{getImportTargetBadge(importSourceBadge) || '-'}</div>
                     </div>
+                    {importTargetSiriEnabled && (
+                    <div>
+                        <div className="font-bold text-gray-700 text-xs uppercase mb-1">Siri Sasaran</div>
+                        <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importTargetSiri} onChange={(e) => setImportTargetSiri(Number(e.target.value))}>
+                            {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                        </select>
+                    </div>
+                    )}
                 </div>
 
                 <p className="text-xs text-gray-500 italic mb-3">Import dilakukan mengikut <b>satu peranan</b> setiap kali. Untuk bawa masuk peranan lain (cth Pemimpin/Penguji), ulang proses ini & tukar pilihan <b>Peranan</b>.</p>

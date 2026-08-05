@@ -1,7 +1,8 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, School, Badge, UserProfile } from '../types';
-import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin, X } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin, X, Layers } from 'lucide-react';
+import { getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { ProgramSummaryView } from './ProgramSummaryView';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { PDFExportButton } from './ui/PDFExportButton';
@@ -31,7 +32,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
+  const [selectedSiriFilter, setSelectedSiriFilter] = useState<number | ''>('');
   const [selectedSchoolFilter, setSelectedSchoolFilter] = useState(''); // '' = semua sekolah
+
+  // Program mana aktifkan siri (rujuk docs/rancangan-siri.md) — kawal keterlihatan penapis Siri.
+  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
+  useEffect(() => { getProgramSettings(selectedYear).then(setProgramSettings); }, [selectedYear]);
+  const siriEnabledBadgeNames = useMemo(() => {
+    const set = new Set<string>();
+    programSettings.forEach(s => { if (s.siriEnabled) set.add(s.badgeName); });
+    return set;
+  }, [programSettings]);
   const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [showMakananDetail, setShowMakananDetail] = useState(false);
@@ -83,8 +94,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
           safeGetYear(d.date) === selectedYear
           && !(d as any).isWithdrawn
           && (!schoolQuery || String(d.school || '').toLowerCase().includes(schoolQuery))
+          && (selectedSiriFilter === '' || (d.siri || 1) === selectedSiriFilter)
       );
-  }, [submittedData, selectedYear, selectedSchoolFilter]);
+  }, [submittedData, selectedYear, selectedSchoolFilter, selectedSiriFilter]);
 
   // Senarai sekolah untuk dropdown filter (dari data yang dihantar, ikut abjad)
   const schoolFilterOptions = useMemo(() => {
@@ -548,13 +560,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                     <select
                         className="p-2 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full md:w-auto"
                         value={selectedBadgeFilter}
-                        onChange={(e) => setSelectedBadgeFilter(e.target.value)}
+                        onChange={(e) => { setSelectedBadgeFilter(e.target.value); setSelectedSiriFilter(''); }}
                     >
                         <option value="">Semua Program</option>
                         {availableBadges.map((b, i) => (
                             <option key={i} value={b}>{b}</option>
                         ))}
                     </select>
+                    {selectedBadgeFilter && siriEnabledBadgeNames.has(selectedBadgeFilter) && (
+                        <div className="flex items-center gap-1">
+                            <Layers size={14} className="text-purple-500" />
+                            <select
+                                className="p-2 border rounded-lg text-purple-700 outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50 text-sm font-bold w-full md:w-auto"
+                                value={selectedSiriFilter}
+                                onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')}
+                                title="Penapis Siri"
+                            >
+                                <option value="">Semua Siri</option>
+                                {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 <div className="w-px h-8 bg-gray-200 hidden md:block"></div>

@@ -25,6 +25,7 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProgram, setSelectedProgram] = useState('ALL');
   const [selectedYear, setSelectedYear] = useState('ALL');
+  const [selectedSiri, setSelectedSiri] = useState('ALL');
   const currentYear = new Date().getFullYear();
 
   // 1. FILTER DATA
@@ -113,6 +114,16 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
       return displayYears;
   }, [sourceData, currentYear]);
 
+  // Siri yang wujud dalam program dipilih (kawal keterlihatan penapis Siri)
+  const availableSiris = useMemo(() => {
+      const set = new Set<number>();
+      sourceData.forEach(item => {
+          if (selectedProgram !== 'ALL' && item.badge !== selectedProgram) return;
+          set.add(item.siri || 1);
+      });
+      return Array.from(set).sort((a, b) => a - b);
+  }, [sourceData, selectedProgram]);
+
   const filteredSourceData = useMemo(() => {
       return sourceData.filter(item => {
           const itemYear = safeGetYear(item.date);
@@ -121,9 +132,10 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
           const matchesYear = selectedYear === 'ALL'
               ? availableYears.includes(itemYear)
               : String(itemYear) === selectedYear;
-          return matchesProgram && matchesYear;
+          const matchesSiri = selectedSiri === 'ALL' || (item.siri || 1) === Number(selectedSiri);
+          return matchesProgram && matchesYear && matchesSiri;
       });
-  }, [sourceData, selectedProgram, selectedYear, availableYears]);
+  }, [sourceData, selectedProgram, selectedYear, selectedSiri, availableYears]);
 
   const displayedYears = useMemo(() => {
       if (selectedYear !== 'ALL') return [Number(selectedYear)];
@@ -242,6 +254,20 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                             <option key={year} value={String(year)}>{year}</option>
                         ))}
                     </select>
+
+                    {availableSiris.length > 1 && (
+                        <select
+                            className="min-w-[110px] p-2 border rounded-lg text-sm bg-purple-50 text-purple-700 font-bold focus:bg-white focus:ring-1 focus:ring-purple-500 outline-none transition"
+                            value={selectedSiri}
+                            onChange={(e) => setSelectedSiri(e.target.value)}
+                            title="Filter mengikut siri"
+                        >
+                            <option value="ALL">Semua Siri</option>
+                            {availableSiris.map(s => (
+                                <option key={s} value={String(s)}>Siri {s}</option>
+                            ))}
+                        </select>
+                    )}
                 </div>
                 
                 <button

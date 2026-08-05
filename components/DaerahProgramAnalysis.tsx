@@ -33,6 +33,7 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
 }) => {
   const currentYear = new Date().getFullYear();
   const [yearFilter, setYearFilter] = useState<'ALL' | number>(currentYear);
+  const [siriFilter, setSiriFilter] = useState<'ALL' | number>('ALL');
   const [expandedDaerah, setExpandedDaerah] = useState<string | null>(null);
 
   // Bersihkan data: keluarkan system markers, hanya rekod sah
@@ -63,10 +64,18 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
     return Array.from(years).sort((a, b) => b - a);
   }, [cleanData]);
 
-  // Apply year filter
+  // Apply year filter + siri filter (rujuk docs/rancangan-siri.md #6 — statistik tepat setiap siri)
   const yearFilteredData = useMemo(() => {
-    if (yearFilter === 'ALL') return cleanData;
-    return cleanData.filter(d => safeYear(d.date) === yearFilter);
+    let result = yearFilter === 'ALL' ? cleanData : cleanData.filter(d => safeYear(d.date) === yearFilter);
+    if (siriFilter !== 'ALL') result = result.filter(d => (d.siri || 1) === siriFilter);
+    return result;
+  }, [cleanData, yearFilter, siriFilter]);
+
+  // Siri yang wujud dalam data semasa (kawal keterlihatan penapis Siri)
+  const availableSiris = useMemo(() => {
+    const set = new Set<number>();
+    (yearFilter === 'ALL' ? cleanData : cleanData.filter(d => safeYear(d.date) === yearFilter)).forEach(d => set.add(d.siri || 1));
+    return Array.from(set).sort((a, b) => a - b);
   }, [cleanData, yearFilter]);
 
   // Senarai daerah untuk dianalisis (jika selectedDaerah !== ALL, hanya daerah itu)
@@ -300,6 +309,19 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
                 {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
+            {availableSiris.length > 1 && (
+              <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-full pl-3 pr-1.5 py-1">
+                <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider">Siri</span>
+                <select
+                  value={siriFilter}
+                  onChange={(e) => setSiriFilter(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
+                  className="bg-white border border-purple-200 rounded-full px-3 py-1.5 text-xs font-bold text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                >
+                  <option value="ALL">Semua Siri</option>
+                  {availableSiris.map(s => <option key={s} value={s}>Siri {s}</option>)}
+                </select>
+              </div>
+            )}
             <button
               onClick={handleExportMatrix}
               disabled={matrix.length === 0}

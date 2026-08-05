@@ -370,7 +370,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       return match ? match[0] : '';
   };
 
-  // Siri diaktifkan untuk program TARGET import ini? (ikut skop badge target + tahun sasaran)
+  // Siri diaktifkan untuk program TARGET import ini? Padankan ikut skop SEKOLAH (bukan badge.negeriCode/
+  // daerahCode — medan tu selalunya kosong pada badge yang tak eksplisit di-scope, jadi padanan tu gagal
+  // walaupun program_settings memang wujud untuk daerah/negeri sekolah ini).
   const importTargetSiriSetting = useMemo(() => {
       const targetBadgeName = getImportTargetBadge(importSourceBadge);
       if (!targetBadgeName) return undefined;
@@ -379,10 +381,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const scope = targetBadge.scope || 'daerah';
       return programSettings.find(s =>
           s.badgeName === targetBadgeName && s.year === selectedYear &&
-          ((scope === 'negeri' && s.negeriCode === targetBadge.negeriCode) ||
-           (scope === 'daerah' && s.daerahCode === targetBadge.daerahCode)) &&
+          ((scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
+           (scope === 'daerah' && s.daerahCode === schoolDaerahCode)) &&
           s.siriEnabled);
-  }, [importSourceBadge, badges, programSettings, selectedYear]);
+  }, [importSourceBadge, badges, programSettings, selectedYear, schoolNegeriCode, schoolDaerahCode]);
   const importTargetSiriEnabled = !!importTargetSiriSetting;
   useEffect(() => { if (!importTargetSiriEnabled) setImportTargetSiri(1); }, [importTargetSiriEnabled]);
 

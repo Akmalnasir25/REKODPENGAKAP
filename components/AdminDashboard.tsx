@@ -43,6 +43,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     programSettings.forEach(s => { if (s.siriEnabled) set.add(s.badgeName); });
     return set;
   }, [programSettings]);
+  const maxSiriForBadge = (badgeName: string): number => {
+    const s = programSettings.find(p => p.badgeName === badgeName && p.siriEnabled);
+    return s?.maxSiri || 5;
+  };
   const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [showMakananDetail, setShowMakananDetail] = useState(false);
@@ -577,7 +581,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                 title="Penapis Siri"
                             >
                                 <option value="">Semua Siri</option>
-                                {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                {Array.from({ length: maxSiriForBadge(selectedBadgeFilter) }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                             </select>
                         </div>
                     )}

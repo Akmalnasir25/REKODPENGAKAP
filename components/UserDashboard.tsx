@@ -371,18 +371,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   };
 
   // Siri diaktifkan untuk program TARGET import ini? (ikut skop badge target + tahun sasaran)
-  const importTargetSiriEnabled = useMemo(() => {
+  const importTargetSiriSetting = useMemo(() => {
       const targetBadgeName = getImportTargetBadge(importSourceBadge);
-      if (!targetBadgeName) return false;
+      if (!targetBadgeName) return undefined;
       const targetBadge = badges.find(b => b.name === targetBadgeName);
-      if (!targetBadge) return false;
+      if (!targetBadge) return undefined;
       const scope = targetBadge.scope || 'daerah';
-      return programSettings.some(s =>
+      return programSettings.find(s =>
           s.badgeName === targetBadgeName && s.year === selectedYear &&
           ((scope === 'negeri' && s.negeriCode === targetBadge.negeriCode) ||
            (scope === 'daerah' && s.daerahCode === targetBadge.daerahCode)) &&
           s.siriEnabled);
   }, [importSourceBadge, badges, programSettings, selectedYear]);
+  const importTargetSiriEnabled = !!importTargetSiriSetting;
   useEffect(() => { if (!importTargetSiriEnabled) setImportTargetSiri(1); }, [importTargetSiriEnabled]);
 
   // --- IMPORT / MIGRATION LOGIC (USER SIDE) ---
@@ -634,6 +635,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     const set = new Set<string>();
     programSettings.forEach(s => { if (s.year === selectedYear && s.siriEnabled) set.add(s.badgeName); });
     return set;
+  }, [programSettings, selectedYear]);
+
+  // Had bilangan siri ikut program (default 5 jika tiada tetapan/badge kosong).
+  const maxSiriForBadge = (badgeName: string): number => {
+    const s = programSettings.find(p => p.badgeName === badgeName && p.year === selectedYear && p.siriEnabled);
+    return s?.maxSiri || 5;
+  };
+  // Had tertinggi merentas semua program aktif siri — digunakan bila pemilihan pukal merangkumi >1 program.
+  const maxSiriAcrossEnabled = useMemo(() => {
+    let max = 1;
+    programSettings.forEach(s => { if (s.year === selectedYear && s.siriEnabled) max = Math.max(max, s.maxSiri || 5); });
+    return max;
   }, [programSettings, selectedYear]);
 
   const handleBulkSetSiri = async (siri: number) => {
@@ -1440,7 +1453,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         {selectedBadgeFilter && siriEnabledBadgeNames.has(selectedBadgeFilter) && (
                             <select className="w-full p-1.5 border rounded font-bold text-purple-700 text-xs bg-purple-50 mt-1.5" value={selectedSiriFilter} onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')}>
                                 <option value="">Semua Siri</option>
-                                {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                {Array.from({ length: maxSiriForBadge(selectedBadgeFilter) }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                             </select>
                         )}
                     </div>
@@ -1558,7 +1571,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
                                   <Layers size={12} className="text-purple-600" />
                                   <select value={bulkSiriTarget} onChange={(e) => setBulkSiriTarget(Number(e.target.value))} className="bg-transparent text-xs font-bold text-purple-700 outline-none">
-                                    {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                    {Array.from({ length: maxSiriAcrossEnabled }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                                   </select>
                                   <button onClick={() => handleBulkSetSiri(bulkSiriTarget)} disabled={isSettingSiri} className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 disabled:opacity-50">
                                     {isSettingSiri ? <LoadingSpinner size="sm" color="border-white" /> : `Set Siri ${bulkSiriTarget}`}
@@ -1848,7 +1861,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     <div>
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Siri Sasaran</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importTargetSiri} onChange={(e) => setImportTargetSiri(Number(e.target.value))}>
-                            {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                            {Array.from({ length: importTargetSiriSetting?.maxSiri || 5 }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                         </select>
                     </div>
                     )}

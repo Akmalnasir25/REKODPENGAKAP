@@ -40,6 +40,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formFeePenolong, setFormFeePenolong] = useState('');
   const [formShirtEnabled, setFormShirtEnabled] = useState(false);
   const [formSiriEnabled, setFormSiriEnabled] = useState(false);
+  const [formMaxSiri, setFormMaxSiri] = useState(5);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
@@ -68,6 +69,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormFeePenolong(s?.feePenolong != null ? String(s.feePenolong) : '');
     setFormShirtEnabled(s?.shirtEnabled || false);
     setFormSiriEnabled(s?.siriEnabled || false);
+    setFormMaxSiri(s?.maxSiri || 5);
   };
 
   const handleSaveSettings = async () => {
@@ -87,6 +89,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         feePenolong: formFeePenolong.trim() ? Number(formFeePenolong) : null,
         shirtEnabled: formShirtEnabled,
         siriEnabled: formSiriEnabled,
+        maxSiri: formMaxSiri,
       });
       if (res.status === 'success') {
         await loadSettings();
@@ -484,6 +487,17 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                   <input type="checkbox" checked={formSiriEnabled} onChange={(e) => setFormSiriEnabled(e.target.checked)} className="w-5 h-5 accent-purple-600" />
                 </label>
                 <p className="text-[11px] text-gray-400 mt-1">Jika aktif, sekolah boleh tandakan peserta ikut siri (Siri 1, Siri 2, dst) — program ini dijalankan berperingkat. Program tetap sama, siri hanya mengasingkan paparan &amp; statistik.</p>
+                {formSiriEnabled && (
+                  <div className="mt-3">
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">Bilangan Siri Maksimum (cth: 3 = Siri 1, 2, 3 sahaja)</label>
+                    <input
+                      type="number" min="1" max="20" step="1"
+                      value={formMaxSiri}
+                      onChange={(e) => setFormMaxSiri(Math.min(Math.max(Number(e.target.value) || 1, 1), 20))}
+                      className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-400 outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 pt-1">

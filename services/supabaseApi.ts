@@ -1611,6 +1611,7 @@ export interface ProgramSetting {
   feePenolong: number | null;
   shirtEnabled: boolean;
   siriEnabled: boolean;
+  maxSiri: number;
 }
 
 // Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
@@ -1620,7 +1621,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled,
+        year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1644,6 +1645,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         feePenolong: r.fee_penolong !== null && r.fee_penolong !== undefined ? Number(r.fee_penolong) : null,
         shirtEnabled: !!r.shirt_enabled,
         siriEnabled: !!r.siri_enabled,
+        maxSiri: r.max_siri || 5,
       };
     });
   } catch {
@@ -1663,6 +1665,7 @@ export interface UpsertProgramSettingInput {
   feePenolong: number | null;
   shirtEnabled: boolean;
   siriEnabled: boolean;
+  maxSiri: number;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
@@ -1688,6 +1691,7 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       fee_penolong: input.paymentEnabled ? input.feePenolong : null,
       shirt_enabled: input.shirtEnabled,
       siri_enabled: input.siriEnabled,
+      max_siri: input.siriEnabled ? Math.min(Math.max(input.maxSiri || 5, 1), 20) : 5,
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
     };

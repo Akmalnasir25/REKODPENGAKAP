@@ -94,7 +94,6 @@ export const UserForm: React.FC<UserFormProps> = ({
   const yearOptions = [thisYear, thisYear - 1, thisYear - 2, thisYear - 3];
   // Siri (program berperingkat) — hanya relevan bila program dipilih aktifkan siri_enabled.
   const [registrationSiri, setRegistrationSiri] = useState(1);
-  const siriOptions = [1, 2, 3, 4, 5];
 
   // Determine permissions
   const currentSchoolSettings = userSession ? schools.find(s => s.name === userSession.schoolName) : null;
@@ -127,10 +126,11 @@ export const UserForm: React.FC<UserFormProps> = ({
      (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
   const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
   const siriEnabled = !!selectedProgramSetting?.siriEnabled;
-  // Reset ke Siri 1 bila tukar ke program yang tak aktifkan siri, supaya tak tersalah simpan siri lama.
+  const siriOptions = Array.from({ length: selectedProgramSetting?.maxSiri || 5 }, (_, i) => i + 1);
+  // Reset ke Siri 1 bila tukar ke program yang tak aktifkan siri, atau siri terpilih melebihi had program baru.
   useEffect(() => {
-    if (!siriEnabled) setRegistrationSiri(1);
-  }, [siriEnabled]);
+    if (!siriEnabled || registrationSiri > siriOptions.length) setRegistrationSiri(1);
+  }, [siriEnabled, siriOptions.length]);
   const filteredBadges = (badgeTypes || []).filter((badge: Badge) => {
     const scope = badge.scope || 'daerah';
     if (scope === 'daerah') {

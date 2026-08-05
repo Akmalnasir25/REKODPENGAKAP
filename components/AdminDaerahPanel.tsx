@@ -10,7 +10,7 @@ import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { PengesahanTab } from './PengesahanTab';
 import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
-import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools } from '../services/supabaseApi';
+import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { uploadLogo, getLogoUrl } from '../services/logoService';
@@ -55,6 +55,8 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   const [selectedAttendanceBadgeId, setSelectedAttendanceBadgeId] = useState<string>('');
   const [selectedAttendanceSiri, setSelectedAttendanceSiri] = useState<number | ''>('');
   const [attendanceScanSiri, setAttendanceScanSiri] = useState(1);
+  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
+  useEffect(() => { getProgramSettings(new Date().getFullYear()).then(setProgramSettings); }, []);
   const [registeredSchools, setRegisteredSchools] = useState<any[]>([]);
   const [daerahLogoUrl, setDaerahLogoUrl] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -67,6 +69,13 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
       return false; // District admin only sees district-scoped badges
     });
   }, [badges, daerahCode]);
+
+  const scanTargetMaxSiri = useMemo(() => {
+    const badge = attendanceBadges.find((b: any) => b.id === selectedAttendanceBadgeId);
+    const s = programSettings.find(p => p.badgeName === badge?.name && p.siriEnabled);
+    return s?.maxSiri || 5;
+  }, [attendanceBadges, selectedAttendanceBadgeId, programSettings]);
+  useEffect(() => { if (attendanceScanSiri > scanTargetMaxSiri) setAttendanceScanSiri(1); }, [scanTargetMaxSiri]);
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
@@ -612,7 +621,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                       onChange={(e) => setAttendanceScanSiri(Number(e.target.value))}
                       className="p-1.5 border border-slate-200 rounded text-xs font-bold text-purple-700 bg-purple-50"
                     >
-                      {[1, 2, 3, 4, 5].map(s => <option key={s} value={s}>Siri {s}</option>)}
+                      {Array.from({ length: scanTargetMaxSiri }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                     </select>
                     <span className="text-[11px] text-slate-400">(kekalkan Siri 1 jika program tidak berperingkat)</span>
                   </div>

@@ -383,10 +383,10 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                                 className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold border transition ${active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}
                                 title="Tetapan yuran, saiz baju & siri"
                             >
-                                <Wallet size={12} /> Yuran & Baju
+                                <Wallet size={12} /> Yuran / Baju / Siri
                                 {s?.paymentEnabled && <span className="bg-emerald-200 text-emerald-800 px-1 rounded">RM</span>}
                                 {s?.shirtEnabled && <Shirt size={11} />}
-                                {s?.siriEnabled && <Layers size={11} />}
+                                {s?.siriEnabled && <span className="bg-purple-200 text-purple-800 px-1 rounded flex items-center gap-0.5"><Layers size={10} /> Siri</span>}
                             </button>
                         );
                     })()}
@@ -418,7 +418,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setSettingsModalBadge(null); }}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden max-h-[90vh] flex flex-col">
             <div className="bg-emerald-600 px-5 py-4 flex justify-between items-center">
-              <h3 className="font-bold text-white flex items-center gap-2"><Wallet size={16} /> Yuran &amp; Saiz Baju</h3>
+              <h3 className="font-bold text-white flex items-center gap-2"><Wallet size={16} /> Yuran, Saiz Baju &amp; Siri</h3>
               <button onClick={() => setSettingsModalBadge(null)} className="text-white/70 hover:text-white"><X size={18} /></button>
             </div>
             <div className="p-5 space-y-4 overflow-y-auto">

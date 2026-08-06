@@ -23,6 +23,7 @@ Sistem sedia ada ada tetapan **caj/yuran** per program (`program_settings`: fee_
 | 5 | Keterlihatan sebelum disahkan | **Disembunyikan dari statistik rasmi** (macam konsep draf sedia ada), tapi tetap boleh dilihat dalam tab/senarai berasingan ("Belum Bayar" / "Menunggu Semakan") untuk susulan. |
 | 6 | Edit peserta LEPAS bayaran disahkan | **Kena lalui kitaran kunci-buka**: admin "Buka Semula untuk Edit" → keluar statistik automatik → sekolah edit & hantar pengesahan semula → admin semak & sahkan semula → dikunci balik. |
 | 7 | Tarik diri peserta LEPAS bayaran disahkan | **Guna ciri Penarikan Diri sedia ada terus** — TIADA perlu buka kunci/reject bayaran. Automatik keluar dari statistik aktif; bayaran kekal `paid` (refund/kredit diuruskan berasingan oleh admin kalau perlu). |
+| 8 | Bilangan peserta berubah lepas `paid` (via kitaran edit §5.4) | **TIDAK dikira semula automatik.** Bila admin semak permintaan edit, sistem papar rekod bayaran asal (jumlah dibayar, bilangan peserta masa tu, tarikh) bersebelahan dengan bilangan peserta baharu — admin putuskan sendiri (bayaran tambahan/refund/terima beza). Guna rekod `payments` tersimpan (dah disahkan masa bayaran asal via §6.2) — tak perlu panggil API ToyyibPay semula setiap kali, sebab data tu dah sah. Sebab tambahan: kebanyakan gateway kecil Malaysia (termasuk ToyyibPay) **tak sokong refund automatik via API** — refund perlu diuruskan manual, jadi automasi keputusan kewangan di sini memang terhad. |
 
 ---
 
@@ -100,7 +101,8 @@ pending ──[bukti dihantar]──▶ pending_review ──▶  paid  (DIKIRA 
 1. Sekolah cuba edit → sistem tunjuk "Dikunci — hubungi admin" (macam mekanisme kunci sedia ada)
 2. Admin klik **"Buka Semula untuk Edit"** → `payment_status` → `pending_review_amend`, **keluar dari statistik automatik**
 3. Sekolah edit (nama/butiran) → hantar pengesahan semula → `pending_review`
-4. Admin semak perubahan → sahkan → `paid`, dikunci semula, masuk statistik rasmi
+4. Admin semak perubahan — sistem papar **rekod bayaran asal** (jumlah dibayar, bilangan peserta masa bayar, tarikh) **bersebelahan** dengan bilangan peserta baharu selepas edit, supaya beza nampak jelas
+5. Admin putuskan sendiri kalau ada beza (bayaran tambahan/refund/terima beza — di luar sistem, tiada automasi) → sahkan → `paid`, dikunci semula, masuk statistik rasmi
 
 ### 5.5 Tarik diri peserta lepas `paid`
 1. Guna ciri Penarikan Diri **sedia ada terus** (`is_withdrawn`, sebab, nota) — tiada langkah tambahan
@@ -217,10 +219,9 @@ Ni bukan bina dari kosong — banyak boleh *reuse*:
 
 | # | Soalan |
 |---|--------|
-| 1 | Bilangan peserta berubah (tambah/kurang) lepas `paid` melalui kitaran edit — patut jumlah bil dikira semula automatik, atau admin uruskan bayaran tambahan/refund secara manual? |
-| 2 | Refund penuh/sebahagian — proses/rekod macam mana? |
-| 3 | Tempoh sah bukti bayaran belum disemak — perlu auto-expire/reminder? |
-| 4 | Siapa boleh tetapkan kaedah bayaran manual yang dibenarkan (cheque/tunai/pindahan bank) per program — developer sahaja atau admin negeri/daerah juga? |
+| 1 | Refund penuh/sebahagian — proses/rekod macam mana? |
+| 2 | Tempoh sah bukti bayaran belum disemak — perlu auto-expire/reminder? |
+| 3 | Siapa boleh tetapkan kaedah bayaran manual yang dibenarkan (cheque/tunai/pindahan bank) per program — developer sahaja atau admin negeri/daerah juga? |
 
 ---
 
@@ -231,3 +232,4 @@ Ni bukan bina dari kosong — banyak boleh *reuse*:
 3. **Jejak audit penuh** — setiap percubaan bayaran, bukti, pengesahan/penolakan direkod (siapa, bila, kenapa).
 4. **Edit lepas bayar mesti melalui admin** — elak data berubah senyap-senyap lepas duit diterima; tarik diri dikecualikan sebab dah ada mekanisme audit sendiri.
 5. **Reuse dahulu, bina baharu bila perlu** — banyak infrastruktur (attachments, R2, lock/reopen, showDrafts, PengesahanTab) sudah wujud dan sesuai digunakan semula.
+6. **Sistem bantu papar maklumat, bukan automatikkan keputusan kewangan** — bila ada beza jumlah/bilangan peserta (cth lepas edit), sistem papar data berkaitan dengan jelas tapi admin yang putuskan tindakan; elak automasi buta untuk hal kewangan sensitif seperti refund.

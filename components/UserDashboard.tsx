@@ -96,6 +96,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   // Import State
   const [importSourceBadge, setImportSourceBadge] = useState('');
+  // Program target boleh dipilih bebas (bukan lagi terhad kepada rantaian Gangsa->Perak->Emas) —
+  // benarkan bawa peserta ke MANA-MANA program lain, termasuk program yang sama, dalam tahun yang sama
+  // (cth peserta Keris Emas Siri 1 turut sertai Keris Perak Siri 2 pada tahun sama).
+  const [importTargetBadge, setImportTargetBadge] = useState('');
   const [importSourceYear, setImportSourceYear] = useState(selectedYear - 1); // Default to previous year
   // Peranan yg hendak diimport naik. User boleh ulang import utk peranan berbeza (peserta/pemimpin/penolong/penguji).
   const [importRole, setImportRole] = useState<'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI'>('PESERTA');
@@ -365,39 +369,42 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       'Jaya': 'Maju'
   };
 
+  // Hanya cadangan DEFAULT bila Program Asal dipilih — Program Target boleh diubah bebas selepas itu.
   const getImportTargetBadge = (sourceBadge: string) => {
       const match = Object.entries(progressionMap).find(([, source]) => sourceBadge.toLowerCase().includes(source.toLowerCase()));
-      return match ? match[0] : '';
+      return match ? match[0] : sourceBadge; // default: bawa ke program sama (siri berbeza) jika tiada aturan naik taraf
   };
+  useEffect(() => {
+      setImportTargetBadge(getImportTargetBadge(importSourceBadge));
+      setSelectedImportCandidates([]);
+      setImportNewIds({});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importSourceBadge]);
 
   // Siri diaktifkan untuk program TARGET import ini? Padankan ikut skop SEKOLAH (bukan badge.negeriCode/
   // daerahCode — medan tu selalunya kosong pada badge yang tak eksplisit di-scope, jadi padanan tu gagal
   // walaupun program_settings memang wujud untuk daerah/negeri sekolah ini).
   const importTargetSiriSetting = useMemo(() => {
-      const targetBadgeName = getImportTargetBadge(importSourceBadge);
-      if (!targetBadgeName) return undefined;
-      const targetBadge = badges.find(b => b.name === targetBadgeName);
+      if (!importTargetBadge) return undefined;
+      const targetBadge = badges.find(b => b.name === importTargetBadge);
       if (!targetBadge) return undefined;
       const scope = targetBadge.scope || 'daerah';
       return programSettings.find(s =>
-          s.badgeName === targetBadgeName && s.year === selectedYear &&
+          s.badgeName === importTargetBadge && s.year === selectedYear &&
           ((scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
            (scope === 'daerah' && s.daerahCode === schoolDaerahCode)) &&
           s.siriEnabled);
-  }, [importSourceBadge, badges, programSettings, selectedYear, schoolNegeriCode, schoolDaerahCode]);
+  }, [importTargetBadge, badges, programSettings, selectedYear, schoolNegeriCode, schoolDaerahCode]);
   const importTargetSiriEnabled = !!importTargetSiriSetting;
   useEffect(() => { if (!importTargetSiriEnabled) setImportTargetSiri(1); }, [importTargetSiriEnabled]);
 
   // --- IMPORT / MIGRATION LOGIC (USER SIDE) ---
   const importCandidates = useMemo(() => {
-      if (!importSourceBadge) return [];
+      if (!importSourceBadge || !importTargetBadge) return [];
       // Use state importSourceYear instead of calculating from selectedYear
       const sourceYear = importSourceYear;
-      
-      const targetBadge = getImportTargetBadge(importSourceBadge);
-      if (!targetBadge) return [];
 
-      const candidates = allData.filter(d => 
+      const candidates = allData.filter(d =>
           ((d.schoolCode && d.schoolCode === user.schoolCode) || d.school === user.schoolName) &&
           new Date(d.date).getFullYear() === sourceYear &&
           d.badge === importSourceBadge
@@ -410,9 +417,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       });
 
       // Dedup ikut IC HANYA bila IC ada (elak peserta tanpa IC '' terbuang sesama sendiri).
-      const existingIcs = new Set(myData.filter(d => d.badge === targetBadge && d.icNumber).map(d => String(d.icNumber)));
+      // Seseorang tak boleh ada > 1 entri dalam program (badge) yang SAMA pada tahun yang SAMA,
+      // tak kira siri — untuk pindah siri dalam program sama, guna "Set Siri" (kemaskini rekod
+      // sedia ada), bukan Import Naik (yang cipta rekod/ID keahlian baharu).
+      const existingIcs = new Set(
+          myData
+              .filter(d => d.badge === importTargetBadge
+                  && d.icNumber
+                  && new Date(d.date).getFullYear() === selectedYear)
+              .map(d => String(d.icNumber))
+      );
       return filteredByRole.filter(c => !(c.icNumber && existingIcs.has(String(c.icNumber))));
-  }, [allData, user, selectedYear, importSourceBadge, myData, importSourceYear, importRole]);
+  }, [allData, user, selectedYear, importSourceBadge, importTargetBadge, myData, importSourceYear, importRole]);
 
   // --- ARCHIVE DATA (PESERTA SAHAJA) ---
   const myArchiveData = useMemo(() => {
@@ -744,9 +760,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const handleSubmitImport = async () => {
       if(selectedImportCandidates.length === 0) { alert("Sila pilih nama."); return; }
-      
-      const targetBadge = getImportTargetBadge(importSourceBadge);
-      
+      if(!importTargetBadge) { alert("Sila pilih program target."); return; }
+
+      const targetBadge = importTargetBadge;
+
       const badgeConfig = badges.find(b => b.name === targetBadge);
       if (badgeConfig && !badgeConfig.isOpen) { alert(`Pendaftaran '${targetBadge}' ditutup.`); return; }
       
@@ -1833,7 +1850,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     <div>
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Tahun Asal</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importSourceYear} onChange={(e) => { setImportSourceYear(parseInt(e.target.value)); setSelectedImportCandidates([]); setImportNewIds({}); }}>
-                            {availableYears.filter(y => y < selectedYear).map(y => <option key={y} value={y}>{y}</option>)}
+                            {availableYears.filter(y => y <= selectedYear).map(y => <option key={y} value={y}>{y}{y === selectedYear ? ' (Tahun Semasa)' : ''}</option>)}
                         </select>
                     </div>
                     <div>
@@ -1849,15 +1866,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Asal</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs" value={importSourceBadge} onChange={(e) => { setImportSourceBadge(e.target.value); setSelectedImportCandidates([]); setImportNewIds({}); }}>
                             <option value="">-- Pilih --</option>
-                            <option value="Keris Gangsa">Keris Gangsa</option>
-                            <option value="Keris Perak">Keris Perak</option>
-                            <option value="Usaha">Usaha</option>
-                            <option value="Maju">Maju</option>
+                            {scopedBadges.filter(b => b.name !== 'Anugerah Rambu').map((b, i) => (
+                                <option key={i} value={b.name}>{b.name}</option>
+                            ))}
                         </select>
                     </div>
                     <div>
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Target</div>
-                        <div className="bg-white border rounded px-3 py-2 text-gray-700 text-xs uppercase font-bold">{getImportTargetBadge(importSourceBadge) || '-'}</div>
+                        <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importTargetBadge} onChange={(e) => { setImportTargetBadge(e.target.value); setSelectedImportCandidates([]); setImportNewIds({}); }}>
+                            <option value="">-- Pilih --</option>
+                            {scopedBadges.filter(b => b.name !== 'Anugerah Rambu').map((b, i) => (
+                                <option key={i} value={b.name}>{b.name}</option>
+                            ))}
+                        </select>
                     </div>
                     {importTargetSiriEnabled && (
                     <div>
@@ -1871,7 +1892,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
                 <p className="text-xs text-gray-500 italic mb-3">Import dilakukan mengikut <b>satu peranan</b> setiap kali. Untuk bawa masuk peranan lain (cth Pemimpin/Penguji), ulang proses ini & tukar pilihan <b>Peranan</b>.</p>
 
-                {importSourceBadge && (
+                {importSourceBadge && importTargetBadge && (
                     <div className="max-h-96 overflow-y-auto border rounded-lg mb-4">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-100 uppercase text-xs text-gray-600 sticky top-0">
@@ -1896,7 +1917,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         <td className="px-4 py-2"><input disabled={!selected} value={importNewIds[key] || ''} onChange={(e) => setImportNewIds(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }))} placeholder="No Kad Keahlian (wajib)" className="w-full p-2 border rounded text-xs font-mono disabled:bg-gray-100" /></td>
                                     </tr>
                                 )})}
-                                {importCandidates.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-400 italic">Tiada calon.</td></tr>}
+                                {importCandidates.length === 0 && (
+                                    <tr><td colSpan={5} className="text-center py-4 text-gray-400 italic">
+                                        {importSourceBadge === importTargetBadge && importSourceYear === selectedYear
+                                            ? 'Tiada calon — semua peserta di program ini tahun ini sudah didaftarkan. Untuk tukar siri dalam program yang sama, guna aksi "Set Siri" pada senarai peserta, bukan Import Naik.'
+                                            : 'Tiada calon.'}
+                                    </td></tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

@@ -1452,10 +1452,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             <option value="">Semua Program</option>
                             {availableBadges.map((b, i) => <option key={i} value={b}>{b}</option>)}
                         </select>
-                        {selectedBadgeFilter && siriEnabledBadgeNames.has(selectedBadgeFilter) && (
-                            <select className="w-full p-1.5 border rounded font-bold text-purple-700 text-xs bg-purple-50 mt-1.5" value={selectedSiriFilter} onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')}>
+                        {siriEnabledBadgeNames.size > 0 && (
+                            <select className="w-full p-1.5 border rounded font-bold text-purple-700 text-xs bg-purple-50 mt-1.5" value={selectedSiriFilter} onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')} title="Tapis ikut Siri — merentas semua program yang aktifkan Siri jika Program tak dipilih">
                                 <option value="">Semua Siri</option>
-                                {Array.from({ length: maxSiriForBadge(selectedBadgeFilter) }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                {Array.from({ length: selectedBadgeFilter ? maxSiriForBadge(selectedBadgeFilter) : maxSiriAcrossEnabled }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                             </select>
                         )}
                     </div>

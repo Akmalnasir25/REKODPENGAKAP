@@ -47,6 +47,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     const s = programSettings.find(p => p.badgeName === badgeName && p.siriEnabled);
     return s?.maxSiri || 5;
   };
+  // Had tertinggi merentas semua program aktif siri — untuk penapis Siri bila tiada Program dipilih.
+  const maxSiriAcrossEnabled = useMemo(() => {
+    let max = 1;
+    programSettings.forEach(s => { if (s.siriEnabled) max = Math.max(max, s.maxSiri || 5); });
+    return max;
+  }, [programSettings]);
   const [floatModalStudent, setFloatModalStudent] = useState<{ personId: string; studentName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [showMakananDetail, setShowMakananDetail] = useState(false);
@@ -571,17 +577,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                             <option key={i} value={b}>{b}</option>
                         ))}
                     </select>
-                    {selectedBadgeFilter && siriEnabledBadgeNames.has(selectedBadgeFilter) && (
+                    {siriEnabledBadgeNames.size > 0 && (
                         <div className="flex items-center gap-1">
                             <Layers size={14} className="text-purple-500" />
                             <select
                                 className="p-2 border rounded-lg text-purple-700 outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50 text-sm font-bold w-full md:w-auto"
                                 value={selectedSiriFilter}
                                 onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')}
-                                title="Penapis Siri"
+                                title="Tapis ikut Siri — merentas semua program yang aktifkan Siri jika Program tak dipilih"
                             >
                                 <option value="">Semua Siri</option>
-                                {Array.from({ length: maxSiriForBadge(selectedBadgeFilter) }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                {Array.from({ length: selectedBadgeFilter ? maxSiriForBadge(selectedBadgeFilter) : maxSiriAcrossEnabled }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                             </select>
                         </div>
                     )}

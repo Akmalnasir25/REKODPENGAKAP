@@ -374,8 +374,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const match = Object.entries(progressionMap).find(([, source]) => sourceBadge.toLowerCase().includes(source.toLowerCase()));
       return match ? match[0] : sourceBadge; // default: bawa ke program sama (siri berbeza) jika tiada aturan naik taraf
   };
+
+  // Program Asal: hanya program yang sekolah INI benar-benar ada peserta, untuk Tahun Asal dipilih
+  // (bukan senarai penuh semua program dalam sistem — elak calon kosong bila pilih program tak berkenaan).
+  const importSourceBadgeOptions = useMemo(() => {
+      const schoolData = allData.filter(d => (d.schoolCode === user.schoolCode) || (d.school === user.schoolName));
+      const set = new Set<string>();
+      schoolData.forEach(d => {
+          if (d.badge && !(d as any).isWithdrawn && new Date(d.date).getFullYear() === importSourceYear) set.add(d.badge);
+      });
+      return Array.from(set).sort();
+  }, [allData, user, importSourceYear]);
+
+  // Program Target: hanya program yang admin dah BUKA pendaftarannya.
+  const importTargetBadgeOptions = useMemo(() => {
+      return scopedBadges.filter(b => b.name !== 'Anugerah Rambu' && b.isOpen);
+  }, [scopedBadges]);
+
+  // Reset Program Asal bila Tahun Asal ditukar dan program terpilih tiada lagi dalam senarai baharu.
   useEffect(() => {
-      setImportTargetBadge(getImportTargetBadge(importSourceBadge));
+      if (importSourceBadge && !importSourceBadgeOptions.includes(importSourceBadge)) {
+          setImportSourceBadge('');
+      }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importSourceYear, importSourceBadgeOptions]);
+
+  useEffect(() => {
+      const suggested = getImportTargetBadge(importSourceBadge);
+      const valid = importTargetBadgeOptions.some(b => b.name === suggested);
+      setImportTargetBadge(valid ? suggested : '');
       setSelectedImportCandidates([]);
       setImportNewIds({});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1866,19 +1893,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Asal</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs" value={importSourceBadge} onChange={(e) => { setImportSourceBadge(e.target.value); setSelectedImportCandidates([]); setImportNewIds({}); }}>
                             <option value="">-- Pilih --</option>
-                            {scopedBadges.filter(b => b.name !== 'Anugerah Rambu').map((b, i) => (
-                                <option key={i} value={b.name}>{b.name}</option>
+                            {importSourceBadgeOptions.map((name, i) => (
+                                <option key={i} value={name}>{name}</option>
                             ))}
                         </select>
+                        {importSourceBadgeOptions.length === 0 && (
+                            <p className="text-[10px] text-gray-400 mt-0.5">Tiada peserta didaftarkan pada tahun {importSourceYear} untuk sekolah ini.</p>
+                        )}
                     </div>
                     <div>
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Program / Program Target</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importTargetBadge} onChange={(e) => { setImportTargetBadge(e.target.value); setSelectedImportCandidates([]); setImportNewIds({}); }}>
                             <option value="">-- Pilih --</option>
-                            {scopedBadges.filter(b => b.name !== 'Anugerah Rambu').map((b, i) => (
+                            {importTargetBadgeOptions.map((b, i) => (
                                 <option key={i} value={b.name}>{b.name}</option>
                             ))}
                         </select>
+                        {importTargetBadgeOptions.length === 0 && (
+                            <p className="text-[10px] text-gray-400 mt-0.5">Tiada program dibuka buat masa ini.</p>
+                        )}
                     </div>
                     {importTargetSiriEnabled && (
                     <div>

@@ -10,7 +10,7 @@ import { BulkWhatsApp } from './ui/BulkWhatsApp';
 import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
 import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 import { FloatStudentModal } from './FloatStudentModal';
-import { safeGetYear, deduplicateRecords, computeRoleStats } from '../utils/dataProcessing';
+import { safeGetYear, deduplicateRecords, computeRoleStats, parseBadgeStatusKey } from '../utils/dataProcessing';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
@@ -71,12 +71,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   // (Elak banner "menunggu pengesahan" untuk status lama tahun lepas yang tidak
   // muncul dalam senarai pengesahan.)
   const pendingCount = useMemo(() => {
-    const yearSuffix = `_${currentYear}`;
     let count = 0;
     schools.forEach(s => {
         if(s && s.lockedBadges) {
             s.lockedBadges.forEach(badgeKey => {
-                if(!badgeKey.endsWith(yearSuffix)) return; // abaikan tahun lain
+                // Kunci kini "<program>_<tahun>_<siri>" (migrasi 027), jadi
+                // padanan akhiran tahun tidak lagi sah — huraikan kunci itu.
+                if(parseBadgeStatusKey(badgeKey).year !== currentYear) return; // abaikan tahun lain
                 if(!s.approvedBadges || !s.approvedBadges.includes(badgeKey)) {
                     count++;
                 }

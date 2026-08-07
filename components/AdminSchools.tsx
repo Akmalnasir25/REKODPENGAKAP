@@ -6,6 +6,7 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
 import { School, Badge, Daerah } from '../types';
+import { parseBadgeStatusKey } from '../utils/dataProcessing';
 
 interface AdminSchoolsProps {
   schools: School[];
@@ -466,10 +467,23 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
           <p className="text-xs text-amber-600 mb-3">Benarkan/tutup edit Peserta, Penolong Pemimpin dan Penguji untuk SEMUA sekolah mengikut program. Contoh: tutup Peserta untuk Keris Perak sahaja, program lain masih boleh edit.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {badges.map(badge => {
-              const currentYearKey = `${badge.name}_${new Date().getFullYear()}`;
-              const allStudentsEdit = schools.length > 0 && schools.every(s => s.badgeEditPermissions?.[currentYearKey]?.students !== false);
-              const allAssistantsEdit = schools.length > 0 && schools.every(s => s.badgeEditPermissions?.[currentYearKey]?.assistants !== false);
-              const allExaminersEdit = schools.length > 0 && schools.every(s => s.badgeEditPermissions?.[currentYearKey]?.examiners !== false);
+              // Kunci kebenaran kini mengandungi siri (migrasi 027), dan satu
+              // sekolah boleh ada beberapa siri untuk program yang sama. Kawalan
+              // ini dikenakan pada semua siri, jadi paparannya menyemak semua
+              // kunci yang sepadan dengan program + tahun ini.
+              const yearNow = new Date().getFullYear();
+              const permsForBadge = (s: School) =>
+                Object.entries(s.badgeEditPermissions || {})
+                  .filter(([k]) => {
+                    const parsed = parseBadgeStatusKey(k);
+                    return parsed.badge === badge.name && parsed.year === yearNow;
+                  })
+                  .map(([, v]) => v as any);
+              // `every` pada senarai kosong = true, mengekalkan tingkah laku asal
+              // untuk sekolah yang belum ada baris status langsung.
+              const allStudentsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.students !== false));
+              const allAssistantsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.assistants !== false));
+              const allExaminersEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.examiners !== false));
               const PermissionButton = ({ type, active, icon: Icon }: { type: 'students' | 'assistants' | 'examiners', active: boolean, icon: any }) => {
                 const loadingKey = `${badge.name}-${type}`;
                 const label = type === 'students' ? 'Peserta' : type === 'assistants' ? 'Penolong' : 'Penguji';

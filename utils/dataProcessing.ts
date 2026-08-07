@@ -44,6 +44,49 @@ export function computeRoleStats(records: SubmissionData[]): RoleStats {
   return stats;
 }
 
+/**
+ * Kunci status pendaftaran: program + tahun + siri.
+ *
+ * Setiap siri ialah pusingan pendaftaran berasingan dengan kitaran
+ * hantar/sahkan/kunci tersendiri (migrasi 027), jadi siri sebahagian daripada
+ * kunci. Format ini WAJIB sama di kedua-dua belah — tempat kunci dibina
+ * (lockedBadges/approvedBadges dalam supabaseApi) dan tempat ia disemak
+ * (deduplicateRecords di bawah, UserForm, UserDashboard). Ditakrif di sini
+ * supaya hanya ada satu sumber kebenaran.
+ */
+export const badgeStatusKey = (badge: string, year: number | string, siri: number = 1): string =>
+  `${badge}_${year}_${siri || 1}`;
+
+/**
+ * Songsangan `badgeStatusKey`. Menerima format baharu `<program>_<tahun>_<siri>`
+ * DAN format lama `<program>_<tahun>` yang masih wujud dalam data tersimpan.
+ *
+ * Kedua-duanya dibezakan dengan menyemak sama ada bahagian itu munasabah
+ * sebagai tahun — bukan dengan mengira bilangan bahagian, kerana nama program
+ * sendiri boleh mengandungi garis bawah.
+ */
+export const parseBadgeStatusKey = (key: string): { badge: string; year: number; siri: number } => {
+  const parts = String(key || '').split('_');
+  const looksLikeYear = (n: number) => Number.isFinite(n) && n >= 2000 && n <= 2100;
+  const last = parseInt(parts[parts.length - 1], 10);
+  const secondLast = parts.length > 2 ? parseInt(parts[parts.length - 2], 10) : NaN;
+
+  // <program>_<tahun>_<siri>
+  if (parts.length > 2 && looksLikeYear(secondLast)) {
+    return {
+      badge: parts.slice(0, -2).join('_'),
+      year: secondLast,
+      siri: Number.isFinite(last) && last >= 1 ? last : 1,
+    };
+  }
+  // <program>_<tahun> (warisan)
+  if (parts.length > 1 && looksLikeYear(last)) {
+    return { badge: parts.slice(0, -1).join('_'), year: last, siri: 1 };
+  }
+  // Nama program sahaja
+  return { badge: key, year: new Date().getFullYear(), siri: 1 };
+};
+
 export function deduplicateRecords(data: SubmissionData[], schools: School[], showDrafts: boolean): SubmissionData[] {
   const schoolMap = new Map<string, School>();
   schools.forEach(s => { if (s && s.name) schoolMap.set(s.name, s); });
@@ -61,8 +104,10 @@ export function deduplicateRecords(data: SubmissionData[], schools: School[], sh
       if (schoolConfig && schoolConfig.approvedBadges) {
         const itemYear = safeGetYear(item.date);
         if (itemYear === null) return false;
-        const badgeYearKey = `${item.badge}_${itemYear}`;
+        const badgeYearKey = badgeStatusKey(item.badge, itemYear, item.siri || 1);
         const approvedList = Array.isArray(schoolConfig.approvedBadges) ? schoolConfig.approvedBadges : [];
+        // Fallback `includes(item.badge)` dikekalkan untuk data warisan yang
+        // disahkan tanpa tahun. Jangan buang — ada rekod lama bergantung padanya.
         if (approvedList.includes(badgeYearKey) || approvedList.includes(item.badge)) {
           isApproved = true;
         }

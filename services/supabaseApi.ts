@@ -1,5 +1,6 @@
 import { supabase, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from './supabaseClient';
 import { SubmissionData, Participant, LeaderInfo, ApiResponse, School, Badge, Negeri, Daerah, UserProfile } from '../types';
+import { badgeStatusKey, parseBadgeStatusKey } from '../utils/dataProcessing';
 
 // ============================================================
 // SUPABASE API LAYER - Replaces Google Apps Script API
@@ -146,7 +147,7 @@ export const fetchCloudData = async (
       const statusRows = (statusRes.data || []).filter((r: any) => r.school?.school_code === s.school_code);
       const badgeEditPermissions = statusRows.reduce((acc: Record<string, any>, r: any) => {
         if (!r.badge?.name || !r.year) return acc;
-        const key = `${r.badge.name}_${r.year}`;
+        const key = badgeStatusKey(r.badge.name, r.year, r.siri ?? 1);
         let notes: any = {};
         try {
           notes = typeof r.notes === 'string' && r.notes.trim().startsWith('{') ? JSON.parse(r.notes) : {};
@@ -169,11 +170,11 @@ export const fetchCloudData = async (
         allowExaminers: s.allow_examiners,
         lockedBadges: statusRows
           .filter((r: any) => r.status === 'submitted')
-          .map((r: any) => r.badge?.name ? `${r.badge.name}_${r.year}` : '')
+          .map((r: any) => r.badge?.name ? badgeStatusKey(r.badge.name, r.year, r.siri ?? 1) : '')
           .filter(Boolean),
         approvedBadges: statusRows
           .filter((r: any) => r.status === 'approved')
-          .map((r: any) => r.badge?.name ? `${r.badge.name}_${r.year}` : '')
+          .map((r: any) => r.badge?.name ? badgeStatusKey(r.badge.name, r.year, r.siri ?? 1) : '')
           .filter(Boolean),
         badgeEditPermissions,
       };
@@ -363,13 +364,18 @@ const createSubmissionWithPeople = async (
 
   // Hanya upsert school_badge_status jika bukan draft
   if (submissionStatus !== 'draft') {
+    // Satu borang = satu siri (UserForm menandakan siri yang sama untuk semua
+    // peserta dalam borang), jadi siri baris pertama mewakili keseluruhan
+    // penghantaran. Status dikunci per siri sejak migrasi 027.
+    const submissionSiri = rows.length > 0 ? (rows[0].siri || 1) : 1;
     await supabase.from('school_badge_status').upsert({
       school_id: school.id,
       badge_id: badge.id,
       year,
+      siri: submissionSiri,
       status: 'submitted',
       submitted_at: submittedAt,
-    }, { onConflict: 'school_id,badge_id,year' });
+    }, { onConflict: 'school_id,badge_id,year,siri' });
   }
 
   return { status: 'success', message: submissionStatus === 'draft' ? 'Data berjaya disimpan sebagai draf.' : 'Pendaftaran berjaya dihantar.' };
@@ -586,11 +592,9 @@ export const toggleSchoolEditBatch = async (_url: string, allow: boolean, permis
 
 export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    // badgeNameWithYear may be "Keris Gangsa_2025" format from getLockKey
-    const parts = badgeNameWithYear.split('_');
-    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
-    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
-    
+    // Kunci daripada getLockKey: "Keris Gangsa_2025_1" (atau format lama tanpa siri)
+    const { badge: badgeName, year, siri } = parseBadgeStatusKey(badgeNameWithYear);
+
     // Try lookup by code first, then by name
     let school = await getSchoolByCodeOrName(schoolCodeOrName);
     if (!school) school = await getSchoolByCodeOrName(undefined, schoolCodeOrName);
@@ -599,16 +603,73 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
     const badge = await getBadgeByName(badgeName);
     if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
 
+    const targetYear = year || currentYear();
+
     // Tukar semua submission draft → submitted untuk sekolah + badge + tahun ini
     await supabase
       .from('submissions')
       .update({ status: 'submitted' })
       .eq('school_id', school.id)
       .eq('badge_id', badge.id)
-      .eq('submission_year', year || currentYear())
+      .eq('submission_year', targetYear)
       .eq('status', 'draft');
-    
-    const { error } = await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'submitted', submitted_at: new Date().toISOString() }, { onConflict: 'school_id,badge_id,year' });
+
+    // Siri mana yang perlu baris status? Diambil daripada PESERTA SEBENAR, bukan
+    // daripada penapis UI. Peserta boleh masuk melalui Import Naik atau "Set Siri"
+    // yang tidak melalui borang, jadi bergantung pada penapis akan menghasilkan
+    // baris status untuk siri yang salah — dan peserta siri sebenar hilang dari
+    // statistik tanpa sebarang ralat.
+    const { data: allSubs, error: allSubsErr } = await supabase
+      .from('submissions')
+      .select('id')
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('submission_year', targetYear);
+    if (allSubsErr) throw allSubsErr;
+
+    const subIds = (allSubs || []).map((s: any) => s.id);
+    let siriList: number[] = [siri];
+    if (subIds.length > 0) {
+      const { data: people, error: peopleErr } = await supabase
+        .from('submission_people')
+        .select('siri')
+        .in('submission_id', subIds)
+        .eq('is_deleted', false);
+      if (peopleErr) throw peopleErr;
+      const found = Array.from(new Set((people || []).map((p: any) => p.siri || 1)));
+      if (found.length > 0) siriList = found;
+    }
+
+    // Jangan tulis semula siri yang sudah dihantar atau disahkan — sekolah yang
+    // menambah Siri 2 tidak sepatutnya menolak Siri 1 keluar daripada 'approved'.
+    const { data: existing, error: existingErr } = await supabase
+      .from('school_badge_status')
+      .select('siri, status')
+      .eq('school_id', school.id)
+      .eq('badge_id', badge.id)
+      .eq('year', targetYear);
+    if (existingErr) throw existingErr;
+
+    const terkunci = new Set(
+      (existing || [])
+        .filter((r: any) => r.status === 'submitted' || r.status === 'approved')
+        .map((r: any) => r.siri ?? 1)
+    );
+    const perluHantar = siriList.filter((s) => !terkunci.has(s));
+    if (perluHantar.length === 0) return { status: 'success' };
+
+    const submittedAt = new Date().toISOString();
+    const { error } = await supabase.from('school_badge_status').upsert(
+      perluHantar.map((s) => ({
+        school_id: school.id,
+        badge_id: badge.id,
+        year: targetYear,
+        siri: s,
+        status: 'submitted',
+        submitted_at: submittedAt,
+      })),
+      { onConflict: 'school_id,badge_id,year,siri' }
+    );
     if (error) throw error;
     return { status: 'success' };
   } catch (error: any) {
@@ -618,11 +679,9 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
 
 export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const parts = badgeNameWithYear.split('_');
-    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
-    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+    const { badge: badgeName, year, siri } = parseBadgeStatusKey(badgeNameWithYear);
 
-    console.log('[unlockSchoolBadge] Input:', { schoolName, badgeNameWithYear, parsedBadge: badgeName, parsedYear: year });
+    console.log('[unlockSchoolBadge] Input:', { schoolName, badgeNameWithYear, parsedBadge: badgeName, parsedYear: year, parsedSiri: siri });
 
     const school = await getSchoolByCodeOrName(undefined, schoolName);
     if (!school) return { status: 'error', message: `Sekolah '${schoolName}' tidak dijumpai dalam database.` };
@@ -639,6 +698,7 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
       .eq('school_id', school.id)
       .eq('badge_id', badge.id)
       .eq('year', year || currentYear())
+      .eq('siri', siri)
       .select();
 
     console.log('[unlockSchoolBadge] UPDATE result:', { updateData, updateError });
@@ -651,8 +711,8 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
       const { data: upsertData, error: upsertError } = await supabase
         .from('school_badge_status')
         .upsert(
-          { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
-          { onConflict: 'school_id,badge_id,year' }
+          { school_id: school.id, badge_id: badge.id, year: year || currentYear(), siri, status: 'reopened' },
+          { onConflict: 'school_id,badge_id,year,siri' }
         )
         .select();
       console.log('[unlockSchoolBadge] UPSERT result:', { upsertData, upsertError });
@@ -668,14 +728,12 @@ export const unlockSchoolBadge = async (_url: string, schoolName: string, badgeN
 
 export const approveSchoolBadge = async (_url: string, schoolName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const parts = badgeNameWithYear.split('_');
-    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
-    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+    const { badge: badgeName, year, siri } = parseBadgeStatusKey(badgeNameWithYear);
 
     const school = await getSchoolByCodeOrName(undefined, schoolName);
     const badge = await getBadgeByName(badgeName);
     if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'approved' }, { onConflict: 'school_id,badge_id,year' });
+    await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), siri, status: 'approved' }, { onConflict: 'school_id,badge_id,year,siri' });
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal approve badge.' };
@@ -869,7 +927,7 @@ export const updateBadgeRequiresDaerahApproval = async (badgeName: string, requi
   }
 };
 
-export const approveDaerahLevel = async (schoolName: string, badgeName: string, year?: number): Promise<ApiResponse> => {
+export const approveDaerahLevel = async (schoolName: string, badgeName: string, year?: number, siri: number = 1): Promise<ApiResponse> => {
   try {
     const targetYear = year || currentYear();
     const school = await getSchoolByCodeOrName(schoolName);
@@ -881,11 +939,12 @@ export const approveDaerahLevel = async (schoolName: string, badgeName: string, 
       school_id: school.id,
       badge_id: badge.id,
       year: targetYear,
+      siri,
       status: 'submitted',
       daerah_approved: true,
       daerah_approved_at: new Date().toISOString(),
       daerah_approved_by: session?.user?.id || null,
-    }, { onConflict: 'school_id,badge_id,year' });
+    }, { onConflict: 'school_id,badge_id,year,siri' });
     if (error) throw error;
     return { status: 'success', message: 'Pengesahan daerah berjaya.' };
   } catch (error: any) {
@@ -1106,9 +1165,7 @@ export const bulkDeleteSubmissions = async (
 
 export const reopenSchoolBadge = async (_url: string, schoolCodeOrName: string, badgeNameWithYear: string, _csrfToken?: string): Promise<ApiResponse> => {
   try {
-    const parts = badgeNameWithYear.split('_');
-    const year = parts.length > 1 ? parseInt(parts[parts.length - 1]) : currentYear();
-    const badgeName = parts.length > 1 ? parts.slice(0, -1).join('_') : badgeNameWithYear;
+    const { badge: badgeName, year, siri } = parseBadgeStatusKey(badgeNameWithYear);
 
     let school = await getSchoolByCodeOrName(schoolCodeOrName);
     if (!school) school = await getSchoolByCodeOrName(undefined, schoolCodeOrName);
@@ -1118,8 +1175,8 @@ export const reopenSchoolBadge = async (_url: string, schoolCodeOrName: string, 
     if (!badge) return { status: 'error', message: 'Badge tidak dijumpai.' };
 
     const { error } = await supabase.from('school_badge_status').upsert(
-      { school_id: school.id, badge_id: badge.id, year: year || currentYear(), status: 'reopened' },
-      { onConflict: 'school_id,badge_id,year' }
+      { school_id: school.id, badge_id: badge.id, year: year || currentYear(), siri, status: 'reopened' },
+      { onConflict: 'school_id,badge_id,year,siri' }
     );
     if (error) throw error;
     return { status: 'success' };
@@ -1191,13 +1248,22 @@ export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: st
       .in('school_id', schoolIds);
     if (existingErr) throw existingErr;
 
-    const existingMap = new Map((existingRows || []).map((r: any) => [r.school_id, r]));
+    // Sejak migrasi 027, satu sekolah boleh ada beberapa baris — satu per siri.
+    // Kawalan edit ialah tetapan peringkat sekolah + program + tahun, jadi ia
+    // dikenakan pada SEMUA siri sekolah tersebut. Mengenakan pada siri 1 sahaja
+    // akan meninggalkan siri lain tanpa kawalan.
+    const bySchool = new Map<string, any[]>();
+    (existingRows || []).forEach((r: any) => {
+      const list = bySchool.get(r.school_id) || [];
+      list.push(r);
+      bySchool.set(r.school_id, list);
+    });
+
     const applyPermission = (current: any = {}) => permissionType === 'all'
       ? { ...current, students: allow, assistants: allow, examiners: allow }
       : { ...current, [permissionType]: allow };
 
-    const rows = (activeSchools || []).map((s: any) => {
-      const existing = existingMap.get(s.id) as any;
+    const buildRow = (existing: any, schoolId: string, siri: number) => {
       let notes: any = {};
       try {
         notes = typeof existing?.notes === 'string' && existing.notes.trim().startsWith('{') ? JSON.parse(existing.notes) : {};
@@ -1205,9 +1271,10 @@ export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: st
         notes = {};
       }
       return {
-        school_id: s.id,
+        school_id: schoolId,
         badge_id: badge.id,
         year,
+        siri,
         status: existing?.status || 'open',
         submitted_at: existing?.submitted_at || null,
         approved_at: existing?.approved_at || null,
@@ -1215,9 +1282,16 @@ export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: st
         locked_at: existing?.locked_at || null,
         notes: JSON.stringify({ ...notes, editPermissions: applyPermission(notes.editPermissions || {}) }),
       };
+    };
+
+    const rows = (activeSchools || []).flatMap((s: any) => {
+      const existing = bySchool.get(s.id);
+      // Sekolah tanpa sebarang baris: cipta siri 1 sebagai lalai
+      if (!existing || existing.length === 0) return [buildRow(null, s.id, 1)];
+      return existing.map((r: any) => buildRow(r, s.id, r.siri ?? 1));
     });
 
-    const { error } = await supabase.from('school_badge_status').upsert(rows, { onConflict: 'school_id,badge_id,year' });
+    const { error } = await supabase.from('school_badge_status').upsert(rows, { onConflict: 'school_id,badge_id,year,siri' });
     if (error) throw error;
     return { status: 'success', message: `Kawalan edit ${badgeName} berjaya dikemaskini.` };
   } catch (error: any) {
@@ -1234,13 +1308,35 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
     if (schoolsErr) throw schoolsErr;
 
     if (lock) {
-      const rows = (activeSchools || []).map((s: any) => ({
-        school_id: s.id,
-        badge_id: badge.id,
-        year: currentYear(),
-        status: 'locked',
-      }));
-      const { error } = await supabase.from('school_badge_status').upsert(rows, { onConflict: 'school_id,badge_id,year' });
+      // Kunci SEMUA siri sedia ada, bukan siri 1 sahaja — jika tidak, sekolah
+      // yang sudah bergerak ke siri 2 kekal terbuka walaupun program dikunci.
+      const { data: existingRows, error: existingErr } = await supabase
+        .from('school_badge_status')
+        .select('school_id, siri')
+        .eq('badge_id', badge.id)
+        .eq('year', currentYear());
+      if (existingErr) throw existingErr;
+
+      const siriBySchool = new Map<string, number[]>();
+      (existingRows || []).forEach((r: any) => {
+        const list = siriBySchool.get(r.school_id) || [];
+        list.push(r.siri ?? 1);
+        siriBySchool.set(r.school_id, list);
+      });
+
+      const rows = (activeSchools || []).flatMap((s: any) => {
+        const siriList = siriBySchool.get(s.id);
+        // Sekolah tanpa sebarang baris: kunci siri 1 sebagai lalai
+        return (siriList && siriList.length > 0 ? siriList : [1]).map((siri) => ({
+          school_id: s.id,
+          badge_id: badge.id,
+          year: currentYear(),
+          siri,
+          status: 'locked',
+        }));
+      });
+
+      const { error } = await supabase.from('school_badge_status').upsert(rows, { onConflict: 'school_id,badge_id,year,siri' });
       if (error) throw error;
     } else {
       const { error } = await supabase
@@ -1299,8 +1395,61 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
 export const setParticipantsSiri = async (personIds: string[], siri: number): Promise<ApiResponse> => {
   try {
     if (!personIds.length) return { status: 'error', message: 'Tiada peserta dipilih.' };
+
+    // Rekod submission yang terlibat SEBELUM kemas kini — diperlukan untuk
+    // memastikan baris status wujud bagi siri sasaran.
+    const { data: affected, error: affectedErr } = await supabase
+      .from('submission_people')
+      .select('id, siri, submission:submissions(school_id, badge_id, submission_year)')
+      .in('id', personIds);
+    if (affectedErr) throw affectedErr;
+
     const { error } = await supabase.from('submission_people').update({ siri }).in('id', personIds);
     if (error) throw error;
+
+    // Peserta yang berpindah siri mesti menemui baris pengesahan untuk siri
+    // BAHARU mereka. Tanpa ini, mengalihkan peserta yang sudah disahkan ke siri
+    // lain akan melenyapkan mereka dari statistik — kunci `<program>_<tahun>_<siri>`
+    // tidak akan padan dengan apa-apa. Baris baharu MEWARISI status siri asal,
+    // supaya perpindahan tidak mengubah keadaan pengesahan sesiapa.
+    const kumpulan = new Map<string, { school_id: string; badge_id: string; year: number; siriAsal: number }>();
+    (affected || []).forEach((p: any) => {
+      const sub = Array.isArray(p.submission) ? p.submission[0] : p.submission;
+      if (!sub?.school_id || !sub?.badge_id || !sub?.submission_year) return;
+      const kunci = `${sub.school_id}|${sub.badge_id}|${sub.submission_year}`;
+      if (!kumpulan.has(kunci)) {
+        kumpulan.set(kunci, {
+          school_id: sub.school_id,
+          badge_id: sub.badge_id,
+          year: sub.submission_year,
+          siriAsal: p.siri || 1,
+        });
+      }
+    });
+
+    for (const g of kumpulan.values()) {
+      const { data: rows, error: rowsErr } = await supabase
+        .from('school_badge_status')
+        .select('*')
+        .eq('school_id', g.school_id)
+        .eq('badge_id', g.badge_id)
+        .eq('year', g.year);
+      if (rowsErr) throw rowsErr;
+
+      const senarai = rows || [];
+      if (senarai.some((r: any) => (r.siri ?? 1) === siri)) continue; // sudah ada
+      // Warisi daripada baris siri asal; jika tiada, ambil siri terendah.
+      const sumber = senarai.find((r: any) => (r.siri ?? 1) === g.siriAsal)
+        || [...senarai].sort((a: any, b: any) => (a.siri ?? 1) - (b.siri ?? 1))[0];
+      if (!sumber) continue; // belum pernah dihantar — tiada apa untuk diwarisi
+
+      const { id: _abaikan, created_at: _abaikan2, updated_at: _abaikan3, ...baki } = sumber as any;
+      await supabase.from('school_badge_status').upsert(
+        { ...baki, siri },
+        { onConflict: 'school_id,badge_id,year,siri' }
+      );
+    }
+
     return { status: 'success', message: `${personIds.length} peserta ditandakan Siri ${siri}.` };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal tandakan siri.' };

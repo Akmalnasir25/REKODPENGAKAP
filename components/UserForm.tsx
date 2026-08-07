@@ -6,6 +6,7 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import { submitRegistration, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 import { PrivacyNotice } from './ui/PrivacyNotice';
+import { badgeStatusKey } from '../utils/dataProcessing';
 
 // Program dikira tutup jika di-tutup manual (isOpen false) ATAU tarikh hari ini
 // sudah melepasi tarikh akhir. Pendaftaran masih dibenarkan pada hari tarikh akhir itu sendiri.
@@ -102,7 +103,8 @@ export const UserForm: React.FC<UserFormProps> = ({
   const baseAllowExaminers = currentSchoolSettings?.allowExaminers ?? currentSchoolSettings?.allowEdit ?? false;
   // Tahun kohort = tahun pendaftaran dipilih (boleh backdated). Semua semakan kebenaran/kunci/pendua ikut tahun ini.
   const currentYear = registrationYear;
-  const selectedBadgePermissionKey = leaderInfo.badgeType ? `${leaderInfo.badgeType}_${currentYear}` : '';
+  // Kunci status ikut siri (migrasi 027) — setiap siri ialah pusingan berasingan.
+  const selectedBadgePermissionKey = leaderInfo.badgeType ? badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri) : '';
   const selectedBadgePermissions = selectedBadgePermissionKey ? currentSchoolSettings?.badgeEditPermissions?.[selectedBadgePermissionKey] : undefined;
   const allowStudents = selectedBadgePermissions?.students ?? baseAllowStudents;
   const allowAssistants = selectedBadgePermissions?.assistants ?? baseAllowAssistants;
@@ -242,10 +244,12 @@ export const UserForm: React.FC<UserFormProps> = ({
         return;
     }
     
-    // Check if selected badge is locked for this school FOR CURRENT YEAR
-    const lockKey = `${leaderInfo.badgeType}_${currentYear}`;
+    // Kunci ikut program + tahun + SIRI. Sekolah yang sudah hantar Siri 1 masih
+    // boleh hantar Siri 2 untuk program yang sama (migrasi 027).
+    const lockKey = badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri);
     if (lockedBadges.includes(lockKey)) {
-        alert(`Maaf, pendaftaran sekolah anda untuk '${leaderInfo.badgeType}' tahun ${currentYear} telah DITUTUP (Telah Dihantar).`);
+        const siriLabel = siriEnabled ? ` (Siri ${registrationSiri})` : '';
+        alert(`Maaf, pendaftaran sekolah anda untuk '${leaderInfo.badgeType}'${siriLabel} tahun ${currentYear} telah DITUTUP (Telah Dihantar).`);
         return;
     }
 
@@ -515,7 +519,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                             {safeBadges.map((badge, idx) => {
                                 if (badge.name === 'Anugerah Rambu') return null;
 
-                                const lockKey = `${badge.name}_${currentYear}`;
+                                const lockKey = badgeStatusKey(badge.name, currentYear, registrationSiri);
                                 const isLocked = lockedBadges.includes(lockKey);
                                 const closed = isBadgeClosed(badge);
                                 return (
@@ -524,8 +528,10 @@ export const UserForm: React.FC<UserFormProps> = ({
                                 </option>
                             )})}
                         </select>
-                         {leaderInfo.badgeType && lockedBadges.includes(`${leaderInfo.badgeType}_${currentYear}`) && (
-                             <p className="text-red-500 text-xs mt-1 font-bold">Pendaftaran program ini telah anda hantar. Sila hubungi Admin jika perlu ubah.</p>
+                         {leaderInfo.badgeType && lockedBadges.includes(badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri)) && (
+                             <p className="text-red-500 text-xs mt-1 font-bold">
+                               Pendaftaran program ini{siriEnabled ? ` (Siri ${registrationSiri})` : ''} telah anda hantar. Sila hubungi Admin jika perlu ubah.
+                             </p>
                          )}
                          {leaderInfo.badgeType && (() => {
                             const sel = safeBadges.find(b => b.name === leaderInfo.badgeType);

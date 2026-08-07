@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { SubmissionData, School } from '../types';
 import { History, Eye, EyeOff, Search, Filter } from 'lucide-react';
+import { badgeStatusKey } from '../utils/dataProcessing';
 
 interface AdminHistoryProps {
   data: SubmissionData[];
@@ -73,7 +74,9 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
 
         const itemYear = safeGetYear(item.date);
         if (itemYear === null) return false;
-        const badgeYearKey = `${item.badge}_${itemYear}`;
+        // Kunci pengesahan ikut siri (migrasi 027) — mesti padan dengan
+        // pembinaan kunci dalam supabaseApi & deduplicateRecords.
+        const badgeYearKey = badgeStatusKey(item.badge, itemYear, item.siri || 1);
 
         // Ensure array
         const approvedList = Array.isArray(schoolConfig.approvedBadges) ? schoolConfig.approvedBadges : [];

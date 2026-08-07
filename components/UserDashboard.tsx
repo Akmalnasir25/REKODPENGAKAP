@@ -12,6 +12,7 @@ const getSubmissionYear = (value?: string | null) => {
   return Number.isFinite(year) ? year : null;
 };
 import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri } from '../services/supabaseApi';
+import { badgeStatusKey } from '../utils/dataProcessing';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
 import { ExportButton } from './ui/ExportButton';
@@ -172,7 +173,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const isAnyAllowed = allowStudents || allowAssistants || allowExaminers;
 
   const lockedBadges = currentSchoolSettings?.lockedBadges || [];
-  const getLockKey = (badge: string, year: number) => `${badge}_${year}`;
+  // Kunci status ikut program + tahun + siri (migrasi 027). Setiap siri ialah
+  // pusingan pendaftaran berasingan dengan kitaran hantar/sahkan tersendiri.
+  const getLockKey = (badge: string, year: number, siri: number = 1) => badgeStatusKey(badge, year, siri);
 
   // --- DEADLINE NOTIFICATION LOGIC ---
   const expiringBadges = useMemo(() => {
@@ -575,7 +578,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const itemYear = new Date(item.date).getFullYear();
       if (itemYear < currentYear) return false;
       
-      const lockKey = getLockKey(item.badge, itemYear);
+      // Ikut siri rekod itu sendiri — Siri 1 boleh terkunci sementara Siri 2 masih terbuka.
+      const lockKey = getLockKey(item.badge, itemYear, item.siri || 1);
       if (lockedBadges.includes(lockKey)) return false;
       
       // If badge+year is approved, user cannot modify
@@ -592,7 +596,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // canAddGeneral checks if at least one category is allowed for NEW registrations
   const canAddGeneral = isRegistrationOpen && isAnyAllowed && isCurrentOrFuture;
   
-  const currentLockKey = selectedBadgeFilter ? getLockKey(selectedBadgeFilter, selectedYear) : '';
+  // Tindakan peringkat program (hantar/status) beroperasi pada siri yang sedang
+  // ditapis; tanpa tapisan siri ia merujuk Siri 1, sama seperti program tanpa siri.
+  const activeSiri = selectedSiriFilter === '' ? 1 : Number(selectedSiriFilter);
+  const currentLockKey = selectedBadgeFilter ? getLockKey(selectedBadgeFilter, selectedYear, activeSiri) : '';
   const isSelectedBadgeLocked = selectedBadgeFilter !== '' && lockedBadges.includes(currentLockKey);
   const isSelectedBadgeApproved = selectedBadgeFilter !== '' && approvedBadges.includes(currentLockKey);
   
@@ -750,7 +757,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     if (!confirm(`PENGESAHAN AKHIR (${selectedYear})\n\nAdakah anda pasti mahu menghantar pendaftaran untuk program '${selectedBadgeFilter}' pada tahun ${selectedYear}?\n\nSelepas ini data akan dikunci.`)) return;
     setIsLocking(true);
     try {
-        const res = await lockSchoolBadge(scriptUrl, user.schoolName, getLockKey(selectedBadgeFilter, selectedYear));
+        const res = await lockSchoolBadge(scriptUrl, user.schoolName, getLockKey(selectedBadgeFilter, selectedYear, activeSiri));
         if (res.status === 'success') { alert("Berjaya dihantar!"); onRefresh(); } else alert("Ralat menghantar.");
     } catch (e) { alert("Gagal menghubungi server."); } finally { setIsLocking(false); }
   };

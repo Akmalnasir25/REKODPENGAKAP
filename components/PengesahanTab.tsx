@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, RefreshCw, Medal, Users, X } from 'lucide-react';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools, approveDaerahLevel } from '../services/supabaseApi';
+import { badgeStatusKey } from '../utils/dataProcessing';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface PengesahanTabProps {
@@ -35,14 +36,17 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
     fetchSubmitted();
   }, [fetchSubmitted]);
 
-  const handleApprove = async (schoolName: string, badgeName: string, isDaerahLevel: boolean) => {
+  const handleApprove = async (schoolName: string, badgeName: string, isDaerahLevel: boolean, siri: number = 1) => {
     const label = isDaerahLevel ? 'Sahkan peringkat daerah' : 'Sahkan pendaftaran';
-    if (!confirm(`${label} '${badgeName}' untuk ${schoolName}?`)) return;
-    setActionLoading(`approve-${schoolName}-${badgeName}`);
+    const siriLabel = siri > 1 ? ` Siri ${siri}` : '';
+    if (!confirm(`${label} '${badgeName}${siriLabel}' untuk ${schoolName}?`)) return;
+    setActionLoading(`approve-${schoolName}-${badgeName}-${siri}`);
     try {
+      // Setiap siri disahkan berasingan (migrasi 027) — kunci mesti membawa siri,
+      // jika tidak pengesahan Siri 2 akan tertulis ke baris Siri 1.
       const res = isDaerahLevel
-        ? await approveDaerahLevel(schoolName, badgeName)
-        : await approveSchoolBadge(scriptUrl, schoolName, badgeName);
+        ? await approveDaerahLevel(schoolName, badgeName, new Date().getFullYear(), siri)
+        : await approveSchoolBadge(scriptUrl, schoolName, badgeStatusKey(badgeName, new Date().getFullYear(), siri));
       if (res.status === 'success') {
         await fetchSubmitted();
         onRefresh();
@@ -56,11 +60,12 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
     }
   };
 
-  const handleReopen = async (schoolName: string, badgeName: string) => {
-    if (!confirm(`Tolak/Buka semula pendaftaran '${badgeName}' untuk ${schoolName}?`)) return;
-    setActionLoading(`reopen-${schoolName}-${badgeName}`);
+  const handleReopen = async (schoolName: string, badgeName: string, siri: number = 1) => {
+    const siriLabel = siri > 1 ? ` Siri ${siri}` : '';
+    if (!confirm(`Tolak/Buka semula pendaftaran '${badgeName}${siriLabel}' untuk ${schoolName}?`)) return;
+    setActionLoading(`reopen-${schoolName}-${badgeName}-${siri}`);
     try {
-      const badgeKey = `${badgeName}_${new Date().getFullYear()}`;
+      const badgeKey = badgeStatusKey(badgeName, new Date().getFullYear(), siri);
       const res = await reopenSchoolBadge(scriptUrl, schoolName, badgeKey);
       if (res.status === 'success') {
         await fetchSubmitted();
@@ -92,10 +97,11 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
       const schoolName = item.school?.name || '';
       const daerah = item.school?.daerah?.code || '';
       const isDaerahStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
+      const siri = item.siri ?? 1;
       try {
         const res = isDaerahStep
-          ? await approveDaerahLevel(schoolName, badgeName)
-          : await approveSchoolBadge(scriptUrl, schoolName, badgeName);
+          ? await approveDaerahLevel(schoolName, badgeName, new Date().getFullYear(), siri)
+          : await approveSchoolBadge(scriptUrl, schoolName, badgeStatusKey(badgeName, new Date().getFullYear(), siri));
         if (res.status === 'success') successCount++;
         else failCount++;
       } catch { failCount++; }
@@ -122,10 +128,11 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
       const badgeName = item.badge?.name || '';
       const daerah = item.school?.daerah?.code || '';
       const isDaerahStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
+      const siri = item.siri ?? 1;
       try {
         const res = isDaerahStep
-          ? await approveDaerahLevel(schoolName, badgeName)
-          : await approveSchoolBadge(scriptUrl, schoolName, badgeName);
+          ? await approveDaerahLevel(schoolName, badgeName, new Date().getFullYear(), siri)
+          : await approveSchoolBadge(scriptUrl, schoolName, badgeStatusKey(badgeName, new Date().getFullYear(), siri));
         if (res.status === 'success') successCount++;
         else failCount++;
       } catch { failCount++; }
@@ -143,11 +150,12 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
     return acc;
   }, {});
 
-  const getParticipantCount = (schoolName: string, badgeName: string) => {
+  const getParticipantCount = (schoolName: string, badgeName: string, siri: number = 1) => {
     const currentYear = new Date().getFullYear();
     return data.filter(d =>
       d.school === schoolName &&
       d.badge === badgeName &&
+      (d.siri || 1) === siri &&
       new Date(d.date).getFullYear() === currentYear
     ).length;
   };
@@ -220,10 +228,11 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
             {items.map((item: any, idx: number) => {
               const schoolName = item.school?.name || 'Tidak Diketahui';
               const daerah = item.school?.daerah?.code || '';
-              const participantCount = getParticipantCount(schoolName, badgeName);
+              const siri = item.siri ?? 1;
+              const participantCount = getParticipantCount(schoolName, badgeName, siri);
               const submittedDate = item.submitted_at ? new Date(item.submitted_at).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-              const isApproving = actionLoading === `approve-${schoolName}-${badgeName}`;
-              const isReopening = actionLoading === `reopen-${schoolName}-${badgeName}`;
+              const isApproving = actionLoading === `approve-${schoolName}-${badgeName}-${siri}`;
+              const isReopening = actionLoading === `reopen-${schoolName}-${badgeName}-${siri}`;
               const isDaerahApproveStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');
               const daerahDoneLabel = item.daerah_approved
                 ? <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded">Daerah disahkan</span>
@@ -236,6 +245,7 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
                       <span className="flex items-center gap-1"><Users size={12} /> {participantCount} peserta</span>
                       <span className="flex items-center gap-1"><Medal size={12} /> {badgeName}</span>
+                      {siri > 1 && <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-semibold">Siri {siri}</span>}
                       {daerah && <span className="bg-slate-100 px-2 py-0.5 rounded">{daerah}</span>}
                       <span>Dihantar: {submittedDate}</span>
                       {daerahDoneLabel}
@@ -243,7 +253,7 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleApprove(schoolName, badgeName, isDaerahApproveStep)}
+                      onClick={() => handleApprove(schoolName, badgeName, isDaerahApproveStep, siri)}
                       disabled={isApproving}
                       className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1"
                       title={isDaerahApproveStep ? 'Sahkan peringkat daerah, kemudian negeri akan sahkan' : 'Sahkan pendaftaran'}
@@ -252,7 +262,7 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                       {isDaerahApproveStep ? 'Sahkan (Daerah)' : 'Sahkan'}
                     </button>
                     <button
-                      onClick={() => handleReopen(schoolName, badgeName)}
+                      onClick={() => handleReopen(schoolName, badgeName, siri)}
                       disabled={isReopening}
                       className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg hover:bg-red-100 border border-red-200 transition disabled:opacity-50 flex items-center gap-1"
                     >

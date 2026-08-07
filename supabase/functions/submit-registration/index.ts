@@ -103,6 +103,7 @@ serve(async (req) => {
         phone_number: p.phoneNumber || null,
         role: p.role || "PESERTA",
         category: p.category || null,
+        siri: p.siri || 1,
         remarks: p.remarks || null,
       }));
 
@@ -121,13 +122,18 @@ serve(async (req) => {
       updated_by: user.id,
     }, { onConflict: "school_id" });
 
+    // Satu borang = satu siri, jadi siri baris pertama mewakili keseluruhan
+    // penghantaran. Status dikunci per siri sejak migrasi 027.
+    const submissionSiri = rows.length > 0 ? (rows[0].siri || 1) : 1;
+
     await adminClient.from("school_badge_status").upsert({
       school_id: school.id,
       badge_id: badge.id,
       year,
+      siri: submissionSiri,
       status: "submitted",
       submitted_at: submittedAt,
-    }, { onConflict: "school_id,badge_id,year", ignoreDuplicates: true });
+    }, { onConflict: "school_id,badge_id,year,siri", ignoreDuplicates: true });
 
     return new Response(JSON.stringify({ status: "success", message: "Pendaftaran berjaya disimpan.", submissionId: submission.id, count: rows.length }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {

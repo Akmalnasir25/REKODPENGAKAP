@@ -174,7 +174,7 @@ Togol BAHARU, berasingan daripada `payment_enabled` sedia ada:
 Kerana muat naik resit/cek kini salah satu pilihan pada pintu bayaran, ia wajib ada dari hari pertama.
 
 - Tambah lajur `category` (cth `'payment_proof'`) + `payment_id` (FK `payments`)
-- **Ketatkan RLS `attachments_select` DAHULU.** Polisi sekarang `submission_id in (select id from public.submissions)` — subquery TIDAK diskop kepada sekolah pengguna, jadi mana-mana pengguna sah boleh baca lampiran sekolah lain. Slip bank = PII sensitif; mesti dibetulkan **sebelum** apa-apa bukti dimuat naik
+- **Jadikan RLS `attachments_select` eksplisit.** ⚠ *Pembetulan:* draf terdahulu mendakwa polisi sedia ada ialah lubang keselamatan kerana subkueri `submission_id in (select id from public.submissions)` kelihatan tidak berskop. Itu **salah** — PostgreSQL mengenakan RLS secara rekursif pada jadual yang dirujuk dalam ungkapan polisi, jadi subkueri itu sudah ditapis oleh `submissions_select`. Yang benar: perlindungan itu **tidak langsung** (bergantung pada polisi jadual lain kekal betul) dan penilaian bersarang mahal. Digantikan dengan fungsi SECURITY DEFINER `can_access_submission()` untuk kejelasan dan prestasi
 - Tambah polisi `delete` untuk sekolah buang bukti sendiri **selagi status masih `pending_review`** (sekarang delete admin-sahaja)
 - Storan: `r2-presigned-upload` sedia ada memang generik (`bucket: 'documents'`, folder bebas) — guna folder `payment-proof/{payment_id}`
 
@@ -646,7 +646,7 @@ Tab/paparan baharu:
 |-----------|-----------------|---|
 | Keadaan "belum dihantar" semasa menunggu bayaran | `submissions.status = 'draft'` | ✅ Sudah wujud dalam check constraint & digunakan (`supabaseApi.ts:259, 289`) |
 | Presign upload bukti bayaran | `r2-presigned-upload` | ✅ Generik — `bucket`/`folder` bebas, had 10MB, JPEG/PNG/WEBP/HEIC/PDF |
-| Simpan metadata bukti | Jadual `attachments` | ⚠ Wujud & kosong, tapi RLS `select` terlalu longgar — betulkan dulu (§3.6) |
+| Simpan metadata bukti | Jadual `attachments` | ✅ Wujud & kosong. RLS sedia ada betul (berskop secara tidak langsung melalui RLS bersarang); dijadikan eksplisit dalam migrasi 030 |
 | UI giliran semak & sahkan/tolak | `PengesahanTab.tsx` | ⚠ Corak boleh dicontohi, tapi query kena baharu + tapisan pukal |
 | Kunci pendaftaran | `school_badge_status` + `lockedBadges` | ✅ Sedia berfungsi |
 | Buka semula untuk edit | `reopenSchoolBadge` | ✅ Terus boleh guna |
@@ -737,8 +737,7 @@ _Migrasi 029 — kuatkuasa (DITULIS, belum dipasang)_
 _Belum ditulis_
 - [ ] `dataProcessing.ts`: tapis submission `draft` di sini, **bukan** semasa fetch (§7.1c)
 - [ ] `types.ts` + mapping `fetchCloudData`: tambah `submissionStatus` pada `SubmissionData`
-- [ ] Migrasi: `attachments.category` + `attachments.payment_id`
-- [ ] **Ketatkan RLS `attachments_select`** — prasyarat sebelum apa-apa bukti dimuat naik
+- [x] ~~Migrasi 030: `attachments.category` + `payment_id`, polisi eksplisit, sekolah boleh buang bukti sendiri selagi `pending_review`~~ → ditulis, belum dipasang
 - [ ] Semakan pendua merentas siri **server-side** sebelum bil dijana (§7.2)
 
 **Backend**

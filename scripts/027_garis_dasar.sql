@@ -26,8 +26,66 @@
 
 
 -- ============================================================
--- LANGKAH 1 — Rakam garis dasar (SEBELUM migrasi)
+-- LANGKAH 0 — Garis dasar BACA-SAHAJA (untuk aliran Supabase Branching)
 -- ============================================================
+-- Gunakan INI, bukan Langkah 1, apabila menguji melalui cawangan Supabase.
+--
+-- Sebabnya urutan: Supabase menjalankan migrasi secara automatik sebaik
+-- cawangan dicipta, jadi 027 sudah berjalan sebelum sempat merakam apa-apa
+-- di sana. Garis dasar mesti diambil dari PRODUKSI terlebih dahulu — dan
+-- kerana produksi tidak sepatutnya disentuh, ini SELECT tulen tanpa jadual.
+--
+-- Simpan outputnya. Selepas cawangan siap, jalankan Langkah 2b-cawangan
+-- di sana dan bandingkan kedua-dua senarai.
+
+select
+  b.name              as program,
+  s.submission_year   as tahun,
+  sp.siri,
+  count(*) filter (where sbs.status = 'approved') as peserta_disahkan,
+  count(*)                                        as peserta_semua
+from public.submission_people sp
+join public.submissions s on s.id = sp.submission_id
+join public.badges b      on b.id = s.badge_id
+-- SEMANTIK LAMA: padanan TANPA siri
+left join public.school_badge_status sbs
+  on  sbs.school_id = s.school_id
+  and sbs.badge_id  = s.badge_id
+  and sbs.year      = s.submission_year
+where sp.is_deleted = false
+  and coalesce(sp.float_status, '') not in ('floated', 'transferred')
+group by b.name, s.submission_year, sp.siri
+order by b.name, s.submission_year, sp.siri;
+
+
+-- ============================================================
+-- LANGKAH 2b-cawangan — jalankan pada CAWANGAN selepas migrasi
+-- ============================================================
+-- Struktur output sama seperti Langkah 0. Bandingkan baris demi baris;
+-- setiap angka mesti serupa.
+--
+--   select b.name as program, s.submission_year as tahun, sp.siri,
+--          count(*) filter (where sbs.status = 'approved') as peserta_disahkan,
+--          count(*)                                        as peserta_semua
+--   from public.submission_people sp
+--   join public.submissions s on s.id = sp.submission_id
+--   join public.badges b      on b.id = s.badge_id
+--   left join public.school_badge_status sbs
+--     on  sbs.school_id = s.school_id
+--     and sbs.badge_id  = s.badge_id
+--     and sbs.year      = s.submission_year
+--     and sbs.siri      = sp.siri          -- <<< SEMANTIK BARU
+--   where sp.is_deleted = false
+--     and coalesce(sp.float_status, '') not in ('floated', 'transferred')
+--   group by b.name, s.submission_year, sp.siri
+--   order by b.name, s.submission_year, sp.siri;
+
+
+-- ============================================================
+-- LANGKAH 1 — Rakam garis dasar (SEBELUM migrasi, aliran satu-pangkalan-data)
+-- ============================================================
+-- Gunakan ini HANYA jika memasang terus ke pangkalan data yang sama.
+-- Untuk aliran cawangan, guna Langkah 0 di atas.
 -- Jadual biasa, bukan TEMP, kerana ia mesti bertahan merentas sesi
 -- dan merentas migrasi itu sendiri.
 

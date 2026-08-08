@@ -35,3 +35,6 @@ nano opencode.json
 *.xlsx
 *.xls
 *.csv
+
+# Fail uji-kering yang dijana daripada migrasi — jangan commit (boleh jadi lapuk)
+UJI-KERING-*.sql

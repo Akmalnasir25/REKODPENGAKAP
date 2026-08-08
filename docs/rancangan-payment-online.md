@@ -727,14 +727,19 @@ _Migrasi 028 — skema bayaran (DITULIS, belum dipasang)_
 - [x] ~~`payment_gateway_settings`~~ → rujukan Vault, RLS deny-all + view berskop tanpa lajur rahsia
 - [x] ~~`school_badge_status.payment_status`~~ + ~~`program_settings.payment_online_required`~~
 
+_Migrasi 029 — kuatkuasa (DITULIS, belum dipasang)_
+- [x] ~~`claim_siri_seats`~~ → `FOR UPDATE` pada baris tetapan siri + kiraan langsung; mengembalikan hasil dan bukan membuang ralat, supaya webhook boleh menanda `no_seat`
+- [x] ~~`siri_seats_taken`~~ → satu sumber kebenaran kiraan tempat; had seluruh program, bukan per sekolah
+- [x] ~~`check_siri_availability`~~ → semakan baca-sahaja untuk dropdown & pra-bil
+- [x] ~~`resolve_program_setting`~~ → padanan tetapan ikut skop sekolah (cerminan `findSetting`)
+- [x] ~~**Trigger DB**: halang `approved` jika bayaran diwajibkan tapi belum `paid`~~ — meliputi INSERT dan UPDATE, kerana `approveSchoolBadge` menggunakan upsert
+
 _Belum ditulis_
 - [ ] `dataProcessing.ts`: tapis submission `draft` di sini, **bukan** semasa fetch (§7.1c)
 - [ ] `types.ts` + mapping `fetchCloudData`: tambah `submissionStatus` pada `SubmissionData`
 - [ ] Migrasi: `attachments.category` + `attachments.payment_id`
 - [ ] **Ketatkan RLS `attachments_select`** — prasyarat sebelum apa-apa bukti dimuat naik
-- [ ] **Fungsi `claim_siri_seats`** — `SELECT … FOR UPDATE` + kiraan langsung
-- [ ] Ulang semakan pendua merentas siri **server-side** dalam transaksi yang sama (§7.2)
-- [ ] **Trigger DB**: halang `approved` jika bayaran diwajibkan tapi belum `paid`
+- [ ] Semakan pendua merentas siri **server-side** sebelum bil dijana (§7.2)
 
 **Backend**
 - [ ] Edge Function `create-payment-bill` — kira jumlah server-side, semak tempat & tarikh, resolusi akaun ikut skop

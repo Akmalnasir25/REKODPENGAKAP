@@ -712,22 +712,28 @@ Contoh bil: 30 peserta × RM80.00 = RM2,400.00 **+ RM1.00 caj** = **RM2,401.00**
 ### Fasa 1 (Teras — ketiga-tiga kaedah bayaran)
 
 **Data & keselamatan**
-- [ ] Migrasi: `payments` (kunci school+badge+year, snapshot, `seat_status`, indeks unik separa) + RLS deny-write
-- [ ] Migrasi: `program_siri_settings` (had nullable, `payment_deadline`, `is_closed`)
-- [ ] Migrasi: `payment_gateway_settings` + Vault + view bukan-rahsia + RLS deny-all
-- [ ] **Migrasi: `school_badge_status.siri`** — lajur → backfill **dipacu data** (§7.3) → barulah tukar kunci unik. Backfill seragam `siri = 1` akan melenyapkan peserta Siri 2 sedia ada
-- [ ] Rekod jumlah statistik **sebelum** migrasi sebagai garis dasar; banding selepas. Beza = gulung semula
-- [ ] Migrasi: `school_badge_status.payment_status`
-- [ ] `dataProcessing.ts`: kunci pengesahan mengandungi siri (§7.1a). **Kunci dedup dibiarkan tanpa siri** (§7.1b) — jangan "betulkan" ia
+
+_Migrasi 027 — dimensi siri (DITULIS, belum dipasang)_
+- [x] ~~`school_badge_status.siri`~~ → lajur → backfill dipacu data → tukar kunci unik
+- [x] ~~`dataProcessing.ts`: kunci pengesahan bersiri~~ → `badgeStatusKey()` / `parseBadgeStatusKey()` sebagai satu sumber kebenaran
+- [x] ~~`supabaseApi.ts`: kunci bersiri + 9 upsert `onConflict`~~
+- [x] ~~`UserForm.tsx`: semakan `lockKey` ikut siri terpilih~~
+- [x] ~~Skrip garis dasar~~ → `scripts/027_garis_dasar.sql`
+- [x] ~~Tiga laluan masuk siri selamat~~ → borang, Import Naik (`lockSchoolBadge` ambil siri dari data sebenar), Set Siri (warisi status)
+
+_Migrasi 028 — skema bayaran (DITULIS, belum dipasang)_
+- [x] ~~`payments`~~ → kunci (school, badge, year, siri), snapshot, `seat_status`, indeks unik separa, RLS baca-sahaja tanpa polisi tulis
+- [x] ~~`program_siri_settings`~~ → had nullable, `payment_deadline`, `is_closed`
+- [x] ~~`payment_gateway_settings`~~ → rujukan Vault, RLS deny-all + view berskop tanpa lajur rahsia
+- [x] ~~`school_badge_status.payment_status`~~ + ~~`program_settings.payment_online_required`~~
+
+_Belum ditulis_
 - [ ] `dataProcessing.ts`: tapis submission `draft` di sini, **bukan** semasa fetch (§7.1c)
 - [ ] `types.ts` + mapping `fetchCloudData`: tambah `submissionStatus` pada `SubmissionData`
-- [ ] Ulang semakan pendua merentas siri **server-side** dalam transaksi `claim_siri_seats` (§7.2)
-- [ ] `supabaseApi.ts`: bina `lockedBadges`/`approvedBadges` dengan kunci bersiri; `getSubmittedSchools`, `approveSchoolBadge`, `reopenSchoolBadge`, `approveDaerahLevel` semua terima parameter `siri`
-- [ ] `UserForm.tsx`: semakan `lockKey` ambil kira siri terpilih, supaya Siri 2 boleh dihantar selepas Siri 1 dikunci
-- [ ] Migrasi: `program_settings.payment_online_required`
 - [ ] Migrasi: `attachments.category` + `attachments.payment_id`
 - [ ] **Ketatkan RLS `attachments_select`** — prasyarat sebelum apa-apa bukti dimuat naik
-- [ ] **Fungsi `claim_siri_seats`** — `SELECT … FOR UPDATE` + kiraan langsung, sokong berbilang siri
+- [ ] **Fungsi `claim_siri_seats`** — `SELECT … FOR UPDATE` + kiraan langsung
+- [ ] Ulang semakan pendua merentas siri **server-side** dalam transaksi yang sama (§7.2)
 - [ ] **Trigger DB**: halang `approved` jika bayaran diwajibkan tapi belum `paid`
 
 **Backend**

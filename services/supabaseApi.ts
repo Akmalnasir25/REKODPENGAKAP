@@ -2071,3 +2071,71 @@ export const getFloatedStudents = async (
     return [];
   }
 };
+
+// ============================================================
+// Had tempat & tarikh tutup per siri (program_siri_settings)
+// ============================================================
+// Jadual ini wujud sejak migrasi 028 tetapi tiada UI, jadi max_peserta
+// sentiasa null — bermakna tiada program pernah penuh, dan seluruh logik
+// pengiraan tempat tidak pernah dicetuskan dalam penggunaan sebenar.
+
+export interface ProgramSiriSetting {
+  programSettingId: string;
+  siri: number;
+  maxPeserta: number | null;      // null = tiada had
+  paymentDeadline: string | null; // null = ikut tarikh akhir program
+  isClosed: boolean;
+}
+
+export const getProgramSiriSettings = async (): Promise<ProgramSiriSetting[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('program_siri_settings')
+      .select('program_setting_id, siri, max_peserta, payment_deadline, is_closed');
+    if (error) throw error;
+    return (data || []).map((r: any) => ({
+      programSettingId: r.program_setting_id,
+      siri: r.siri,
+      maxPeserta: r.max_peserta,
+      paymentDeadline: r.payment_deadline,
+      isClosed: !!r.is_closed,
+    }));
+  } catch (error) {
+    console.error('getProgramSiriSettings error:', error);
+    return [];
+  }
+};
+
+export const saveProgramSiriSettings = async (
+  programSettingId: string,
+  rows: Array<{ siri: number; maxPeserta: number | null; paymentDeadline: string | null; isClosed: boolean }>,
+): Promise<ApiResponse> => {
+  try {
+    const { error: delErr } = await supabase
+      .from('program_siri_settings')
+      .delete()
+      .eq('program_setting_id', programSettingId);
+    if (delErr) throw delErr;
+
+    // Baris tanpa had, tanpa tarikh tutup dan tidak ditutup bermakna sama
+    // seperti tiada baris langsung — check_siri_availability memulangkan
+    // "tiada had" dalam kedua-dua keadaan. Menyimpannya hanya menambah baris
+    // yang perlu difahami kemudian.
+    const bermakna = rows.filter(r => r.maxPeserta !== null || r.paymentDeadline !== null || r.isClosed);
+    if (bermakna.length === 0) return { status: 'success', message: 'Had siri dikemas kini.' };
+
+    const { error } = await supabase.from('program_siri_settings').insert(
+      bermakna.map(r => ({
+        program_setting_id: programSettingId,
+        siri: r.siri,
+        max_peserta: r.maxPeserta,
+        payment_deadline: r.paymentDeadline,
+        is_closed: r.isClosed,
+      })),
+    );
+    if (error) throw error;
+    return { status: 'success', message: 'Had siri dikemas kini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal simpan had siri.' };
+  }
+};

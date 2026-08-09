@@ -147,14 +147,20 @@ serve(async (req) => {
       });
       const teks = (await res.text()).trim();
 
-      // Respons getCategoryDetails tidak didokumenkan, jadi semakan dibuat
-      // secara negatif: tolak hanya bila gateway jelas menandakan kegagalan.
-      // Memadankan medan tertentu ialah tekaan yang menolak kredensial sah.
-      const atas = teks.toUpperCase();
-      sah = res.ok && teks.length > 0 && !atas.includes('FALSE') && !atas.includes('INVALID');
+      // Respons yang didokumenkan bagi kredensial sah:
+      //   [{"categoryName":"...","categoryDescription":"...","categoryStatus":"1"}]
+      // Padanan tepat pada categoryName digunakan dengan sengaja. Semakan yang
+      // lebih longgar (cth "tolak hanya jika mengandungi FALSE") akan menerima
+      // kredensial rosak, yang bermakna kegagalan berpindah ke saat sekolah
+      // pertama cuba membayar.
+      let kategori: any = null;
+      try {
+        const parsed = JSON.parse(teks);
+        kategori = Array.isArray(parsed) ? parsed[0] : parsed;
+      } catch (_) { /* bukan JSON — tidak sah */ }
+      sah = res.ok && !!kategori?.categoryName;
 
-      // Bentuk respons dilog untuk diagnosis — panjang sahaja, bukan
-      // kandungan, kerana ToyyibPay kadang memantulkan input.
+      // Diagnosis tanpa mendedahkan kandungan: ToyyibPay kadang memantulkan input.
       console.log('getCategoryDetails', { httpStatus: res.status, panjangRespons: teks.length, sah });
     } catch (_) {
       sah = false;

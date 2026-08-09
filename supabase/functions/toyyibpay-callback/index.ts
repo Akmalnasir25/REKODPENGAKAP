@@ -8,10 +8,14 @@
 //   ditolak 401 sebelum kod ini berjalan, dan setiap bayaran tersangkut.
 //
 // PERATURAN
-//   1. Callback ToyyibPay TIADA tandatangan kriptografi — sesiapa yang tahu
-//      URL boleh menghantar "bayaran berjaya" palsu. Jadi kandungan callback
-//      TIDAK dipercayai; ia hanya pencetus. Status sebenar diambil dengan
-//      memanggil BALIK getBillTransactions menggunakan secret key kita
+//   1. DUA lapisan pengesahan, bukan satu:
+//      a) Hash MD5 yang ToyyibPay hantar bersama callback —
+//         MD5(userSecretKey + status + order_id + refno + "ok").
+//         Dokumentasi menyatakan ini WAJIB disahkan sebelum memproses.
+//         Ia menolak callback palsu dengan segera, tanpa panggilan rangkaian
+//      b) getBillTransactions — walaupun hash sah, jumlah dan status sebenar
+//         diambil dari gateway. Hash membuktikan penghantar tahu kunci; ia
+//         tidak membuktikan berapa yang benar-benar dibayar
 //   2. Idempoten — ToyyibPay boleh menghantar lebih daripada sekali
 //   3. Akaun gateway dikongsi dengan sistem lain (3-4 tahun penggunaan), jadi
 //      callback untuk bil yang BUKAN milik kita mesti ditolak dengan bersih:
@@ -25,6 +29,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createHash } from 'node:crypto';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,6 +54,9 @@ serve(async (req) => {
 
   let orderId = '';
   let billcode = '';
+  let refno = '';
+  let statusCb = '';
+  let hashCb = '';
 
   try {
     // ToyyibPay menghantar form-encoded; JSON dikendali sebagai sandaran.
@@ -57,10 +65,16 @@ serve(async (req) => {
       const b = await req.json();
       orderId = String(b.order_id || b.orderId || '');
       billcode = String(b.billcode || b.billCode || '');
+      refno = String(b.refno || '');
+      statusCb = String(b.status || '');
+      hashCb = String(b.hash || '');
     } else {
       const f = await req.formData();
       orderId = String(f.get('order_id') || '');
       billcode = String(f.get('billcode') || '');
+      refno = String(f.get('refno') || '');
+      statusCb = String(f.get('status') || '');
+      hashCb = String(f.get('hash') || '');
     }
 
     // Log setiap callback yang diterima, termasuk yang ditolak — tanpa ini,
@@ -102,8 +116,30 @@ serve(async (req) => {
     const { data: rahsia } = await admin.rpc('read_gateway_secret', { p_id: gw.secret_vault_id });
     if (!rahsia) return ok('kunci gateway tidak dapat dibaca');
 
-    // ── DOUBLE-CHECK: tanya ToyyibPay sendiri ─────────────────────────
-    // Ini yang membezakan bayaran sebenar daripada callback palsu.
+    // ── LAPISAN 1: sahkan hash ────────────────────────────────────────
+    // MD5(userSecretKey + status + order_id + refno + "ok"). Callback tanpa
+    // hash yang sah tidak pernah datang dari ToyyibPay — tolak sebelum
+    // membuat apa-apa panggilan rangkaian.
+    if (hashCb) {
+      const dijangkaHash = createHash('md5')
+        .update(`${rahsia}${statusCb}${orderId}${refno}ok`)
+        .digest('hex');
+      if (dijangkaHash !== hashCb.toLowerCase()) {
+        await admin.from('audit_logs').insert({
+          action: 'toyyibpay_hash_tidak_sah',
+          entity_type: 'payments', entity_id: bayaran.id,
+          details: { billcode, refno, statusCb },
+        }).then(() => {}, () => {});
+        return ok('hash tidak sah — callback ditolak');
+      }
+    }
+    // Hash yang tiada tidak ditolak terus: lapisan kedua di bawah tetap
+    // menentukan kebenaran, dan menolak di sini akan memecahkan integrasi
+    // sekiranya ToyyibPay meninggalkan medan itu bagi saluran tertentu.
+
+    // ── LAPISAN 2: tanya ToyyibPay sendiri ────────────────────────────
+    // Hash membuktikan penghantar tahu kunci. Ia TIDAK membuktikan berapa
+    // yang dibayar — itu diambil dari gateway.
     const hos = gw.is_sandbox ? 'https://dev.toyyibpay.com' : 'https://toyyibpay.com';
     // urlencoded — lihat nota dalam save-gateway-settings.
     const borang = new URLSearchParams();

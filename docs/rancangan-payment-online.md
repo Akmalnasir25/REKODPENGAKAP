@@ -420,7 +420,7 @@ ToyyibPay tidak boleh menerima bil RM0, jadi tanpa pengendalian, sekolah tersang
 ### 6.2 Pengesahan Bayaran — dua lapisan
 
 1. **Webhook**: ToyyibPay POST ke `billCallbackUrl` dengan `billcode`, `order_id` (=`billExternalReferenceNo`), `status` (1=berjaya), `amount`
-2. **Double-check wajib**: Callback ToyyibPay **tiada tandatangan kriptografi** (tak macam Stripe) — Edge Function mesti panggil **balik** `getBillTransactions` guna secret key **akaun skop yang betul** (dari `payments.gateway_settings_id`) sebelum tanda `paid`
+2. **Double-check wajib**: hash membuktikan penghantar tahu kunci, tetapi bukan berapa yang dibayar — Edge Function mesti panggil **balik** `getBillTransactions` guna secret key **akaun skop yang betul** (dari `payments.gateway_settings_id`) sebelum tanda `paid`
 
 ```
 1. Cipta bil: amount=25000 (sen), billPriceSetting=1, billExternalReferenceNo=payment.id

@@ -803,12 +803,62 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))),
     [programSettings, selectedBadgeFilter, selectedYear, currentSchoolSettings]);
 
+  // Siri yang masih menunggu penghantaran, diterbitkan daripada PESERTA SEBENAR.
+  //
+  // lockSchoolBadge sudah lama berbuat demikian, dan komennya memberi amaran
+  // terhadap bergantung pada penapis UI. Pintu bayaran melakukan tepat perkara
+  // itu: penapis kosong bermakna Siri 1, sedangkan peserta berada dalam Siri 2.
+  // Jumlah dikira untuk siri kosong, keluar RM0, dan pintu bayaran dilangkau —
+  // sekolah masuk statistik tanpa membayar sesen pun.
+  const siriBelumHantar = useMemo(() => {
+    if (!selectedBadgeFilter) return [] as number[];
+    const ada = new Set<number>();
+    allData.forEach((d: any) => {
+      if (d.badge !== selectedBadgeFilter) return;
+      let tahun: number;
+      try { tahun = new Date(d.date).getFullYear(); } catch { return; }
+      if (tahun !== selectedYear) return;
+      ada.add(d.siri || 1);
+    });
+    return Array.from(ada)
+      .filter(s => {
+        const k = getLockKey(selectedBadgeFilter, selectedYear, s);
+        return !lockedBadges.includes(k) && !approvedBadges.includes(k);
+      })
+      .sort((a, b) => a - b);
+  }, [allData, selectedBadgeFilter, selectedYear, lockedBadges, approvedBadges]);
+
+  const [siriBayaran, setSiriBayaran] = useState<number | null>(null);
+
   const handleFinalSubmit = async () => {
     if (!selectedBadgeFilter) return;
 
     // Pintu bayaran: pendaftaran TIDAK dihantar terus. Ia kekal draf sehingga
     // bayaran diuruskan; Edge Function yang menghantarnya selepas itu.
-    if (tetapanBayaranAktif) { setPaymentResume(undefined); setShowPayment(true); return; }
+    if (tetapanBayaranAktif) {
+      // Penapis diutamakan bila ditetapkan; jika tidak, siri diterbitkan.
+      const dipilih = selectedSiriFilter === '' ? null : Number(selectedSiriFilter);
+      const sasar = dipilih ?? (siriBelumHantar.length === 1 ? siriBelumHantar[0] : null);
+
+      if (sasar === null) {
+        alert(
+          siriBelumHantar.length === 0
+            ? 'Tiada peserta yang belum dihantar untuk program ini.'
+            : `Peserta program ini merangkumi Siri ${siriBelumHantar.join(' dan ')}.\n\n`
+              + 'Bayaran dikira satu siri pada satu masa. Sila tapis mengikut siri dahulu.',
+        );
+        return;
+      }
+      if (!siriBelumHantar.includes(sasar)) {
+        alert(`Tiada peserta yang belum dihantar dalam Siri ${sasar} bagi program ini.`);
+        return;
+      }
+
+      setSiriBayaran(sasar);
+      setPaymentResume(undefined);
+      setShowPayment(true);
+      return;
+    }
     if (!confirm(`PENGESAHAN AKHIR (${selectedYear})\n\nAdakah anda pasti mahu menghantar pendaftaran untuk program '${selectedBadgeFilter}' pada tahun ${selectedYear}?\n\nSelepas ini data akan dikunci.`)) return;
     setIsLocking(true);
     try {
@@ -2155,12 +2205,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         <PaymentScreen
           badgeName={selectedBadgeFilter}
           year={selectedYear}
-          siri={activeSiri}
+          siri={siriBayaran ?? activeSiri}
           negeriCode={currentSchoolSettings?.negeriCode}
           daerahCode={currentSchoolSettings?.daerahCode}
           paymentIdSediaAda={paymentResume}
-          onTutup={() => { setShowPayment(false); setPaymentResume(undefined); }}
-          onSelesai={() => { setShowPayment(false); setPaymentResume(undefined); onRefresh(); }}
+          onTutup={() => { setShowPayment(false); setPaymentResume(undefined); setSiriBayaran(null); }}
+          onSelesai={() => { setShowPayment(false); setPaymentResume(undefined); setSiriBayaran(null); onRefresh(); }}
         />
       )}
     </div>

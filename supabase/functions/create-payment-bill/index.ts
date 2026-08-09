@@ -127,6 +127,18 @@ serve(async (req) => {
       .eq('is_deleted', false)
       .or('is_withdrawn.is.null,is_withdrawn.eq.false');
 
+    // Siri tanpa seorang pun peserta BUKAN pendaftaran percuma — ia siri yang
+    // salah. Tanpa semakan ini kedua-duanya menghasilkan RM0, dan cabang RM0 di
+    // bawah menghantar pendaftaran terus ke pengesahan tanpa bayaran. Sekolah
+    // masuk statistik secara percuma, dan tiada apa-apa yang kelihatan rosak.
+    if ((people || []).length === 0) {
+      return json({
+        status: 'error',
+        message: `Tiada peserta direkodkan untuk Siri ${siri} dalam program ini. `
+               + `Sila semak penapis siri anda sebelum menghantar.`,
+      }, 400);
+    }
+
     const kira = { peserta: 0, pemimpin: 0, penolong: 0 };
     (people || []).forEach((p: any) => {
       const r = String(p.role || 'PESERTA').toUpperCase();

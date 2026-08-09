@@ -1,6 +1,6 @@
 # RANCANGAN PENUH: Pembayaran Online & Pengesahan Bayaran
 
-> Status: **Rancangan (belum implementasi)** · Tarikh: 2026-08-06 · Semakan teknikal: 2026-08-07 · Skop: ScoutNadi (daftarpengakap)
+> Status: **Dilaksanakan · dalam ujian sandbox** · Tarikh: 2026-08-06 · Semakan teknikal: 2026-08-07 · Kemas kini: 2026-08-09 · Skop: ScoutNadi (daftarpengakap)
 >
 > Semakan 2026-08-07 menyelaraskan rancangan dengan kod sebenar dan merakam keputusan teras:
 > granulariti bayaran (per sekolah+program+tahun+**siri**), susunan pintu (bayar → admin sahkan),
@@ -17,53 +17,68 @@
 
 ## 0. Status Semasa · 9 Ogos 2026
 
-**Terakhir dikerjakan:** aliran bayaran ToyyibPay **berjaya hujung ke hujung** dalam sandbox — sekolah membayar, webhook sampai, hash disahkan, tempat dituntut, pendaftaran masuk giliran pengesahan admin.
+**Terakhir dikerjakan:** kedua-dua aliran bayaran **berjaya hujung ke hujung** dalam sandbox. ToyyibPay/FPX: sekolah membayar, webhook sampai, hash disahkan, tempat dituntut. Manual: sekolah memuat naik bukti, admin membukanya, mengesahkan bayaran, kemudian mengesahkan pendaftaran — dan ia masuk ke statistik.
 
-**Tiga pepijat yang hanya muncul semasa ujian sebenar:**
+**Enam pepijat yang hanya muncul semasa ujian sebenar:**
 
 | Pepijat | Kenapa ujian berasingan terlepas |
 |---|---|
 | `CategoryName` huruf besar | Dokumentasi ToyyibPay menunjukkan huruf kecil; API memulangkan huruf besar |
 | `billExpiryDate` dalam UTC | `createBill` memulangkan `BillCode` seperti biasa — bil dicipta sempurna, cuma sudah mati. Hanya kelihatan bila seseorang membuka pautan |
 | Caj gateway RM1 | `billChargeToCustomer=0` menyebabkan pembayar membayar RM81 untuk bil RM80; padanan tepat menolak setiap bayaran sah |
+| Rahsia reconciliation berkurungan | Placeholder ditulis `<nilai>`; kurungan tersalin ke rahsia Edge Function. Setiap larian cron ditolak 401 — dan `cron.job_run_details` melaporkan `succeeded`, kerana pg_net tidak menunggu respons |
+| R2 tidak pernah wujud | `r2-presigned-upload` tidak pernah di-deploy dan tiada kredensial R2. Preflight 404 dilaporkan pelayar sebagai ralat CORS, jadi ia kelihatan seperti masalah header. Modul kursus tidak menyedarinya kerana ia mempunyai fallback senyap |
+| Pencetus bayaran vs `ON CONFLICT` | PostgreSQL menembak BEFORE INSERT bagi baris upsert sebelum konflik dikesan, jadi pencetus membaca lalai lajur `'not_required'` dan bukan `'paid'` yang tersimpan. Ralatnya ditelan kerana `approveSchoolBadge` tidak memeriksa `error` |
 
-Ketiga-tiganya jenis yang sama: setiap fungsi menjawab dengan betul secara berasingan, tetapi rantaian tidak berkelakuan baik untuk manusia sebenar.
+Kesemuanya jenis yang sama: setiap bahagian menjawab dengan betul secara berasingan, tetapi rantaian tidak berkelakuan baik untuk manusia sebenar. Tiga yang terakhir berkongsi satu ciri yang lebih merbahaya — **kegagalan senyap**. Cron melaporkan berjaya, pelayar menyalahkan CORS, butang tidak berbuat apa-apa tanpa mesej. Setiap kali, pangkalan data atau gateway sudah memberitahu sebabnya; tiada siapa yang membaca jawapannya.
 
 ### Sudah siap & hidup di produksi
 
 | | |
 |---|---|
-| Migrasi 027–032 | Dipasang, disahkan terhadap data sebenar |
+| Migrasi 027–039 | Dipasang, disahkan terhadap data sebenar |
 | Kunci/pengesahan ikut siri | Sekolah boleh hantar Siri 2 selepas Siri 1 |
 | Kategori sekolah SR/SM | Ditetapkan semasa daftar, boleh diedit |
 | Kadar yuran per siri × jenis | Grid dalam modal tetapan program |
 | Penapis jenis sekolah | AdminDashboard, AdminHistory, DaerahProgramAnalysis |
-| Edge Functions | `save-gateway-settings`, `create-payment-bill`, `toyyibpay-callback` — ketiga-tiganya di-deploy |
-| Akaun gateway | Kinta Utara · **sandbox · disahkan** · kredensial dalam Vault |
-| Aliran bayaran penuh | **Diuji berjaya** — ToyyibPay/FPX, SBI BANK A |
-| Reconciliation | pg_cron setiap 5 minit; rahsia dalam Vault |
+| Edge Functions | `save-gateway-settings`, `create-payment-bill`, `toyyibpay-callback`, `check-payment-status`, `submit-payment-proof`, `reconcile-payments` — kesemuanya di-deploy |
+| Akaun gateway | Kinta Utara · **sandbox · disahkan** · kredensial dalam Vault · maklumat akaun bank diisi |
+| Aliran ToyyibPay | **Diuji berjaya** — FPX, SBI BANK A |
+| Aliran manual | **Diuji berjaya** — bukti dimuat naik, dibuka admin, disahkan, masuk statistik |
+| Reconciliation | pg_cron setiap 5 minit · **disahkan benar-benar sampai** ke Edge Function |
+| Storan bukti | Baldi persendirian `payment-proofs`; skop diwarisi dari RLS `payments` |
+| Resit PDF | Nombor diterbitkan dari ID bayaran; bilangan dari snapshot bil |
 
-`toyyibpay-callback` di-deploy dengan `--no-verify-jwt`. Jangan deploy semula tanpanya.
+`toyyibpay-callback` dan `reconcile-payments` di-deploy dengan `--no-verify-jwt`. Jangan deploy semula tanpanya.
 
 ### Langkah seterusnya, ikut urutan
 
-**Belum diuji** — semua dibina, tiada satu pun dilalui:
-1. **SBI BANK C** (pending 30 minit) — menguji lapisan reconciliation dan peraturan jangan-batalkan-transaksi-tergantung. Paling berharga; paling mudah tersilap
+**Belum diuji:**
+1. **SBI BANK C** (pending 30 minit) — menguji lapisan reconciliation dan peraturan jangan-batalkan-transaksi-tergantung. Paling berharga; paling mudah tersilap. Percubaan pertama terhenti apabila bil manual mengambil tempat bil tergantung itu (satu bil terbuka sahaja per sekolah × program × tahun × siri), jadi ulang pada program atau siri lain
 2. **SBI BANK B** (gagal) — sekolah boleh jana bil baharu
-3. **Pindahan bank / cek** — muat naik bukti, giliran semakan admin, sahkan & tolak
-4. Sahkan cron benar-benar berjalan: `select * from audit_logs where action = 'reconciliation_dijalankan'`
 
-**Belum dibina:**
-5. Resit PDF
-6. Jurang §9b — peserta ditambah selepas pengesahan tanpa dibil
+**Belum diputuskan:**
+3. Jurang §9b — peserta ditambah selepas pengesahan tanpa dibil
 
 **Sebelum produksi:**
-7. `categoryCode` ScoutNadi pada akaun ToyyibPay **produksi**
-8. Tukar togol gateway dari Sandbox ke Produksi
+4. `categoryCode` ScoutNadi pada akaun ToyyibPay **produksi**
+5. Tukar togol gateway dari Sandbox ke Produksi
 
-### Belum diaktifkan
+### Pengaktifan
 
-`payment_online_required` masih `false` untuk **semua** program. Tiada sekolah nampak apa-apa perubahan berkaitan bayaran. Togol ini ialah langkah terakhir sebelum ujian sebenar, bukan pertama.
+`payment_online_required` kini `true` untuk **Keris Perak 2026 · Kinta Utara** sahaja — program perintis. Semua program lain masih `false`, jadi tiada sekolah lain nampak sebarang perubahan berkaitan bayaran.
+
+### Cara mengesan reconciliation mati
+
+**Bukan** melalui `cron.job_run_details`. pg_net bersifat fire-and-forget, jadi larian dilaporkan `succeeded` selagi SQL berjaya dihantar — walaupun Edge Function menolaknya 401. Penunjuk sebenar:
+
+```sql
+select to_char(created_at at time zone 'Asia/Kuala_Lumpur','HH24:MI:SS'), details
+from audit_logs where action = 'reconciliation_dijalankan'
+order by created_at desc limit 5;
+```
+
+Tiada baris baharu dalam 10 minit lepas bermakna ia sedang mati senyap.
 
 ### Perintis
 

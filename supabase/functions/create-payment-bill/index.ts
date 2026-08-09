@@ -32,6 +32,20 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
+
+// Baca medan tanpa mengira huruf besar-kecil.
+//
+// getCategoryDetails memulangkan "CategoryName" sedangkan dokumentasi rasmi
+// menunjukkan "categoryName". Memandangkan satu endpoint sudah menyimpang,
+// yang lain tidak boleh dipercayai kekal seperti didokumenkan — dan dalam
+// laluan bayaran, padanan medan yang gagal bermakna bayaran sah tidak pernah
+// diakui, tanpa apa-apa yang kelihatan rosak.
+const medan = (objek: any, nama: string): any => {
+  if (!objek || typeof objek !== 'object') return undefined;
+  const kunci = Object.keys(objek).find((k) => k.toLowerCase() === nama.toLowerCase());
+  return kunci ? objek[kunci] : undefined;
+};
+
 const TEMPOH_BIL_MINIT = 30;
 
 type Kaedah = 'toyyibpay' | 'bank_transfer' | 'cheque';
@@ -259,7 +273,7 @@ serve(async (req) => {
     let billCode = '';
     try {
       const parsed = JSON.parse(teks);
-      billCode = Array.isArray(parsed) ? parsed[0]?.BillCode : parsed?.BillCode;
+      billCode = medan(Array.isArray(parsed) ? parsed[0] : parsed, 'BillCode');
     } catch (_) { /* respons bukan JSON — dikendali di bawah */ }
 
     if (!billCode) {

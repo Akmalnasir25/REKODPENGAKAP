@@ -151,18 +151,27 @@ serve(async (req) => {
       });
       const teks = (await res.text()).trim();
 
-      // Respons yang didokumenkan bagi kredensial sah:
-      //   [{"categoryName":"...","categoryDescription":"...","categoryStatus":"1"}]
-      // Padanan tepat pada categoryName digunakan dengan sengaja. Semakan yang
-      // lebih longgar (cth "tolak hanya jika mengandungi FALSE") akan menerima
-      // kredensial rosak, yang bermakna kegagalan berpindah ke saat sekolah
-      // pertama cuba membayar.
+      // Respons bagi kredensial sah:
+      //   [{"CategoryName":"...","categoryDescription":"...","categoryStatus":"1"}]
+      //
+      // ⚠ Dokumentasi rasmi ToyyibPay menunjukkan "categoryName" dengan huruf
+      // kecil. API sebenar memulangkan "CategoryName" dengan C BESAR. Padanan
+      // peka huruf menolak kredensial yang sah — itulah punca borang ini gagal
+      // berulang kali walaupun kunci dan kod kategori betul.
+      //
+      // Padanan dibuat tanpa mengira huruf besar-kecil supaya ia bertahan
+      // walaupun ToyyibPay menyelaraskannya dengan dokumentasi kemudian.
       let kategori: any = null;
       try {
         const parsed = JSON.parse(teks);
         kategori = Array.isArray(parsed) ? parsed[0] : parsed;
       } catch (_) { /* bukan JSON — tidak sah */ }
-      sah = res.ok && !!kategori?.categoryName;
+
+      const adaNamaKategori = kategori && typeof kategori === 'object'
+        && Object.keys(kategori).some(
+             (k) => k.toLowerCase() === 'categoryname' && String(kategori[k] ?? '').length > 0,
+           );
+      sah = res.ok && !!adaNamaKategori;
 
       // Diagnosis: nama medan sahaja, bukan nilai. Ini mendedahkan bentuk
       // respons (dan sebab padanan gagal) tanpa mencatat apa-apa kandungan —

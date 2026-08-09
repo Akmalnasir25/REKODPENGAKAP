@@ -37,6 +37,20 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+
+// Baca medan tanpa mengira huruf besar-kecil.
+//
+// getCategoryDetails memulangkan "CategoryName" sedangkan dokumentasi rasmi
+// menunjukkan "categoryName". Memandangkan satu endpoint sudah menyimpang,
+// yang lain tidak boleh dipercayai kekal seperti didokumenkan — dan dalam
+// laluan bayaran, padanan medan yang gagal bermakna bayaran sah tidak pernah
+// diakui, tanpa apa-apa yang kelihatan rosak.
+const medan = (objek: any, nama: string): any => {
+  if (!objek || typeof objek !== 'object') return undefined;
+  const kunci = Object.keys(objek).find((k) => k.toLowerCase() === nama.toLowerCase());
+  return kunci ? objek[kunci] : undefined;
+};
+
 // Sentiasa 200 — lihat peraturan 4 di atas.
 const ok = (nota: string) =>
   new Response(JSON.stringify({ received: true, nota }), {
@@ -162,18 +176,18 @@ serve(async (req) => {
     }
 
     // billpaymentStatus: 1 = berjaya
-    const berjaya = transaksi.find((t) => String(t?.billpaymentStatus) === '1');
+    const berjaya = transaksi.find((t) => String(medan(t, 'billpaymentStatus') ?? '') === '1');
     if (!berjaya) {
       await admin.from('audit_logs').insert({
         action: 'toyyibpay_callback_tidak_berjaya',
         entity_type: 'payments', entity_id: bayaran.id,
-        details: { billcode, statusDilaporkan: transaksi.map((t) => t?.billpaymentStatus) },
+        details: { billcode, statusDilaporkan: transaksi.map((t) => medan(t, 'billpaymentStatus')) },
       }).then(() => {}, () => {});
       return ok('gateway tidak mengesahkan bayaran berjaya');
     }
 
     // Jumlah mesti sepadan dengan total_amount (yuran + caj), bukan amount.
-    const dibayar = Number(String(berjaya.billpaymentAmount ?? '0').replace(/[^0-9.]/g, ''));
+    const dibayar = Number(String(medan(berjaya, 'billpaymentAmount') ?? '0').replace(/[^0-9.]/g, ''));
     const dijangka = Number(bayaran.total_amount);
     if (Math.abs(dibayar - dijangka) > 0.01) {
       await admin.from('payments').update({

@@ -105,11 +105,16 @@ serve(async (req) => {
     // ── DOUBLE-CHECK: tanya ToyyibPay sendiri ─────────────────────────
     // Ini yang membezakan bayaran sebenar daripada callback palsu.
     const hos = gw.is_sandbox ? 'https://dev.toyyibpay.com' : 'https://toyyibpay.com';
-    const borang = new FormData();
-    borang.append('userSecretKey', rahsia as string);
-    borang.append('billCode', billcode);
+    // urlencoded — lihat nota dalam save-gateway-settings.
+    const borang = new URLSearchParams();
+    borang.set('userSecretKey', rahsia as string);
+    borang.set('billCode', billcode);
 
-    const res = await fetch(`${hos}/index.php/api/getBillTransactions`, { method: 'POST', body: borang });
+    const res = await fetch(`${hos}/index.php/api/getBillTransactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: borang.toString(),
+    });
     const teks = await res.text();
 
     let transaksi: any[] = [];

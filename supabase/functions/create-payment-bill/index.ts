@@ -224,25 +224,30 @@ serve(async (req) => {
     const pad = (n: number) => String(n).padStart(2, '0');
     const expiryStr = `${pad(luput.getDate())}-${pad(luput.getMonth() + 1)}-${luput.getFullYear()} ${pad(luput.getHours())}:${pad(luput.getMinutes())}:${pad(luput.getSeconds())}`;
 
-    const borang = new FormData();
-    borang.append('userSecretKey', rahsia as string);
-    borang.append('categoryCode', gw!.category_code!);
+    // urlencoded — lihat nota dalam save-gateway-settings.
+    const borang = new URLSearchParams();
+    borang.set('userSecretKey', rahsia as string);
+    borang.set('categoryCode', gw!.category_code!);
     // billName dihadkan 30 aksara oleh ToyyibPay
-    borang.append('billName', `${badge.name} S${siri}`.slice(0, 30));
-    borang.append('billDescription', `${school.name} · ${badge.name} Siri ${siri} ${year}`.slice(0, 100));
-    borang.append('billPriceSetting', '1');          // jumlah tetap — pembayar tak boleh ubah
-    borang.append('billPayorInfo', '1');
-    borang.append('billAmount', String(Math.round(total * 100)));   // sen; Math.round elak ralat float
-    borang.append('billReturnUrl', `${appUrl}/?bayaran=${bayaran.id}`);
-    borang.append('billCallbackUrl', `${supabaseUrl}/functions/v1/toyyibpay-callback`);
-    borang.append('billExternalReferenceNo', bayaran.id);
-    borang.append('billTo', school.name);
-    borang.append('billEmail', user.email || 'noreply@scoutnadi.my');
-    borang.append('billPhone', '0000000000');
-    borang.append('billPaymentChannel', '0');        // FPX sahaja — caj kad ialah peratusan
-    borang.append('billExpiryDate', expiryStr);
+    borang.set('billName', `${badge.name} S${siri}`.slice(0, 30));
+    borang.set('billDescription', `${school.name} · ${badge.name} Siri ${siri} ${year}`.slice(0, 100));
+    borang.set('billPriceSetting', '1');          // jumlah tetap — pembayar tak boleh ubah
+    borang.set('billPayorInfo', '1');
+    borang.set('billAmount', String(Math.round(total * 100)));   // sen; Math.round elak ralat float
+    borang.set('billReturnUrl', `${appUrl}/?bayaran=${bayaran.id}`);
+    borang.set('billCallbackUrl', `${supabaseUrl}/functions/v1/toyyibpay-callback`);
+    borang.set('billExternalReferenceNo', bayaran.id);
+    borang.set('billTo', school.name);
+    borang.set('billEmail', user.email || 'noreply@scoutnadi.my');
+    borang.set('billPhone', '0000000000');
+    borang.set('billPaymentChannel', '0');        // FPX sahaja — caj kad ialah peratusan
+    borang.set('billExpiryDate', expiryStr);
 
-    const res = await fetch(`${hos}/index.php/api/createBill`, { method: 'POST', body: borang });
+    const res = await fetch(`${hos}/index.php/api/createBill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: borang.toString(),
+    });
     const teks = await res.text();
     let billCode = '';
     try {

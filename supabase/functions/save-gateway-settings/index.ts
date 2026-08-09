@@ -134,13 +134,28 @@ serve(async (req) => {
     try {
       // getCategoryDetails mengesahkan kunci DAN kod kategori sekali gus —
       // kedua-duanya mesti betul untuk mendapat balasan yang bermakna.
-      const borang = new FormData();
-      borang.append('userSecretKey', kunciUntukUji);
-      borang.append('categoryCode', body.categoryCode.trim());
-      const res = await fetch(`${hos}/index.php/api/getCategoryDetails`, { method: 'POST', body: borang });
-      const teks = await res.text();
-      // ToyyibPay memulangkan objek kategori bila sah, dan mesej ralat bila tidak.
-      sah = res.ok && teks.includes('categoryName');
+      // urlencoded, BUKAN FormData. API ToyyibPay membaca $_POST daripada
+      // badan urlencoded; multipart/form-data tidak dibaca dengan betul dan
+      // setiap panggilan kelihatan seperti kredensial salah.
+      const borang = new URLSearchParams();
+      borang.set('userSecretKey', kunciUntukUji);
+      borang.set('categoryCode', body.categoryCode.trim());
+      const res = await fetch(`${hos}/index.php/api/getCategoryDetails`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: borang.toString(),
+      });
+      const teks = (await res.text()).trim();
+
+      // Respons getCategoryDetails tidak didokumenkan, jadi semakan dibuat
+      // secara negatif: tolak hanya bila gateway jelas menandakan kegagalan.
+      // Memadankan medan tertentu ialah tekaan yang menolak kredensial sah.
+      const atas = teks.toUpperCase();
+      sah = res.ok && teks.length > 0 && !atas.includes('FALSE') && !atas.includes('INVALID');
+
+      // Bentuk respons dilog untuk diagnosis — panjang sahaja, bukan
+      // kandungan, kerana ToyyibPay kadang memantulkan input.
+      console.log('getCategoryDetails', { httpStatus: res.status, panjangRespons: teks.length, sah });
     } catch (_) {
       sah = false;
     }

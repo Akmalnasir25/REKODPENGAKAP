@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Wallet, Shirt, Loader, RefreshCw, Download } from 'lucide-react';
 import { SubmissionData } from '../types';
-import { getProgramSettings, ProgramSetting } from '../services/supabaseApi';
+import { getProgramSettings, getProgramFeeOverrides, ProgramSetting, ProgramFeeOverride } from '../services/supabaseApi';
 import { buildProgramSummary, formatRM, SHIRT_SIZES, SHIRT_TYPES, SchoolSummary } from '../services/programSummary';
 
 interface ProgramSummaryViewProps {
@@ -24,22 +24,31 @@ const orderTypes = (types: string[]): string[] => {
 
 export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records, year, mode }) => {
   const [settings, setSettings] = useState<ProgramSetting[]>([]);
+  const [feeOverrides, setFeeOverrides] = useState<ProgramFeeOverride[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'bayaran' | 'baju'>('bayaran');
 
   const loadSettings = async () => {
     setLoading(true);
-    const data = await getProgramSettings(year);
+    const [data, overrides] = await Promise.all([
+      getProgramSettings(year),
+      getProgramFeeOverrides(),
+    ]);
     setSettings(data);
+    setFeeOverrides(overrides);
     setLoading(false);
   };
 
   useEffect(() => { loadSettings(); }, [year]);
 
   const summary = useMemo(
-    () => buildProgramSummary(records, settings, year),
-    [records, settings, year],
+    () => buildProgramSummary(records, settings, year, feeOverrides),
+    [records, settings, year, feeOverrides],
   );
+
+  // Rumusan kini dipecah per program x siri kerana yuran boleh berbeza antara
+  // siri. Untuk program tanpa siri semuanya Siri 1, jadi label disembunyikan.
+  const labelSiri = (siri: number) => (siri > 1 ? ` · Siri ${siri}` : '');
 
   const grandTotalAll = summary.reduce((sum, s) => sum + s.grandTotal, 0);
   const anyPayment = summary.some(s => s.programs.some(p => p.paymentEnabled));
@@ -77,11 +86,11 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
       school.programs.forEach(p => {
         const typeEntries = Object.entries(p.shirtByType);
         if (typeEntries.length === 0) {
-          rows.push([`"${school.schoolName}"`, `"${p.badge}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), '', '', ''].join(','));
+          rows.push([`"${school.schoolName}"`, `"${p.badge}${labelSiri(p.siri)}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), '', '', ''].join(','));
         } else {
           typeEntries.forEach(([type, sizes]) => {
             Object.entries(sizes).forEach(([size, n]) => {
-              rows.push([`"${school.schoolName}"`, `"${p.badge}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), `"${type}"`, `"${size}"`, n].join(','));
+              rows.push([`"${school.schoolName}"`, `"${p.badge}${labelSiri(p.siri)}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), `"${type}"`, `"${size}"`, n].join(','));
             });
           });
         }
@@ -181,9 +190,9 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
       {tab === 'bayaran' && mode === 'school' && summary.map(school => (
         <div key={school.schoolCode} className="space-y-4">
           {school.programs.filter(p => p.paymentEnabled).map(p => (
-            <div key={p.badge} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div key={`${p.badge}-${p.siri}`} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-slate-50 px-4 py-3 border-b">
-                <h3 className="font-bold text-slate-800">{p.badge}</h3>
+                <h3 className="font-bold text-slate-800">{p.badge}{labelSiri(p.siri)}</h3>
               </div>
               <div className="p-4">
                 <table className="w-full text-sm">
@@ -231,14 +240,14 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
               {summary.filter(s => s.programs.some(p => p.paymentEnabled)).map(school => {
                 const payPrograms = school.programs.filter(p => p.paymentEnabled);
                 return payPrograms.map((p, idx) => (
-                  <tr key={`${school.schoolCode}-${p.badge}`} className="hover:bg-slate-50">
+                  <tr key={`${school.schoolCode}-${p.badge}-${p.siri}`} className="hover:bg-slate-50">
                     {idx === 0 && (
                       <td className="px-4 py-2 font-medium text-gray-700 align-top" rowSpan={payPrograms.length}>
                         {school.schoolName}
                         <div className="text-xs text-emerald-600 font-bold mt-0.5">{formatRM(school.grandTotal)}</div>
                       </td>
                     )}
-                    <td className="px-4 py-2 text-gray-600">{p.badge}</td>
+                    <td className="px-4 py-2 text-gray-600">{p.badge}{labelSiri(p.siri)}</td>
                     <td className="px-4 py-2 text-center">{p.countPeserta}</td>
                     <td className="px-4 py-2 text-center">{p.countPemimpin}</td>
                     <td className="px-4 py-2 text-center">{p.countPenolong}</td>
@@ -268,9 +277,9 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
       {tab === 'baju' && mode === 'school' && summary.map(school => (
         <div key={school.schoolCode} className="space-y-4">
           {school.programs.filter(p => p.shirtEnabled).map(p => (
-            <div key={p.badge} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div key={`${p.badge}-${p.siri}`} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-slate-50 px-4 py-3 border-b flex justify-between items-center">
-                <h3 className="font-bold text-slate-800">{p.badge}</h3>
+                <h3 className="font-bold text-slate-800">{p.badge}{labelSiri(p.siri)}</h3>
                 <span className="text-xs text-indigo-600 font-bold">{p.shirtCount} baju</span>
               </div>
               <div className="p-4">

@@ -1768,7 +1768,44 @@ export const getActiveSchoolsForAssign = async (): Promise<AssignSchoolOption[]>
 // PROGRAM SETTINGS (Yuran & Saiz Baju per program/skop/tahun)
 // ============================================================
 
+/**
+ * Pengecualian yuran bagi program tertentu. siri null = semua siri;
+ * schoolType null = semua jenis sekolah. Rujuk migrasi 031.
+ */
+export interface ProgramFeeOverride {
+  programSettingId: string;
+  siri: number | null;
+  schoolType: SchoolType | null;
+  feePeserta: number | null;
+  feePemimpin: number | null;
+  feePenolong: number | null;
+}
+
+// Diambil sekali dan diselesaikan di klien. Jadual ini kecil (segelintir baris),
+// dan rumusan dikira merentas ribuan peserta — memanggil RPC resolve_program_fees
+// bagi setiap gabungan akan menjadi beratus panggilan bulat-balik.
+export const getProgramFeeOverrides = async (): Promise<ProgramFeeOverride[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('program_fee_overrides')
+      .select('program_setting_id, siri, school_type, fee_peserta, fee_pemimpin, fee_penolong');
+    if (error) throw error;
+    return (data || []).map((r: any) => ({
+      programSettingId: r.program_setting_id,
+      siri: r.siri ?? null,
+      schoolType: (r.school_type ?? null) as SchoolType | null,
+      feePeserta: r.fee_peserta !== null ? Number(r.fee_peserta) : null,
+      feePemimpin: r.fee_pemimpin !== null ? Number(r.fee_pemimpin) : null,
+      feePenolong: r.fee_penolong !== null ? Number(r.fee_penolong) : null,
+    }));
+  } catch (error) {
+    console.error('getProgramFeeOverrides error:', error);
+    return [];
+  }
+};
+
 export interface ProgramSetting {
+  id: string;
   badgeName: string;
   scope: 'negeri' | 'daerah';
   negeriCode?: string | null;
@@ -1790,7 +1827,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri,
+        id, year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1803,6 +1840,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
       const negeri = Array.isArray(r.negeri) ? r.negeri[0] : r.negeri;
       const daerah = Array.isArray(r.daerah) ? r.daerah[0] : r.daerah;
       return {
+        id: r.id,
         badgeName: badge?.name || '',
         scope: (badge?.scope || 'daerah') as 'negeri' | 'daerah',
         negeriCode: negeri?.code || null,

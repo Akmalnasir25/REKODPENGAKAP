@@ -1,5 +1,5 @@
-import { SubmissionData } from '../types';
-import { ProgramSetting } from './supabaseApi';
+import { SubmissionData, SchoolType } from '../types';
+import { ProgramSetting, ProgramFeeOverride } from './supabaseApi';
 
 // ============================================================
 // Pengiraan rumusan yuran & saiz baju untuk modul pendaftaran.
@@ -20,6 +20,7 @@ export const SHIRT_SIZES = [...SHIRT_SIZES_KIDS, ...SHIRT_SIZES_ADULT] as const;
 
 export interface ProgramBreakdown {
   badge: string;
+  siri: number;
   countPeserta: number;
   countPemimpin: number;
   countPenolong: number;
@@ -64,6 +65,43 @@ const findSetting = (
      (s.scope === 'daerah' && s.daerahCode === daerahCode)),
   );
 
+/**
+ * Cermin klien bagi resolve_program_fees() (migrasi 031). Kedua-duanya MESTI
+ * memberi jawapan sama — satu memandu paparan, satu lagi memandu bil sebenar.
+ *
+ * Keutamaan, paling khusus menang:
+ *   (siri tepat, jenis tepat) > (siri tepat, semua) > (semua, jenis tepat) > (semua, semua)
+ *
+ * Peranan yang tidak dicaj pada aras program kekal tidak dicaj, walau apa pun
+ * yang override tetapkan. Ini yang memastikan set peranan berbayar sama untuk
+ * setiap sekolah, yang seterusnya mengekalkan peraturan kuota.
+ */
+export const resolveFees = (
+  setting: ProgramSetting,
+  overrides: ProgramFeeOverride[],
+  siri: number,
+  schoolType: SchoolType,
+): { feePeserta: number | null; feePemimpin: number | null; feePenolong: number | null } => {
+  const calon = overrides
+    .filter(o => o.programSettingId === setting.id
+      && (o.siri === null || o.siri === siri)
+      && (o.schoolType === null || o.schoolType === schoolType))
+    .sort((a, b) => keutamaan(a) - keutamaan(b));
+  const pilih = calon[0];
+
+  return {
+    feePeserta:  setting.feePeserta  === null ? null : (pilih?.feePeserta  ?? setting.feePeserta),
+    feePemimpin: setting.feePemimpin === null ? null : (pilih?.feePemimpin ?? setting.feePemimpin),
+    feePenolong: setting.feePenolong === null ? null : (pilih?.feePenolong ?? setting.feePenolong),
+  };
+};
+
+const keutamaan = (o: ProgramFeeOverride): number =>
+  o.siri !== null && o.schoolType !== null ? 1
+  : o.siri !== null ? 2
+  : o.schoolType !== null ? 3
+  : 4;
+
 const roleOf = (r?: string) => (r || 'PESERTA').toUpperCase();
 const isPeserta = (r: string) => r === 'PESERTA' || r === 'PENERIMA RAMBU';
 const isPemimpin = (r: string) => r === 'PEMIMPIN';
@@ -78,6 +116,7 @@ export const buildProgramSummary = (
   records: SubmissionData[],
   settings: ProgramSetting[],
   year: number,
+  overrides: ProgramFeeOverride[] = [],
 ): SchoolSummary[] => {
   // Kumpulan: schoolCode -> badge -> breakdown
   const schoolMap = new Map<string, SchoolSummary>();
@@ -105,14 +144,20 @@ export const buildProgramSummary = (
     }
     const school = schoolMap.get(schoolCode)!;
 
-    let prog = school.programs.find(p => p.badge === badge);
+    // Yuran boleh berbeza antara siri, jadi rumusan dipecah per program x siri.
+    // Jenis sekolah tetap dalam satu sekolah, jadi ia tidak memecahkan lagi.
+    const siri = rec.siri || 1;
+    const yuran = resolveFees(setting, overrides, siri, (rec.schoolType || 'lain') as SchoolType);
+
+    let prog = school.programs.find(p => p.badge === badge && p.siri === siri);
     if (!prog) {
       prog = {
         badge,
+        siri,
         countPeserta: 0, countPemimpin: 0, countPenolong: 0,
-        feePeserta: setting.paymentEnabled ? setting.feePeserta : null,
-        feePemimpin: setting.paymentEnabled ? setting.feePemimpin : null,
-        feePenolong: setting.paymentEnabled ? setting.feePenolong : null,
+        feePeserta: setting.paymentEnabled ? yuran.feePeserta : null,
+        feePemimpin: setting.paymentEnabled ? yuran.feePemimpin : null,
+        feePenolong: setting.paymentEnabled ? yuran.feePenolong : null,
         subtotalPeserta: 0, subtotalPemimpin: 0, subtotalPenolong: 0,
         total: 0,
         paymentEnabled: setting.paymentEnabled,
@@ -152,7 +197,7 @@ export const buildProgramSummary = (
       p.total = p.subtotalPeserta + p.subtotalPemimpin + p.subtotalPenolong;
     });
     school.grandTotal = school.programs.reduce((sum, p) => sum + p.total, 0);
-    school.programs.sort((a, b) => a.badge.localeCompare(b.badge));
+    school.programs.sort((a, b) => a.badge.localeCompare(b.badge) || a.siri - b.siri);
   });
 
   return Array.from(schoolMap.values()).sort((a, b) => a.schoolName.localeCompare(b.schoolName));

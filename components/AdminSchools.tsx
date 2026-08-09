@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search, MapPin } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode } from '../services/supabaseApi';
+import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode, updateSchoolType } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
-import { School, Badge, Daerah } from '../types';
+import { School, Badge, Daerah, SchoolType } from '../types';
 import { parseBadgeStatusKey } from '../utils/dataProcessing';
 
 interface AdminSchoolsProps {
@@ -21,6 +21,9 @@ interface AdminSchoolsProps {
 
 export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges = [], scriptUrl, negeriCode, daerahCode, daerahList = [], onRefresh, enableResetClaim = false }) => {
   const [newSchoolName, setNewSchoolName] = useState('');
+  // Jenis sekolah ditetapkan semasa pendaftaran — ia menentukan kadar yuran.
+  const [newSchoolType, setNewSchoolType] = useState<SchoolType>('rendah');
+  const [savingType, setSavingType] = useState<string | null>(null);
   const [selectedDaerahForAdd, setSelectedDaerahForAdd] = useState(daerahCode || '');
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState<{name: string, type: string} | null>(null);
@@ -53,6 +56,17 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const allAssistantsAllowed = schools.length > 0 && schools.every(s => s.allowAssistants);
   const allExaminersAllowed = schools.length > 0 && schools.every(s => s.allowExaminers);
   const allAllowed = schools.length > 0 && schools.every(s => s.allowStudents && s.allowAssistants && s.allowExaminers);
+
+  const handleChangeType = async (school: School, jenis: SchoolType) => {
+    if (!school.schoolCode) { alert('Sekolah ini tiada kod — tidak boleh dikemas kini.'); return; }
+    setSavingType(school.schoolCode);
+    try {
+      const res = await updateSchoolType(school.schoolCode, jenis);
+      if (res.status === 'success') onRefresh();
+      else alert('Gagal: ' + res.message);
+    } catch { alert('Ralat sambungan.'); }
+    finally { setSavingType(null); }
+  };
 
   const handleAdd = async () => {
     // 1. Split and Normalize Input — format: NAMA SEKOLAH | KOD SEKOLAH
@@ -117,7 +131,7 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
     setLoading(true);
     try {
         const effectiveDaerah = selectedDaerahForAdd || daerahCode;
-        await addSchoolBatch(scriptUrl, schoolsToSend, negeriCode, effectiveDaerah);
+        await addSchoolBatch(scriptUrl, schoolsToSend, negeriCode, effectiveDaerah, undefined, newSchoolType);
         
         let finalMessage = `${schoolsToSend.length} sekolah berjaya dihantar.`;
         if (duplicateSchools.length > 0) {
@@ -389,6 +403,19 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
           <p className="text-[11px] text-gray-500 mt-1.5">
             Format: <span className="font-bold text-gray-700">NAMA SEKOLAH | KOD SEKOLAH</span> (satu setiap baris). Kod sekolah akan digunakan oleh guru untuk mendaftar akaun.
           </p>
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Kategori Sekolah</label>
+          <select
+            value={newSchoolType}
+            onChange={(e) => setNewSchoolType(e.target.value as SchoolType)}
+            className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 outline-none bg-white font-semibold text-teal-800"
+          >
+            <option value="rendah">Sekolah Rendah (SR)</option>
+            <option value="menengah">Sekolah Menengah (SM)</option>
+            <option value="lain">Lain-lain</option>
+          </select>
+          <p className="text-[10px] text-gray-400 mt-1">Terpakai kepada semua sekolah dalam senarai di atas. Kategori menentukan kadar yuran yang dikenakan.</p>
         </div>
         {daerahList.length > 0 && (
           <div>
@@ -668,6 +695,25 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                         </div>
                     </div>
 
+                    {/* KATEGORI SEKOLAH — menentukan kadar yuran */}
+                    <div className="flex items-center gap-2 pl-12 mb-2">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">Kategori:</span>
+                        <select
+                            value={s.schoolType || 'lain'}
+                            onChange={(e) => handleChangeType(s, e.target.value as SchoolType)}
+                            disabled={savingType === s.schoolCode}
+                            className={`text-[11px] font-bold rounded-full px-2.5 py-1 border outline-none transition disabled:opacity-50
+                                ${s.schoolType === 'menengah' ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                  : s.schoolType === 'rendah' ? 'bg-teal-50 border-teal-200 text-teal-700'
+                                  : 'bg-amber-50 border-amber-300 text-amber-700'}`}
+                            title="Kategori menentukan kadar yuran yang dikenakan"
+                        >
+                            <option value="rendah">SR — Sekolah Rendah</option>
+                            <option value="menengah">SM — Sekolah Menengah</option>
+                            <option value="lain">Belum ditetapkan</option>
+                        </select>
+                    </div>
+
                     {/* GRANULAR PERMISSIONS */}
                     <div className="flex flex-wrap gap-2 pl-12">
                         <PermissionToggle 
@@ -706,8 +752,10 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                             <div className="flex flex-wrap gap-2">
                                 {statusBadges.map(badgeKey => {
                                     const isApproved = s.approvedBadges && s.approvedBadges.includes(badgeKey);
-                                    const displayBadge = badgeKey.includes('_') 
-                                        ? `${badgeKey.split('_')[0]} (${badgeKey.split('_')[1]})` 
+                                    // Kunci kini "<program>_<tahun>_<siri>" (migrasi 027).
+                                    const kb = parseBadgeStatusKey(badgeKey);
+                                    const displayBadge = badgeKey.includes('_')
+                                        ? `${kb.badge} (${kb.year}${kb.siri > 1 ? ` · Siri ${kb.siri}` : ''})`
                                         : badgeKey;
 
                                     return (

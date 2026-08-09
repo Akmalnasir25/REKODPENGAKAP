@@ -1,5 +1,5 @@
 import { supabase, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from './supabaseClient';
-import { SubmissionData, Participant, LeaderInfo, ApiResponse, School, Badge, Negeri, Daerah, UserProfile } from '../types';
+import { SubmissionData, Participant, LeaderInfo, ApiResponse, School, Badge, Negeri, Daerah, UserProfile, SchoolType } from '../types';
 import { badgeStatusKey, parseBadgeStatusKey } from '../utils/dataProcessing';
 
 // ============================================================
@@ -519,21 +519,39 @@ export const addSchool = async (_url: string, schoolData: { name?: string; schoo
   }
 };
 
-export const addSchoolBatch = async (_url: string, schools: string[] | { name: string; schoolCode: string }[], negeriCode?: string, daerahCode?: string, _csrfToken?: string): Promise<ApiResponse> => {
+export const addSchoolBatch = async (_url: string, schools: string[] | { name: string; schoolCode: string }[], negeriCode?: string, daerahCode?: string, _csrfToken?: string, schoolType: SchoolType = 'lain'): Promise<ApiResponse> => {
   try {
     const negeriId = negeriCode ? await getNegeriId(negeriCode) : null;
     const daerahId = daerahCode ? await getDaerahId(daerahCode) : null;
+    // Jenis sekolah ditetapkan semasa pendaftaran dan bukan diteka daripada nama —
+    // ia menentukan kadar yuran yang dikenakan (migrasi 031).
     const rows = schools.map(item => {
       if (typeof item === 'string') {
-        return { name: normalize(item), school_code: normalize(item), negeri_id: negeriId, daerah_id: daerahId, is_active: true };
+        return { name: normalize(item), school_code: normalize(item), negeri_id: negeriId, daerah_id: daerahId, school_type: schoolType, is_active: true };
       }
-      return { name: normalize(item.name), school_code: normalize(item.schoolCode), negeri_id: negeriId, daerah_id: daerahId, is_active: true };
+      return { name: normalize(item.name), school_code: normalize(item.schoolCode), negeri_id: negeriId, daerah_id: daerahId, school_type: schoolType, is_active: true };
     });
     const { error } = await supabase.from('schools').insert(rows);
     if (error) throw error;
     return { status: 'success', message: `${schools.length} sekolah berjaya ditambah.` };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal tambah sekolah batch.' };
+  }
+};
+
+// Tukar jenis sekolah selepas pendaftaran. Diperlukan kerana jenis menentukan
+// kadar yuran, dan sekolah yang dimigrasi dari sistem lama diklasifikasi
+// daripada nama — yang tidak selalu tepat.
+export const updateSchoolType = async (schoolCode: string, schoolType: SchoolType): Promise<ApiResponse> => {
+  try {
+    const { error } = await supabase
+      .from('schools')
+      .update({ school_type: schoolType })
+      .eq('school_code', normalize(schoolCode));
+    if (error) throw error;
+    return { status: 'success', message: 'Jenis sekolah dikemas kini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal kemas kini jenis sekolah.' };
   }
 };
 

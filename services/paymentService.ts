@@ -97,6 +97,47 @@ export const getArahanBayaranManual = async (
   }
 };
 
+export const BALDI_BUKTI = 'payment-proofs';
+
+/**
+ * Muat naik bukti bayaran ke baldi PERSENDIRIAN payment-proofs.
+ *
+ * Bukan R2. r2-presigned-upload tidak pernah di-deploy ke projek ini dan tiada
+ * kredensial R2 ditetapkan, jadi setiap panggilan berakhir sebagai 404 yang
+ * pelayar laporkan sebagai ralat CORS.
+ *
+ * Segmen pertama laluan MESTI paymentId — polisi storan (migrasi 038) membaca
+ * segmen itu untuk menentukan siapa boleh melihat fail ini.
+ */
+export const muatNaikBukti = async (
+  paymentId: string, fail: File,
+): Promise<{ fileName: string; filePath: string; mimeType: string; fileSize: number }> => {
+  const ext = (fail.name.split('.').pop() || 'bin').toLowerCase();
+  const laluan = `${paymentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from(BALDI_BUKTI)
+    .upload(laluan, fail, { contentType: fail.type, upsert: false });
+  if (error) throw new Error(error.message || 'Gagal memuat naik bukti.');
+
+  return { fileName: fail.name, filePath: laluan, mimeType: fail.type, fileSize: fail.size };
+};
+
+/**
+ * URL bertandatangan untuk melihat bukti. Baldi persendirian, jadi tiada URL
+ * awam — pautan ini luput dalam 5 minit dan dijana hanya apabila diklik.
+ */
+export const urlBukti = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await supabase.storage
+    .from(BALDI_BUKTI)
+    .createSignedUrl(filePath, 300);
+  if (error) {
+    console.error('urlBukti error:', error);
+    return null;
+  }
+  return data?.signedUrl ?? null;
+};
+
 // ============================================================
 // Sebelah admin
 // ============================================================

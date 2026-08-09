@@ -7,8 +7,7 @@ import {
   janaBil, semakStatusBayaran, hantarBuktiBayaran, getArahanBayaranManual,
   KaedahBayaran, BilDijana, StatusBayaran,
 } from '../services/paymentService';
-import { uploadToR2 } from '../services/r2Service';
-import { getDataResit } from '../services/paymentService';
+import { getDataResit, muatNaikBukti } from '../services/paymentService';
 import { muatTurunResit } from '../services/receiptService';
 import { formatRM } from '../services/programSummary';
 
@@ -92,17 +91,7 @@ export const PaymentScreen: React.FC<Props> = ({
     setRalat('');
     setMemuatNaik(true);
     try {
-      let bukti;
-      if (fail) {
-        const naik = await uploadToR2(fail, { folder: `payment-proof/${bil.paymentId}`, bucket: 'documents' });
-        if (!naik.success || !naik.objectKey) throw new Error(naik.message || 'Gagal memuat naik bukti.');
-        bukti = {
-          fileName: fail.name,
-          filePath: naik.objectKey,
-          mimeType: fail.type,
-          fileSize: fail.size,
-        };
-      }
+      const bukti = fail ? await muatNaikBukti(bil.paymentId, fail) : undefined;
       const hasil = await hantarBuktiBayaran({
         paymentId: bil.paymentId,
         referenceNumber: rujukan.trim(),

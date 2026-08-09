@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CheckCircle, RefreshCw, Medal, Users, X } from 'lucide-react';
+import { CheckCircle, RefreshCw, Medal, Users, X, Paperclip } from 'lucide-react';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools, approveDaerahLevel } from '../services/supabaseApi';
 import { badgeStatusKey } from '../utils/dataProcessing';
-import { getBayaranUntukSemakan, semakBuktiBayaran, BayaranUntukSemakan } from '../services/paymentService';
+import { getBayaranUntukSemakan, semakBuktiBayaran, urlBukti, BayaranUntukSemakan } from '../services/paymentService';
 import { formatRM } from '../services/programSummary';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
@@ -88,6 +88,17 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
 
   const muatBayaran = useCallback(async () => setBayaran(await getBayaranUntukSemakan()), []);
   useEffect(() => { muatBayaran(); }, [muatBayaran]);
+
+  // Tab dibuka SERENTAK dengan klik, sebelum await. Membukanya selepas URL
+  // bertandatangan tiba menjadikannya popup tak-berkaitan-klik, dan pelayar
+  // menyekatnya secara senyap — admin akan nampak butang yang tidak buat apa-apa.
+  const bukaBukti = async (filePath: string) => {
+    const tab = window.open('', '_blank');
+    const url = await urlBukti(filePath);
+    if (!url) { tab?.close(); alert('Gagal membuka bukti bayaran.'); return; }
+    if (tab) tab.location.href = url;
+    else window.location.href = url;
+  };
 
   const handleSemak = async (id: string, terima: boolean) => {
     let sebab: string | undefined;
@@ -228,9 +239,21 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                       </span>
                     )}
                   </div>
+                  {/* Baldi persendirian — tiada URL awam. Pautan bertandatangan
+                      dijana bila diklik dan luput dalam 5 minit. */}
                   {b.bukti.length > 0 && (
-                    <p className="text-[11px] text-blue-600 mt-1">
-                      {b.bukti.length} bukti dimuat naik: {b.bukti.map(x => x.fileName).join(', ')}
+                    <p className="text-[11px] mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-slate-500">{b.bukti.length} bukti:</span>
+                      {b.bukti.map((x) => (
+                        <button
+                          key={x.filePath}
+                          onClick={() => bukaBukti(x.filePath)}
+                          className="text-blue-600 hover:text-blue-800 underline underline-offset-2 inline-flex items-center gap-1"
+                        >
+                          <Paperclip size={11} />
+                          {x.fileName}
+                        </button>
+                      ))}
                     </p>
                   )}
                   {b.seatStatus === 'no_seat' && (

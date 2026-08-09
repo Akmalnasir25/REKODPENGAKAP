@@ -521,22 +521,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                 </label>
                 {formPaymentEnabled && (
                   <div className="mt-3 space-y-2">
-                    {[
-                      { label: 'Yuran Peserta (RM)', val: formFeePeserta, set: setFormFeePeserta, ph: 'Cth: 65' },
-                      { label: 'Yuran Pemimpin (RM) — kosong = tak caj', val: formFeePemimpin, set: setFormFeePemimpin, ph: 'Kosongkan jika percuma' },
-                      { label: 'Yuran Penolong Pemimpin (RM) — kosong = tak caj', val: formFeePenolong, set: setFormFeePenolong, ph: 'Kosongkan jika percuma' },
-                    ].map(f => (
-                      <div key={f.label}>
-                        <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">{f.label}</label>
-                        <input
-                          type="number" min="0" step="0.01"
-                          value={f.val}
-                          onChange={(e) => f.set(e.target.value)}
-                          placeholder={f.ph}
-                          className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none"
-                        />
-                      </div>
-                    ))}
+                    {/* Kadar asas TIDAK lagi mempunyai kotaknya sendiri di sini.
+                        Ia kini baris pertama jadual di bawah, supaya tiada dua
+                        tempat memasukkan yuran yang sama. */}
 
                     {/* PINTU BAYARAN — togol yang menghidupkan aliran sebenar */}
                     <label className="flex items-start justify-between gap-3 mt-3 pt-3 border-t border-dashed border-gray-200 cursor-pointer">
@@ -564,7 +551,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[11px] font-bold text-teal-700 uppercase">
-                          Kadar Ikut {formSiriEnabled ? 'Siri & ' : ''}Jenis Sekolah
+                          Kadar Yuran
                         </span>
                         <div className="flex gap-1">
                           {([[null, 'Semua'], ['rendah', 'SR'], ['menengah', 'SM']] as [SchoolType | null, string][]).map(([jenis, label]) => (
@@ -584,26 +571,60 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                         </div>
                       </div>
                       <p className="text-[10px] text-gray-400 mb-2">
-                        Biar kosong untuk guna kadar asas di atas. Peranan tanpa yuran asas tidak boleh
-                        dicaj di sini - kadar ini menukar jumlah, bukan siapa dicaj.
+                        Baris <strong>Asas</strong> menetapkan siapa dicaj dan berapa. Siri yang dibiar
+                        kosong mengikut baris itu — termasuk siri yang dibuka kemudian. Lajur yang
+                        Asas-nya kosong tidak dicaj langsung.
+                        {overrideType !== null && ' Asas dikongsi semua jenis sekolah, jadi ia diedit pada tab “Semua”.'}
                       </p>
 
                       <table className="w-full text-[11px]">
                         <thead>
                           <tr className="text-gray-400">
-                            <th className="text-left font-bold uppercase text-[9px] pb-1">
-                              {formSiriEnabled ? 'Siri' : 'Kadar'}
-                            </th>
+                            <th className="text-left font-bold uppercase text-[9px] pb-1">Kadar</th>
                             <th className="font-bold uppercase text-[9px] pb-1">Peserta</th>
                             <th className="font-bold uppercase text-[9px] pb-1">Pemimpin</th>
                             <th className="font-bold uppercase text-[9px] pb-1">Penolong</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {barisSiri.map(siri => (
+                          {/* BARIS ASAS — dahulunya tiga kotak berasingan di atas.
+                              Memisahkannya bermakna admin melihat "70" di satu
+                              tempat dan "70" lagi di tempat lain, tanpa apa-apa
+                              yang menjelaskan hubungan keduanya. */}
+                          <tr className="border-b border-teal-100">
+                            <td className="pr-2 py-0.5 font-bold text-emerald-800 whitespace-nowrap">Asas</td>
+                            {(['peserta', 'pemimpin', 'penolong'] as const).map(peranan => {
+                              const nilai = peranan === 'peserta' ? formFeePeserta
+                                : peranan === 'pemimpin' ? formFeePemimpin : formFeePenolong;
+                              const tetap = peranan === 'peserta' ? setFormFeePeserta
+                                : peranan === 'pemimpin' ? setFormFeePemimpin : setFormFeePenolong;
+                              // Asas tidak bergantung pada jenis sekolah, jadi ia
+                              // hanya boleh diedit pada tab "Semua".
+                              const kunci = overrideType !== null;
+                              return (
+                                <td key={peranan} className="px-0.5 py-0.5">
+                                  <input
+                                    type="number" min="0" step="0.01"
+                                    value={nilai}
+                                    disabled={kunci}
+                                    onChange={(e) => tetap(e.target.value)}
+                                    placeholder="–"
+                                    title={kunci
+                                      ? 'Kadar asas dikongsi semua jenis sekolah — edit pada tab “Semua”'
+                                      : 'Kosong = peranan ini tidak dicaj langsung'}
+                                    className="w-full p-1.5 border border-emerald-300 rounded text-center font-bold bg-emerald-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:font-normal focus:ring-2 focus:ring-emerald-400 outline-none"
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                          {/* Bila siri tidak aktif, satu-satunya baris di bawah ialah
+                              kadar khas jenis sekolah. Pada tab "Semua" ia hanya akan
+                              mengulang baris Asas, jadi ia disembunyikan di situ. */}
+                          {(formSiriEnabled || overrideType !== null) && barisSiri.map(siri => (
                             <tr key={String(siri)}>
                               <td className="pr-2 py-0.5 font-bold text-teal-800 whitespace-nowrap">
-                                {siri === null ? 'Semua' : `Siri ${siri}`}
+                                {siri === null ? 'Kadar khas' : `Siri ${siri}`}
                               </td>
                               {(['peserta', 'pemimpin', 'penolong'] as const).map(peranan => {
                                 const asas = peranan === 'peserta' ? formFeePeserta

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt, Layers } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { GatewaySettingsCard } from './GatewaySettingsCard';
 import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting, getProgramFeeOverrides, saveProgramFeeOverrides, ProgramFeeOverride } from '../services/supabaseApi';
 import { Badge , SchoolType } from '../types';
 
@@ -297,6 +298,15 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   };
 
   return (
+    <>
+      {/* Akaun pembayaran bagi skop ini. Hanya relevan bila skop diketahui. */}
+      {scopeContext?.type && (scopeContext.negeriCode || scopeContext.daerahCode) && (
+        <GatewaySettingsCard
+          scope={scopeContext.type}
+          code={(scopeContext.type === 'negeri' ? scopeContext.negeriCode : scopeContext.daerahCode) as string}
+          label={scopeContext.label || ''}
+        />
+      )}
     <div className="bg-white p-6 rounded-xl shadow animate-[fadeIn_0.2s_ease-out]">
       <div className="flex justify-between items-center mb-4">
         <h2 className="font-bold text-gray-800 flex items-center gap-2">
@@ -637,5 +647,6 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         </div>
       )}
     </div>
+    </>
   );
 };

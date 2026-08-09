@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt, Layers } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting } from '../services/supabaseApi';
-import { Badge } from '../types';
+import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting, getProgramFeeOverrides, saveProgramFeeOverrides, ProgramFeeOverride } from '../services/supabaseApi';
+import { Badge , SchoolType } from '../types';
 
 interface AdminBadgesProps {
   badges: Badge[];
@@ -38,14 +38,20 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formFeePeserta, setFormFeePeserta] = useState('');
   const [formFeePemimpin, setFormFeePemimpin] = useState('');
   const [formFeePenolong, setFormFeePenolong] = useState('');
+  // Override yuran: kadar berbeza ikut siri dan/atau jenis sekolah (migrasi 031).
+  // Yuran asas di atas menentukan SIAPA dicaj; baris di sini hanya BERAPA.
+  type BarisOverride = { siri: number | null; schoolType: SchoolType | null; peserta: string; pemimpin: string; penolong: string };
+  const [formOverrides, setFormOverrides] = useState<BarisOverride[]>([]);
+  const [allOverrides, setAllOverrides] = useState<ProgramFeeOverride[]>([]);
   const [formShirtEnabled, setFormShirtEnabled] = useState(false);
   const [formSiriEnabled, setFormSiriEnabled] = useState(false);
   const [formMaxSiri, setFormMaxSiri] = useState(5);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
-    const data = await getProgramSettings();
+    const [data, overrides] = await Promise.all([getProgramSettings(), getProgramFeeOverrides()]);
     setAllSettings(data);
+    setAllOverrides(overrides);
   };
   useEffect(() => { loadSettings(); }, []);
 
@@ -70,6 +76,17 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormShirtEnabled(s?.shirtEnabled || false);
     setFormSiriEnabled(s?.siriEnabled || false);
     setFormMaxSiri(s?.maxSiri || 5);
+    setFormOverrides(
+      allOverrides
+        .filter(o => s && o.programSettingId === s.id)
+        .map(o => ({
+          siri: o.siri,
+          schoolType: o.schoolType,
+          peserta: o.feePeserta != null ? String(o.feePeserta) : '',
+          pemimpin: o.feePemimpin != null ? String(o.feePemimpin) : '',
+          penolong: o.feePenolong != null ? String(o.feePenolong) : '',
+        })),
+    );
   };
 
   const handleSaveSettings = async () => {
@@ -92,7 +109,20 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         maxSiri: formMaxSiri,
       });
       if (res.status === 'success') {
+        // Override memerlukan id tetapan, jadi ia hanya boleh disimpan selepas
+        // baris asas wujud. upsertProgramSetting memulangkan id untuk itu.
+        const settingId = (res as any).settingId || findSetting(b, settingsYear)?.id;
+        if (settingId) {
+          await saveProgramFeeOverrides(settingId, formOverrides.map(r => ({
+            siri: r.siri,
+            schoolType: r.schoolType,
+            feePeserta:  r.peserta.trim()  ? Number(r.peserta)  : null,
+            feePemimpin: r.pemimpin.trim() ? Number(r.pemimpin) : null,
+            feePenolong: r.penolong.trim() ? Number(r.penolong) : null,
+          })));
+        }
         await loadSettings();
+        setAllOverrides(await getProgramFeeOverrides());
         setSettingsModalBadge(null);
       } else {
         alert('Gagal: ' + res.message);
@@ -467,6 +497,88 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                         />
                       </div>
                     ))}
+
+                    {/* KADAR BERBEZA - override ikut siri / jenis sekolah */}
+                    <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-bold text-teal-700 uppercase">Kadar Berbeza (opsyenal)</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormOverrides([...formOverrides, { siri: null, schoolType: 'menengah', peserta: '', pemimpin: '', penolong: '' }])}
+                          className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2.5 py-1 hover:bg-teal-100 transition"
+                        >
+                          + Tambah kadar
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mb-2">
+                        Kosongkan medan untuk guna kadar asas di atas. Peranan tanpa yuran asas tidak
+                        boleh dicaj di sini - kadar berbeza hanya menukar jumlah, bukan siapa dicaj.
+                      </p>
+
+                      {formOverrides.length === 0 && (
+                        <p className="text-[11px] text-gray-400 italic">Semua sekolah dan siri guna kadar asas.</p>
+                      )}
+
+                      <div className="space-y-2">
+                        {formOverrides.map((row, i) => {
+                          const ubah = (patch: Partial<typeof row>) =>
+                            setFormOverrides(formOverrides.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+                          return (
+                            <div key={i} className="bg-teal-50/60 border border-teal-200 rounded-lg p-2 space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={row.siri === null ? '' : String(row.siri)}
+                                  onChange={(e) => ubah({ siri: e.target.value === '' ? null : Number(e.target.value) })}
+                                  className="flex-1 p-1.5 border border-teal-200 rounded text-[11px] font-semibold bg-white"
+                                >
+                                  <option value="">Semua Siri</option>
+                                  {Array.from({ length: formSiriEnabled ? formMaxSiri : 1 }, (_, k) => k + 1)
+                                    .map(n => <option key={n} value={n}>Siri {n}</option>)}
+                                </select>
+                                <select
+                                  value={row.schoolType === null ? '' : row.schoolType}
+                                  onChange={(e) => ubah({ schoolType: e.target.value === '' ? null : (e.target.value as SchoolType) })}
+                                  className="flex-1 p-1.5 border border-teal-200 rounded text-[11px] font-semibold bg-white"
+                                >
+                                  <option value="">Semua Jenis</option>
+                                  <option value="rendah">SR sahaja</option>
+                                  <option value="menengah">SM sahaja</option>
+                                  <option value="lain">Lain-lain</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => setFormOverrides(formOverrides.filter((_, j) => j !== i))}
+                                  className="text-gray-400 hover:text-red-500 p-1"
+                                  title="Buang kadar ini"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {([
+                                  ['Peserta', row.peserta, (v: string) => ubah({ peserta: v }), !formFeePeserta.trim()],
+                                  ['Pemimpin', row.pemimpin, (v: string) => ubah({ pemimpin: v }), !formFeePemimpin.trim()],
+                                  ['Penolong', row.penolong, (v: string) => ubah({ penolong: v }), !formFeePenolong.trim()],
+                                ] as [string, string, (v: string) => void, boolean][]).map(([label, val, set, disabled]) => (
+                                  <div key={label}>
+                                    <label className="block text-[9px] font-bold text-gray-400 uppercase">{label}</label>
+                                    <input
+                                      type="number" min="0" step="0.01"
+                                      value={val}
+                                      disabled={disabled}
+                                      onChange={(e) => set(e.target.value)}
+                                      placeholder={disabled ? 'tak dicaj' : 'asas'}
+                                      title={disabled ? 'Peranan ini tiada yuran asas, jadi ia tidak dicaj langsung' : undefined}
+                                      className="w-full p-1.5 border border-teal-200 rounded text-[11px] bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

@@ -1804,6 +1804,47 @@ export const getProgramFeeOverrides = async (): Promise<ProgramFeeOverride[]> =>
   }
 };
 
+/**
+ * Ganti SEMUA override bagi satu tetapan program. Padam-kemudian-masuk dipilih
+ * berbanding kemas kini per baris kerana editornya ialah senarai penuh: apa
+ * yang admin nampak ialah keadaan yang dikehendaki, jadi apa-apa yang tiada
+ * dalam senarai itu memang patut hilang.
+ */
+export const saveProgramFeeOverrides = async (
+  programSettingId: string,
+  rows: Array<{ siri: number | null; schoolType: SchoolType | null; feePeserta: number | null; feePemimpin: number | null; feePenolong: number | null }>,
+): Promise<ApiResponse> => {
+  try {
+    const { error: delErr } = await supabase
+      .from('program_fee_overrides')
+      .delete()
+      .eq('program_setting_id', programSettingId);
+    if (delErr) throw delErr;
+
+    // Baris yang semua yurannya kosong tidak bermakna apa-apa — ia hanya
+    // menyebabkan resolusi memilihnya lalu jatuh balik ke yuran asas.
+    const bermakna = rows.filter(r => r.feePeserta !== null || r.feePemimpin !== null || r.feePenolong !== null);
+    if (bermakna.length === 0) return { status: 'success', message: 'Override yuran dikemas kini.' };
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('program_fee_overrides').insert(
+      bermakna.map(r => ({
+        program_setting_id: programSettingId,
+        siri: r.siri,
+        school_type: r.schoolType,
+        fee_peserta: r.feePeserta,
+        fee_pemimpin: r.feePemimpin,
+        fee_penolong: r.feePenolong,
+        created_by: user?.id || null,
+      })),
+    );
+    if (error) throw error;
+    return { status: 'success', message: 'Override yuran dikemas kini.' };
+  } catch (error: any) {
+    return { status: 'error', message: error.message || 'Gagal simpan override yuran.' };
+  }
+};
+
 export interface ProgramSetting {
   id: string;
   badgeName: string;
@@ -1909,14 +1950,18 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
     existingQuery = daerahId ? existingQuery.eq('daerah_id', daerahId) : existingQuery.is('daerah_id', null);
     const { data: existing } = await existingQuery.maybeSingle();
 
+    // id dipulangkan supaya pemanggil boleh menyimpan override yuran sejurus
+    // selepas ini, tanpa perlu mencari semula baris yang baru dicipta.
+    let settingId = existing?.id as string | undefined;
     if (existing) {
       const { error } = await supabase.from('program_settings').update(payload).eq('id', existing.id);
       if (error) return { status: 'error', message: error.message };
     } else {
-      const { error } = await supabase.from('program_settings').insert(payload);
+      const { data: inserted, error } = await supabase.from('program_settings').insert(payload).select('id').single();
       if (error) return { status: 'error', message: error.message };
+      settingId = inserted?.id;
     }
-    return { status: 'success', message: 'Tetapan program disimpan.' };
+    return { status: 'success', message: 'Tetapan program disimpan.', settingId } as ApiResponse & { settingId?: string };
   } catch (err: any) {
     return { status: 'error', message: err.message || 'Gagal simpan tetapan program.' };
   }

@@ -17,9 +17,17 @@
 
 ## 0. Status Semasa · 9 Ogos 2026
 
-**Terakhir dikerjakan:** tetapan gateway sandbox Kinta Utara **berjaya disimpan & disahkan**. Kredensial dalam Vault, akaun sedia mencipta bil.
+**Terakhir dikerjakan:** aliran bayaran ToyyibPay **berjaya hujung ke hujung** dalam sandbox — sekolah membayar, webhook sampai, hash disahkan, tempat dituntut, pendaftaran masuk giliran pengesahan admin.
 
-**Pepijat yang diselesaikan:** `getCategoryDetails` memulangkan `CategoryName` dengan **C besar**, sedangkan dokumentasi rasmi ToyyibPay menunjukkan `categoryName` huruf kecil. Padanan peka huruf menolak kredensial yang sah selama beberapa pusingan. Semua bacaan medan ToyyibPay kini tidak peka huruf besar-kecil — termasuk `BillCode`, `billpaymentStatus` dan `billpaymentAmount`, kerana kegagalan padanan dalam callback bermakna bayaran sah tidak pernah diakui tanpa apa-apa yang kelihatan rosak.
+**Tiga pepijat yang hanya muncul semasa ujian sebenar:**
+
+| Pepijat | Kenapa ujian berasingan terlepas |
+|---|---|
+| `CategoryName` huruf besar | Dokumentasi ToyyibPay menunjukkan huruf kecil; API memulangkan huruf besar |
+| `billExpiryDate` dalam UTC | `createBill` memulangkan `BillCode` seperti biasa — bil dicipta sempurna, cuma sudah mati. Hanya kelihatan bila seseorang membuka pautan |
+| Caj gateway RM1 | `billChargeToCustomer=0` menyebabkan pembayar membayar RM81 untuk bil RM80; padanan tepat menolak setiap bayaran sah |
+
+Ketiga-tiganya jenis yang sama: setiap fungsi menjawab dengan betul secara berasingan, tetapi rantaian tidak berkelakuan baik untuk manusia sebenar.
 
 ### Sudah siap & hidup di produksi
 
@@ -32,20 +40,26 @@
 | Penapis jenis sekolah | AdminDashboard, AdminHistory, DaerahProgramAnalysis |
 | Edge Functions | `save-gateway-settings`, `create-payment-bill`, `toyyibpay-callback` — ketiga-tiganya di-deploy |
 | Akaun gateway | Kinta Utara · **sandbox · disahkan** · kredensial dalam Vault |
+| Aliran bayaran penuh | **Diuji berjaya** — ToyyibPay/FPX, SBI BANK A |
+| Reconciliation | pg_cron setiap 5 minit; rahsia dalam Vault |
 
 `toyyibpay-callback` di-deploy dengan `--no-verify-jwt`. Jangan deploy semula tanpanya.
 
 ### Langkah seterusnya, ikut urutan
 
-1. ~~Nyahpepijat borang gateway~~ → **selesai.** Punca: padanan medan peka huruf besar-kecil.
+**Belum diuji** — semua dibina, tiada satu pun dilalui:
+1. **SBI BANK C** (pending 30 minit) — menguji lapisan reconciliation dan peraturan jangan-batalkan-transaksi-tergantung. Paling berharga; paling mudah tersilap
+2. **SBI BANK B** (gagal) — sekolah boleh jana bil baharu
+3. **Pindahan bank / cek** — muat naik bukti, giliran semakan admin, sahkan & tolak
+4. Sahkan cron benar-benar berjalan: `select * from audit_logs where action = 'reconciliation_dijalankan'`
 
-   Diagnostik dikekalkan dalam mesej ralat borang (panjang & nama medan sahaja, tiada nilai) sehingga aliran bayaran penuh terbukti berfungsi.
-2. `check-payment-status` — lapisan 1, dipanggil bila sekolah kembali dari gateway
-3. `submit-payment-proof` — muat naik resit/cek → `pending_review`
-4. Skrin bayaran (UI tiga pilihan) selepas Hantar
-5. Lencana bayaran + giliran "dibayar tanpa tempat" dalam `PengesahanTab`
-6. Job cron reconciliation (pg_cron + pg_net sudah aktif & diuji)
-7. Resit PDF
+**Belum dibina:**
+5. Resit PDF
+6. Jurang §9b — peserta ditambah selepas pengesahan tanpa dibil
+
+**Sebelum produksi:**
+7. `categoryCode` ScoutNadi pada akaun ToyyibPay **produksi**
+8. Tukar togol gateway dari Sandbox ke Produksi
 
 ### Belum diaktifkan
 

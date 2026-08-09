@@ -36,6 +36,7 @@ export interface SubmissionData {
   date: string;
   school: string;
   schoolCode?: string;
+  schoolType?: SchoolType;
   negeriCode?: string;
   daerahCode?: string;
   badge: string;
@@ -78,9 +79,19 @@ export interface Badge {
   requiresDaerahApproval?: boolean;
 }
 
+/** Jenis sekolah — menentukan kadar yuran mana yang terpakai (migrasi 031). */
+export type SchoolType = 'rendah' | 'menengah' | 'lain';
+
+export const SCHOOL_TYPE_LABEL: Record<SchoolType, string> = {
+  rendah: 'Sekolah Rendah (SR)',
+  menengah: 'Sekolah Menengah (SM)',
+  lain: 'Lain-lain',
+};
+
 export interface School {
   name: string;
   schoolCode?: string;
+  schoolType?: SchoolType;
   negeriCode?: string;
   daerahCode?: string;
   isClaimed?: boolean;

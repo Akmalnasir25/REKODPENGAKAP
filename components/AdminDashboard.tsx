@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { SubmissionData, School, Badge, UserProfile } from '../types';
+import { SubmissionData, School, Badge, UserProfile, SchoolType } from '../types';
 import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin, X, Layers } from 'lucide-react';
 import { getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { ProgramSummaryView } from './ProgramSummaryView';
@@ -33,6 +33,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
   const [selectedSiriFilter, setSelectedSiriFilter] = useState<number | ''>('');
+  // Penapis jenis sekolah — SR/SM membayar kadar berbeza, jadi laporan selalunya
+  // perlu dipisahkan mengikutnya (migrasi 031).
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<SchoolType | ''>('');
   const [selectedSchoolFilter, setSelectedSchoolFilter] = useState(''); // '' = semua sekolah
 
   // Program mana aktifkan siri (rujuk docs/rancangan-siri.md) — kawal keterlihatan penapis Siri.
@@ -106,8 +109,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
           && !(d as any).isWithdrawn
           && (!schoolQuery || String(d.school || '').toLowerCase().includes(schoolQuery))
           && (selectedSiriFilter === '' || (d.siri || 1) === selectedSiriFilter)
+          && (selectedTypeFilter === '' || (d.schoolType || 'lain') === selectedTypeFilter)
       );
-  }, [submittedData, selectedYear, selectedSchoolFilter, selectedSiriFilter]);
+  }, [submittedData, selectedYear, selectedSchoolFilter, selectedSiriFilter, selectedTypeFilter]);
 
   // Senarai sekolah untuk dropdown filter (dari data yang dihantar, ikut abjad)
   const schoolFilterOptions = useMemo(() => {
@@ -592,6 +596,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                             </select>
                         </div>
                     )}
+                    <select
+                        className="p-2 border rounded-lg text-teal-700 outline-none focus:ring-2 focus:ring-teal-500 bg-teal-50 text-sm font-bold w-full md:w-auto"
+                        value={selectedTypeFilter}
+                        onChange={(e) => setSelectedTypeFilter(e.target.value as SchoolType | '')}
+                        title="Tapis ikut jenis sekolah — SR dan SM boleh mempunyai kadar yuran berbeza"
+                    >
+                        <option value="">Semua Jenis</option>
+                        <option value="rendah">SR — Sekolah Rendah</option>
+                        <option value="menengah">SM — Sekolah Menengah</option>
+                        <option value="lain">Lain-lain</option>
+                    </select>
                 </div>
 
                 <div className="w-px h-8 bg-gray-200 hidden md:block"></div>

@@ -27,6 +27,9 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
   const [selectedProgram, setSelectedProgram] = useState('ALL');
   const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedSiri, setSelectedSiri] = useState('ALL');
+  // SR/SM boleh mempunyai kadar yuran berbeza (migrasi 031), jadi sejarah
+  // selalunya perlu dipisahkan mengikut jenis sekolah.
+  const [selectedType, setSelectedType] = useState('ALL');
   const currentYear = new Date().getFullYear();
 
   // 1. FILTER DATA
@@ -136,9 +139,10 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
               ? availableYears.includes(itemYear)
               : String(itemYear) === selectedYear;
           const matchesSiri = selectedSiri === 'ALL' || (item.siri || 1) === Number(selectedSiri);
-          return matchesProgram && matchesYear && matchesSiri;
+          const matchesType = selectedType === 'ALL' || (item.schoolType || 'lain') === selectedType;
+          return matchesProgram && matchesYear && matchesSiri && matchesType;
       });
-  }, [sourceData, selectedProgram, selectedYear, selectedSiri, availableYears]);
+  }, [sourceData, selectedProgram, selectedYear, selectedSiri, selectedType, availableYears]);
 
   const displayedYears = useMemo(() => {
       if (selectedYear !== 'ALL') return [Number(selectedYear)];
@@ -271,6 +275,18 @@ export const AdminHistory: React.FC<AdminHistoryProps> = ({ data, schools, onRef
                             ))}
                         </select>
                     )}
+
+                    <select
+                        className="min-w-[130px] p-2 border rounded-lg text-sm bg-teal-50 text-teal-700 font-bold focus:bg-white focus:ring-1 focus:ring-teal-500 outline-none transition"
+                        value={selectedType}
+                        onChange={(e) => setSelectedType(e.target.value)}
+                        title="Filter mengikut jenis sekolah"
+                    >
+                        <option value="ALL">Semua Jenis</option>
+                        <option value="rendah">SR — Sekolah Rendah</option>
+                        <option value="menengah">SM — Sekolah Menengah</option>
+                        <option value="lain">Lain-lain</option>
+                    </select>
                 </div>
                 
                 <button

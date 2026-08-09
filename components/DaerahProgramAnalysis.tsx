@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { MapPin, Award, Users, BarChart3, TrendingUp, Calendar, FileSpreadsheet, ChevronDown, ChevronUp, Activity } from 'lucide-react';
-import { SubmissionData, School, Badge } from '../types';
+import { SubmissionData, School, Badge, SchoolType } from '../types';
 
 interface DaerahProgramAnalysisProps {
   data: SubmissionData[];
@@ -34,6 +34,8 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
   const currentYear = new Date().getFullYear();
   const [yearFilter, setYearFilter] = useState<'ALL' | number>(currentYear);
   const [siriFilter, setSiriFilter] = useState<'ALL' | number>('ALL');
+  // SR/SM boleh mempunyai kadar yuran berbeza (migrasi 031).
+  const [typeFilter, setTypeFilter] = useState<'ALL' | SchoolType>('ALL');
   const [expandedDaerah, setExpandedDaerah] = useState<string | null>(null);
 
   // Bersihkan data: keluarkan system markers, hanya rekod sah
@@ -68,8 +70,9 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
   const yearFilteredData = useMemo(() => {
     let result = yearFilter === 'ALL' ? cleanData : cleanData.filter(d => safeYear(d.date) === yearFilter);
     if (siriFilter !== 'ALL') result = result.filter(d => (d.siri || 1) === siriFilter);
+    if (typeFilter !== 'ALL') result = result.filter(d => (d.schoolType || 'lain') === typeFilter);
     return result;
-  }, [cleanData, yearFilter, siriFilter]);
+  }, [cleanData, yearFilter, siriFilter, typeFilter]);
 
   // Siri yang wujud dalam data semasa (kawal keterlihatan penapis Siri)
   const availableSiris = useMemo(() => {
@@ -322,6 +325,19 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
                 </select>
               </div>
             )}
+            <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-full pl-3 pr-1.5 py-1">
+              <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider">Jenis</span>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value as 'ALL' | SchoolType)}
+                className="bg-white border border-teal-200 rounded-full px-3 py-1.5 text-xs font-bold text-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-400"
+              >
+                <option value="ALL">Semua Jenis</option>
+                <option value="rendah">SR</option>
+                <option value="menengah">SM</option>
+                <option value="lain">Lain</option>
+              </select>
+            </div>
             <button
               onClick={handleExportMatrix}
               disabled={matrix.length === 0}

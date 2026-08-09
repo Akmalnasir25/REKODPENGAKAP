@@ -105,7 +105,7 @@ export const fetchCloudData = async (
           *,
           submission:submissions(
             id, submission_year, submitted_at, status, remarks,
-            school:schools(id, name, school_code, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
+            school:schools(id, name, school_code, school_type, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
             badge:badges(id, name)
           )
         `).eq('is_deleted', false).not('float_status', 'in', '("floated","transferred")').order('created_at', { ascending: false }).range(from, from + pageSize - 1);
@@ -160,6 +160,7 @@ export const fetchCloudData = async (
       return {
         name: s.name,
         schoolCode: s.school_code,
+        schoolType: s.school_type || 'lain',
         negeriCode: s.negeri?.code,
         daerahCode: s.daerah?.code,
         isClaimed: Boolean(s.is_claimed),
@@ -187,6 +188,7 @@ export const fetchCloudData = async (
         date: p.submission?.submitted_at || p.created_at,
         school: p.submission?.school?.name || '',
         schoolCode: p.submission?.school?.school_code || '',
+        schoolType: p.submission?.school?.school_type || 'lain',
         negeriCode: p.submission?.school?.negeri?.code,
         daerahCode: p.submission?.school?.daerah?.code,
         badge: p.submission?.badge?.name || '',

@@ -6,7 +6,7 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import { submitRegistration, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 import { PrivacyNotice } from './ui/PrivacyNotice';
-import { badgeStatusKey } from '../utils/dataProcessing';
+import { badgeStatusKey, resolveBadgePermissions } from '../utils/dataProcessing';
 
 // Program dikira tutup jika di-tutup manual (isOpen false) ATAU tarikh hari ini
 // sudah melepasi tarikh akhir. Pendaftaran masih dibenarkan pada hari tarikh akhir itu sendiri.
@@ -104,8 +104,13 @@ export const UserForm: React.FC<UserFormProps> = ({
   // Tahun kohort = tahun pendaftaran dipilih (boleh backdated). Semua semakan kebenaran/kunci/pendua ikut tahun ini.
   const currentYear = registrationYear;
   // Kunci status ikut siri (migrasi 027) — setiap siri ialah pusingan berasingan.
-  const selectedBadgePermissionKey = leaderInfo.badgeType ? badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri) : '';
-  const selectedBadgePermissions = selectedBadgePermissionKey ? currentSchoolSettings?.badgeEditPermissions?.[selectedBadgePermissionKey] : undefined;
+  // Kebenaran diselesaikan dengan sandaran ke Siri 1 — togol admin ialah
+  // peringkat PROGRAM, jadi Siri 2 tidak boleh terbuka semata-mata kerana
+  // barisnya belum wujud semasa togol ditetapkan.
+  const selectedBadgePermissions = resolveBadgePermissions(
+    currentSchoolSettings?.badgeEditPermissions,
+    leaderInfo.badgeType, currentYear, registrationSiri,
+  );
   const allowStudents = selectedBadgePermissions?.students ?? baseAllowStudents;
   const allowAssistants = selectedBadgePermissions?.assistants ?? baseAllowAssistants;
   const allowExaminers = selectedBadgePermissions?.examiners ?? baseAllowExaminers;

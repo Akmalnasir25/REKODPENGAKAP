@@ -58,6 +58,33 @@ export const badgeStatusKey = (badge: string, year: number | string, siri: numbe
   `${badge}_${year}_${siri || 1}`;
 
 /**
+ * Kebenaran edit bagi satu program, tahun dan siri.
+ *
+ * Kebenaran DISIMPAN mengikut siri, kerana ia hidup dalam `notes` pada baris
+ * school_badge_status dan baris itu dikunci pada (sekolah, program, tahun,
+ * siri). Tetapi UI admin — "Kawalan Edit Pukal Mengikut Program" — tidak
+ * mempunyai dimensi siri langsung. Ia menulis kepada siri yang sudah wujud,
+ * yang biasanya Siri 1 sahaja.
+ *
+ * Tanpa sandaran ini, menutup Peserta menyekat Siri 1 dan membiarkan Siri 2
+ * terbuka sepenuhnya — sekolah hanya perlu bertukar siri untuk memintasnya.
+ * Itu bukan yang admin fikir mereka tetapkan.
+ *
+ * Jadi: kunci tepat dahulu, kemudian jatuh kembali kepada Siri 1 sebagai
+ * kedudukan peringkat program. Kalau admin tidak pernah menyentuh togol itu,
+ * kedua-duanya tiada dan pemanggil menggunakan kebenaran peringkat sekolah.
+ */
+export const resolveBadgePermissions = <T,>(
+  peta: Record<string, T> | undefined | null,
+  badge: string,
+  year: number | string,
+  siri: number = 1,
+): T | undefined => {
+  if (!peta || !badge) return undefined;
+  return peta[badgeStatusKey(badge, year, siri)] ?? peta[badgeStatusKey(badge, year, 1)];
+};
+
+/**
  * Songsangan `badgeStatusKey`. Menerima format baharu `<program>_<tahun>_<siri>`
  * DAN format lama `<program>_<tahun>` yang masih wujud dalam data tersimpan.
  *

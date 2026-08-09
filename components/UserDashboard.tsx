@@ -12,7 +12,7 @@ const getSubmissionYear = (value?: string | null) => {
   return Number.isFinite(year) ? year : null;
 };
 import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri } from '../services/supabaseApi';
-import { badgeStatusKey } from '../utils/dataProcessing';
+import { badgeStatusKey, resolveBadgePermissions } from '../utils/dataProcessing';
 import { PaymentScreen } from './PaymentScreen';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
@@ -602,7 +602,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       // If badge+year is approved, user cannot modify
       if (approvedBadges.includes(lockKey)) return false;
 
-      const perBadgePermissions = currentSchoolSettings?.badgeEditPermissions?.[lockKey];
+      // Sandaran ke Siri 1: togol admin peringkat program, bukan per siri.
+      const perBadgePermissions = resolveBadgePermissions(
+        currentSchoolSettings?.badgeEditPermissions, item.badge, itemYear, item.siri || 1,
+      );
       const role = (item.role || 'PESERTA').toUpperCase();
       if (role === 'PENGUJI') return perBadgePermissions?.examiners ?? allowExaminers;
       if (role.includes('PENOLONG') || role === 'PEMIMPIN') return perBadgePermissions?.assistants ?? allowAssistants;

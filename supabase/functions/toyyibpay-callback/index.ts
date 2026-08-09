@@ -202,49 +202,22 @@ serve(async (req) => {
       return ok('jumlah tidak sepadan');
     }
 
-    // ── PINTU TEMPAT — atomik, di bawah kunci baris ───────────────────
-    const { data: tuntut, error: tuntutErr } = await admin.rpc('claim_siri_seats', {
+    // ── PINTU TEMPAT + penyelesaian ───────────────────────────────────
+    // Urutan (tuntut tempat → hantar pendaftaran → kemas kini status) tinggal
+    // dalam finalize_payment supaya laluan ini dan check-payment-status tidak
+    // boleh menyimpang. Lihat migrasi 033.
+    const { data: hasil, error: finErr } = await admin.rpc('finalize_payment', {
       p_payment_id: bayaran.id,
       p_new_status: 'paid',
     });
-    if (tuntutErr) throw tuntutErr;
+    if (finErr) throw finErr;
 
-    const dapatTempat = tuntut?.ok === true;
-
-    if (dapatTempat) {
-      // Bayaran diterima DAN tempat diperoleh: pendaftaran masuk giliran pengesahan.
-      const { data: subs } = await admin
-        .from('submissions').select('id')
-        .eq('school_id', bayaran.school_id).eq('badge_id', bayaran.badge_id)
-        .eq('submission_year', bayaran.year);
-      const subIds = (subs || []).map((s: any) => s.id);
-      if (subIds.length) {
-        await admin.from('submissions').update({ status: 'submitted' })
-          .in('id', subIds).eq('status', 'draft');
-      }
-
-      await admin.from('school_badge_status').upsert({
-        school_id: bayaran.school_id, badge_id: bayaran.badge_id,
-        year: bayaran.year, siri: bayaran.siri,
-        payment_status: 'paid',
-        status: 'submitted',
-        submitted_at: new Date().toISOString(),
-      }, { onConflict: 'school_id,badge_id,year,siri' });
-    } else {
-      // Duit diterima, tempat tiada. claim_siri_seats sudah menandakan
-      // seat_status = 'no_seat'. Pendaftaran KEKAL draf dengan sengaja —
-      // ia tidak boleh masuk giliran pengesahan tanpa tempat.
-      await admin.from('school_badge_status').upsert({
-        school_id: bayaran.school_id, badge_id: bayaran.badge_id,
-        year: bayaran.year, siri: bayaran.siri,
-        payment_status: 'paid',
-      }, { onConflict: 'school_id,badge_id,year,siri' });
-    }
+    const dapatTempat = hasil?.ok === true;
 
     await admin.from('audit_logs').insert({
       action: dapatTempat ? 'bayaran_disahkan' : 'bayaran_tanpa_tempat',
       entity_type: 'payments', entity_id: bayaran.id,
-      details: { billcode, dibayar, tuntut },
+      details: { billcode, dibayar, hasil },
     }).then(() => {}, () => {});
 
     // Notifikasi admin — best-effort. Kegagalan di sini tidak boleh

@@ -1,4 +1,5 @@
 import { supabase, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from './supabaseClient';
+import { DataResit } from './receiptService';
 
 // ============================================================
 // Lapisan bayaran untuk sekolah.
@@ -181,5 +182,59 @@ export const semakBuktiBayaran = async (
     return { ok: false, message: sebabMesej[data?.sebab] || 'Gagal menyemak bayaran.' };
   } catch (error: any) {
     return { ok: false, message: error?.message || 'Ralat sambungan.' };
+  }
+};
+
+
+/**
+ * Data untuk resit. Bilangan peserta diambil dari SNAPSHOT yang disimpan
+ * semasa bil dicipta, bukan dikira semula — resit mesti mencerminkan apa yang
+ * sebenarnya dibil, walaupun senarai peserta berubah selepas itu.
+ *
+ * RLS pada `payments` mengehadkan sekolah kepada bayaran sendiri.
+ */
+export const getDataResit = async (paymentId: string): Promise<DataResit | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('payments')
+      .select(`
+        id, year, siri, amount, transaction_fee, total_amount, method,
+        reference_number, paid_at, confirmed_at,
+        snapshot_peserta, snapshot_pemimpin, snapshot_penolong,
+        school:school_id(name, school_code, daerah:daerah_id(name), negeri:negeri_id(name)),
+        badge:badge_id(name)
+      `)
+      .eq('id', paymentId)
+      .maybeSingle();
+    if (error || !data) return null;
+
+    const sekolah: any = Array.isArray(data.school) ? data.school[0] : data.school;
+    const badge: any = Array.isArray(data.badge) ? data.badge[0] : data.badge;
+    const daerah: any = Array.isArray(sekolah?.daerah) ? sekolah.daerah[0] : sekolah?.daerah;
+    const negeri: any = Array.isArray(sekolah?.negeri) ? sekolah.negeri[0] : sekolah?.negeri;
+
+    return {
+      paymentId: data.id,
+      schoolName: sekolah?.name || '-',
+      schoolCode: sekolah?.school_code,
+      badgeName: badge?.name || '-',
+      siri: data.siri ?? 1,
+      year: data.year,
+      amount: Number(data.amount ?? 0),
+      transactionFee: Number(data.transaction_fee ?? 0),
+      totalAmount: Number(data.total_amount ?? 0),
+      method: data.method,
+      referenceNumber: data.reference_number,
+      paidAt: data.paid_at,
+      confirmedAt: data.confirmed_at,
+      daerahName: daerah?.name,
+      negeriName: negeri?.name,
+      bilPeserta: data.snapshot_peserta ?? 0,
+      bilPemimpin: data.snapshot_pemimpin ?? 0,
+      bilPenolong: data.snapshot_penolong ?? 0,
+    };
+  } catch (error) {
+    console.error('getDataResit error:', error);
+    return null;
   }
 };

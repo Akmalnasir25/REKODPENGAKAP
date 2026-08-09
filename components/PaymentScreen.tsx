@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
   CreditCard, Landmark, FileCheck2, Loader2, CheckCircle2,
-  AlertTriangle, Clock, Upload, ExternalLink, X,
+  AlertTriangle, Clock, Upload, ExternalLink, X, Download,
 } from 'lucide-react';
 import {
   janaBil, semakStatusBayaran, hantarBuktiBayaran, getArahanBayaranManual,
   KaedahBayaran, BilDijana, StatusBayaran,
 } from '../services/paymentService';
 import { uploadToR2 } from '../services/r2Service';
+import { getDataResit } from '../services/paymentService';
+import { muatTurunResit } from '../services/receiptService';
 import { formatRM } from '../services/programSummary';
 
 interface Props {
@@ -46,6 +48,7 @@ export const PaymentScreen: React.FC<Props> = ({
   const [rujukan, setRujukan] = useState('');
   const [fail, setFail] = useState<File | null>(null);
   const [memuatNaik, setMemuatNaik] = useState(false);
+  const [menjanaResit, setMenjanaResit] = useState(false);
 
   useEffect(() => {
     getArahanBayaranManual(badgeName, year).then(setArahan);
@@ -136,8 +139,28 @@ export const PaymentScreen: React.FC<Props> = ({
             </div>
           </div>
         </div>
+        {/* Resit hanya untuk bayaran yang SUDAH disahkan. Bukti yang masih
+            menunggu semakan belum boleh diresitkan — admin mungkin menolaknya. */}
+        {status.paymentStatus === 'paid' && (
+          <button
+            onClick={async () => {
+              const id = paymentIdSediaAda || bil?.paymentId;
+              if (!id) return;
+              setMenjanaResit(true);
+              const data = await getDataResit(id);
+              setMenjanaResit(false);
+              if (data) muatTurunResit(data);
+              else setRalat('Gagal menjana resit. Cuba lagi.');
+            }}
+            disabled={menjanaResit}
+            className="w-full mt-4 py-2.5 rounded-lg font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 transition flex items-center justify-center gap-2"
+          >
+            {menjanaResit ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            {menjanaResit ? 'Menjana resit…' : 'Muat Turun Resit (PDF)'}
+          </button>
+        )}
         <button onClick={takdaTempat ? onTutup : onSelesai}
-          className="w-full mt-4 py-2.5 rounded-lg font-bold text-white bg-slate-800 hover:bg-slate-900 transition">
+          className="w-full mt-2 py-2.5 rounded-lg font-bold text-white bg-slate-800 hover:bg-slate-900 transition">
           Selesai
         </button>
       </Bingkai>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User, CheckCircle, ScanLine } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, MapPin, Plus, EyeOff, Eye, Image, Upload, User, CheckCircle, ScanLine, Wallet } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -11,6 +11,7 @@ import { DaerahProgramAnalysis } from './DaerahProgramAnalysis';
 import { FloatedStudentsTab } from './FloatedStudentsTab';
 import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
 import { PengesahanTab } from './PengesahanTab';
+import { AdminPaymentsTab } from './AdminPaymentsTab';
 import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
 import { QRAttendanceScanner } from './ui/QRVerification';
@@ -41,7 +42,7 @@ interface AdminNegeriPanelProps {
 export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({ 
   negeriCode, negeriName, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, daerahList, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'pengesahan' | 'attendance' | 'withdrawals' | 'courses' | 'history' | 'audit' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'daerah' | 'schools' | 'admins' | 'badges' | 'pengesahan' | 'bayaran' | 'attendance' | 'withdrawals' | 'courses' | 'history' | 'audit' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   // Filter daerah global utk semua tab data (Rumusan, Analitik, Sekolah, Semakan, Audit)
@@ -546,6 +547,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     { id: 'admins', label: 'Urus Admin Daerah', icon: Users, allowed: true, scoped: false },
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true, scoped: false },
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true, scoped: false },
+    { id: 'bayaran', label: 'Rumusan Bayaran', icon: Wallet, allowed: true, scoped: false },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true, scoped: false },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true, scoped: true },
     { id: 'floated', label: 'Murid Terapung', icon: MapPin, allowed: true, scoped: true },
@@ -892,6 +894,12 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                   badges={badges}
                   onRefresh={refreshData}
                 />
+              </div>
+            )}
+
+            {tab === 'bayaran' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <AdminPaymentsTab />
               </div>
             )}
 

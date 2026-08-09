@@ -227,6 +227,89 @@ export const getBayaranUntukSemakan = async (): Promise<BayaranUntukSemakan[]> =
   }
 };
 
+export interface BarisRumusanBayaran {
+  id: string;
+  schoolName: string;
+  schoolCode: string | null;
+  schoolType: string | null;
+  daerahName: string | null;
+  badgeName: string;
+  year: number;
+  siri: number;
+  amount: number;
+  transactionFee: number;
+  totalAmount: number;
+  method: string;
+  status: string;
+  seatStatus: string;
+  referenceNumber: string | null;
+  billCode: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  bilPeserta: number;
+  bilPemimpin: number;
+  bilPenolong: number;
+}
+
+/**
+ * Setiap bayaran dalam skop admin — bukan hanya yang menunggu tindakan.
+ *
+ * Tiada penapisan skop di sini: RLS pada `payments` (migrasi 028) sudah
+ * mengehadkan admin daerah kepada daerahnya dan admin negeri kepada
+ * negerinya. Menulis semula syarat itu di sini hanya mencipta salinan kedua
+ * yang boleh menyimpang daripada yang sebenar.
+ */
+export const getRumusanBayaran = async (tahun?: number): Promise<BarisRumusanBayaran[]> => {
+  try {
+    let q = supabase
+      .from('payments')
+      .select(`
+        id, year, siri, amount, transaction_fee, total_amount, method, status,
+        seat_status, reference_number, external_bill_code, paid_at, created_at,
+        snapshot_peserta, snapshot_pemimpin, snapshot_penolong,
+        school:school_id(name, school_code, school_type, daerah:daerah_id(name)),
+        badge:badge_id(name)
+      `)
+      .order('created_at', { ascending: false });
+    if (tahun) q = q.eq('year', tahun);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    return (data || []).map((r: any) => {
+      const sekolah = Array.isArray(r.school) ? r.school[0] : r.school;
+      const badge = Array.isArray(r.badge) ? r.badge[0] : r.badge;
+      const daerah = Array.isArray(sekolah?.daerah) ? sekolah.daerah[0] : sekolah?.daerah;
+      return {
+        id: r.id,
+        schoolName: sekolah?.name || '-',
+        schoolCode: sekolah?.school_code ?? null,
+        schoolType: sekolah?.school_type ?? null,
+        daerahName: daerah?.name ?? null,
+        badgeName: badge?.name || '-',
+        year: r.year,
+        siri: r.siri ?? 1,
+        amount: Number(r.amount ?? 0),
+        transactionFee: Number(r.transaction_fee ?? 0),
+        totalAmount: Number(r.total_amount ?? 0),
+        method: r.method,
+        status: r.status,
+        seatStatus: r.seat_status,
+        referenceNumber: r.reference_number,
+        billCode: r.external_bill_code,
+        paidAt: r.paid_at,
+        createdAt: r.created_at,
+        bilPeserta: r.snapshot_peserta ?? 0,
+        bilPemimpin: r.snapshot_pemimpin ?? 0,
+        bilPenolong: r.snapshot_penolong ?? 0,
+      };
+    });
+  } catch (error) {
+    console.error('getRumusanBayaran error:', error);
+    return [];
+  }
+};
+
 /** Sahkan atau tolak bukti manual. Kebenaran disemak dalam fungsi DB. */
 export const semakBuktiBayaran = async (
   paymentId: string, terima: boolean, sebab?: string,

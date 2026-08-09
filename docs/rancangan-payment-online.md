@@ -814,6 +814,38 @@ _Belum ditulis_
 
 ---
 
+## 9b. Jurang Wajib Ditutup Sebelum Program Berbayar Pertama
+
+### Peserta boleh ditambah SELEPAS pengesahan, tanpa dibil
+
+**Disahkan dalam data sebenar (2026-08-09).** Keris Emas 2026 Siri 1 mempunyai **41 peserta** dalam submission berstatus `draft`, tersebar merentas **7 sekolah**. 19 daripadanya berada di bawah baris status `approved`, jadi mereka **dikira dalam statistik rasmi hari ini** walaupun submission induknya draf.
+
+Puncanya: `createSubmissionWithPeople` lalainya `'draft'`, dan Import Naik tidak pernah menghantar nilai lain. Draf hanya bertukar `submitted` apabila sekolah menekan Hantar (`lockSchoolBadge`). Peserta yang ditambah selepas itu kekal draf tetapi **menumpang pengesahan sedia ada**, dan statistik hanya menyemak pengesahan.
+
+Taburan merentas 7 sekolah menunjukkan ini **rutin, bukan terpencil**. Corak nama menimbulkan hipotesis bahawa ia berlaku apabila pemimpin/penolong ditambah melalui penghantaran berasingan selepas peserta.
+
+**Kenapa ia mematikan untuk bayaran:**
+
+```
+Sekolah bayar untuk 20 peserta       →  disahkan, 20 tempat diambil
+Kemudian tambah 5 pemimpin (draf)    →  menumpang pengesahan yang sama
+                                     →  dikira dalam statistik
+                                     →  TIDAK pernah dibil, TIDAK ambil tempat
+```
+
+Duit terlepas, dan kuota terlepas.
+
+**Bukan penyelesaiannya:** menapis `submissionStatus === 'draft'` dalam `deduplicateRecords`. Dicuba pada 2026-08-09 dan digulung semula — ia akan melenyapkan 20 peserta sah daripada laporan rasmi, kerana draf ialah keadaan biasa bagi penambahan yang sah dan bukan penanda "belum bayar".
+
+**Arah penyelesaian yang perlu diputuskan:**
+- Tambahan kepada program yang sudah `approved` mengembalikan status kepada `submitted` (memaksa pengesahan semula), atau
+- Bil tambahan dijana automatik untuk peserta yang ditambah selepas bayaran, atau
+- Sekat penambahan sepenuhnya selepas pengesahan bagi program `payment_online_required`
+
+Ketiga-tiganya mengubah aliran kerja sedia ada, jadi ia perlu keputusan sebelum dilaksana.
+
+---
+
 ## 10. Soalan Terbuka
 
 | # | Soalan | Nota |

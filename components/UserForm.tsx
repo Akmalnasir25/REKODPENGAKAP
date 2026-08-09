@@ -111,6 +111,41 @@ export const UserForm: React.FC<UserFormProps> = ({
   const allowExaminers = selectedBadgePermissions?.examiners ?? baseAllowExaminers;
   const lockedBadges = currentSchoolSettings?.lockedBadges || [];
 
+  // Peranan yang benar-benar boleh didaftar untuk program ini.
+  //
+  // Dropdown peranan melumpuhkan pilihan yang ditutup, tetapi itu hanya
+  // menghalang MENUKAR kepadanya. Baris baharu dahulunya sentiasa bermula
+  // sebagai PESERTA, jadi menutup Peserta tidak menghalang apa-apa: sekolah
+  // menekan Tambah, mengisi nama, dan menghantar.
+  const peranaanDibenarkan = React.useMemo<PersonRole[]>(() => {
+    const senarai: PersonRole[] = [];
+    if (allowStudents) senarai.push('PESERTA');
+    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN');
+    if (allowExaminers) senarai.push('PENGUJI');
+    return senarai;
+  }, [allowStudents, allowAssistants, allowExaminers]);
+  const peranaanLalai: PersonRole = peranaanDibenarkan[0] ?? 'PESERTA';
+
+  // Baris KOSONG yang memegang peranan tertutup dibetulkan secara senyap —
+  // termasuk baris pertama borang, yang wujud sebelum kebenaran dimuatkan.
+  // Baris yang sudah diisi tidak disentuh; ia dihalang semasa hantar dengan
+  // mesej, supaya tiada kerja sekolah hilang tanpa penjelasan.
+  useEffect(() => {
+    if (peranaanDibenarkan.length === 0) return;
+    setAllPeople(prev => {
+      let berubah = false;
+      const baharu = prev.map(p => {
+        const kosong = !p.name.trim() && !(p.icNumber || '').trim();
+        if (kosong && !peranaanDibenarkan.includes((p as any).role)) {
+          berubah = true;
+          return { ...p, role: peranaanLalai };
+        }
+        return p;
+      });
+      return berubah ? baharu : prev;
+    });
+  }, [peranaanDibenarkan, peranaanLalai]);
+
   // FILTER BADGES BY SCOPE based on current school's negeri/daerah
   const schoolNegeriCode = currentSchoolSettings?.negeriCode;
   const schoolDaerahCode = currentSchoolSettings?.daerahCode;
@@ -257,6 +292,19 @@ export const UserForm: React.FC<UserFormProps> = ({
     
     // 1. Consolidate entries that have content
     const allEntries = allPeople.filter(p => p.name.trim() !== '' || (p.icNumber && p.icNumber.trim() !== ''));
+
+    // Peranan yang ditutup admin tidak boleh DIDAFTAR, bukan sekadar tidak
+    // boleh dipilih dari dropdown. Ini pengadang sebenar — paparan di atas
+    // hanya memudahkan, dan tidak boleh dipercayai bersendirian.
+    const peranaanDitolak = allEntries.filter(p => !peranaanDibenarkan.includes((p as any).role));
+    if (peranaanDitolak.length > 0) {
+      const jenis = Array.from(new Set(peranaanDitolak.map(p => (p as any).role as string)));
+      alert(
+        `Pendaftaran ${jenis.join(' dan ')} untuk '${leaderInfo.badgeType}' telah ditutup oleh admin.\n\n` +
+        `${peranaanDitolak.length} rekod berkenaan perlu dibuang sebelum borang ini boleh dihantar.`,
+      );
+      return;
+    }
 
     // Check Local IC Duplicates
     const icSet = new Set<string>();
@@ -873,9 +921,17 @@ export const UserForm: React.FC<UserFormProps> = ({
                       </div>
                     ))}
 
-                    <button type="button" onClick={() => setAllPeople([...allPeople, createEmptyParticipant('PESERTA')])} className="mt-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
-                        <Plus size={20}/> Tambah Peserta
+                    {/* Label mengikut peranan yang benar-benar boleh didaftar.
+                        "Tambah Peserta" pada program yang Peserta-nya ditutup
+                        ialah janji yang borang ini tidak boleh tunaikan. */}
+                    <button type="button" onClick={() => setAllPeople([...allPeople, createEmptyParticipant(peranaanLalai)])} className="mt-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
+                        <Plus size={20}/> Tambah {peranaanLalai === 'PESERTA' ? 'Peserta' : peranaanLalai === 'PENGUJI' ? 'Penguji' : 'Pemimpin'}
                     </button>
+                    {!allowStudents && (
+                      <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        Pendaftaran <strong>Peserta</strong> baharu untuk program ini telah ditutup oleh admin. Senarai sedia ada kekal, dan muat naik senarai masih boleh digunakan.
+                      </p>
+                    )}
                 </div>
             </div>
 

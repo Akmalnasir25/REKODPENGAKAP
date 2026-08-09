@@ -989,3 +989,127 @@ Ketiga-tiganya mengubah aliran kerja sedia ada, jadi ia perlu keputusan sebelum 
 | R2 presign generik | `supabase/functions/r2-presigned-upload/index.ts:16-27` | Boleh terus diguna untuk bukti bayaran |
 | pg_cron belum tentu aktif | `supabase/migrations/020_data_retention_policy.sql:47-50` | Perlu disahkan (§9 Fasa 0) |
 | Corak RLS berskop | `supabase/migrations/002_rls_policies.sql:24-44, 186+` | `get_my_role()` / `get_my_negeri_id()` / `get_my_daerah_id()` |
+
+---
+
+## 13. Bayaran Peringkat Siri (rancangan · belum implementasi)
+
+> Ditulis 9 Ogos 2026. **Tiada kod ditulis sehingga bahagian ini tertutup sepenuhnya.**
+
+### 13.1 Masalah
+
+Bayaran kini berkunci pada **(sekolah, program, tahun, siri)**. Sekolah yang mendaftar Keris Emas dan Keris Perak dalam Siri 2 membayar dua kali, menerima dua resit, dan menekan Hantar dua kali. Bilangan kerja bertambah mengikut bilangan program, sedangkan dari sudut sekolah ia satu pusingan pendaftaran.
+
+**Matlamat:** satu bil per **(sekolah, tahun, siri)** merangkumi semua program dalam siri itu. Menekan Hantar untuk satu siri menghantar kesemuanya sekaligus.
+
+### 13.2 Keputusan yang sudah dibuat
+
+| # | Soalan | Keputusan |
+|---|---|---|
+| 13a | Satu program dalam siri itu penuh | **Bayar yang ada tempat sahaja.** Program penuh dilangkau dari bil dan kekal draf; ia boleh dibayar kemudian jika had dinaikkan |
+| 13b | Pengesahan admin | **Kekal per program.** Hanya bayaran digabungkan. Admin masih boleh menolak satu program tanpa menyentuh yang lain |
+| 13c | Program mana masuk ke bil | **Semua automatik** — setiap program yang mempunyai peserta draf dalam siri itu. Sekolah tidak memilih |
+| 13d | Program dilangkau, had dinaikkan kemudian | **Bil kedua dijana** untuk yang berbaki. Satu siri boleh mempunyai beberapa bil; hanya satu boleh TERBUKA serentak. Lihat §13.11 |
+
+### 13.3 Bentuk data
+
+Pilihan yang **tidak** diambil ialah menjadikan `payments.badge_id` nullable dan memindahkan program ke jadual item. Itu memaksa pengiraan tempat, `payment_status` pada `school_badge_status`, pencetus kelulusan dan statistik berubah serentak — kesemuanya berkunci pada (sekolah, program, tahun, siri) hari ini.
+
+Sebaliknya: **lapisan bil baharu di atas baris bayaran sedia ada.**
+
+```
+payment_bills                        payments (sedia ada, kekal per program)
+─────────────────────────────        ──────────────────────────────────────
+id                                   id
+school_id, year, siri                bill_id  ← BARU
+method, status                       school_id, badge_id, year, siri
+amount, transaction_fee              amount, transaction_fee, total_amount
+total_amount                         snapshot_peserta/pemimpin/penolong
+gateway_settings_id                  status, seat_status
+external_bill_code                   submission_id
+expires_at, paid_at, confirmed_at
+reference_number, notes
+```
+
+`payment_bills` memiliki segala-galanya berkaitan **wang dan gateway**. `payments` kekal sebagai **baris program** — dan setiap perkara yang sudah berfungsi terhadapnya tidak berubah langsung: `claim_siri_seats`, `siri_seats_taken`, `finalize_payment`, `enforce_payment_before_approval`, dan `school_badge_status.payment_status`.
+
+**Setiap bayaran mesti mempunyai bil.** Baris sejarah mendapat bil 1:1 semasa migrasi, jadi hanya ada SATU laluan kod, bukan satu untuk bil baharu dan satu lagi untuk baris lama. Laluan bercabang seperti itu akan reput.
+
+### 13.4 Perubahan indeks
+
+| Indeks | Sebelum | Selepas |
+|---|---|---|
+| Satu bil terbuka | `payments(school, badge, year, siri)` where pending | **kekal** — satu baris program terbuka per program |
+| — | tiada | **baharu:** `payment_bills(school, year, siri)` where pending — satu bil terbuka per siri |
+| Kod bil unik | `payments(external_bill_code)` | berpindah ke `payment_bills` |
+
+### 13.5 Aliran mencipta bil
+
+`create-payment-bill` menerima `{year, siri}` — **tiada lagi `badgeName`**.
+
+1. Cari setiap program yang mempunyai peserta draf dalam siri itu bagi sekolah tersebut
+2. Langkau program yang sudah `submitted` atau `approved` untuk siri itu
+3. Bagi setiap program: selesaikan yuran, kira jumlah
+4. **Langkau program yang tempatnya tidak mencukupi** (keputusan 13a) dan kumpulkan sebabnya untuk dipaparkan
+5. Langkau program berjumlah RM0 — ia terus dihantar tanpa bayaran, seperti sekarang
+6. Jika tiada program berbaki: kembalikan ralat yang menamakan sebab setiap satu dilangkau. **Bukan** senyap
+7. Batalkan bil terbuka sedia ada bagi (sekolah, tahun, siri)
+8. Cipta satu `payment_bills` + N baris `payments`, satu per program
+9. Cipta satu bil ToyyibPay dengan `order_id` = **id bil**, jumlah = hasil tambah
+
+**Semakan tempat berlaku dua kali, dengan sengaja.** Sekali semasa bil dicipta (melangkau program penuh), sekali lagi semasa bayaran disahkan melalui `claim_siri_seats`. Tempat boleh habis antara kedua-duanya — dalam kes itu kelakuan sedia ada terpakai: duit diterima, program ditanda `no_seat`, admin uruskan.
+
+`check_siri_availability` perlu dilanjutkan: hari ini ia menjawab "ada baki?", tetapi langkah 4 memerlukan "ada baki untuk **N orang** ini?".
+
+### 13.6 Pengesahan bayaran
+
+`finalize_bill(p_bill_id, p_new_status)` — gelung ke atas setiap `payments` milik bil itu dan panggil `finalize_payment` sedia ada bagi setiap satu. Fungsi itu sudah melakukan urutan per program dengan betul: tuntut tempat → hantar pendaftaran → kemas kini `school_badge_status`.
+
+Ketiga-tiga laluan pengesahan (`toyyibpay-callback`, `check-payment-status`, `reconcile-payments`) beralih daripada mencari `payments` kepada `payment_bills`, kemudian memanggil `finalize_bill`. Perbandingan jumlah, pengesahan hash dan peraturan lebihan-caj tidak berubah.
+
+Pencetus kelulusan **tidak disentuh** — `finalize_payment` masih menetapkan `payment_status` pada setiap baris `school_badge_status`, jadi pengesahan per program (keputusan 13b) terus berfungsi seperti sekarang.
+
+### 13.7 Program tanpa bayaran dalam siri yang sama
+
+Siri boleh mengandungi campuran: Keris Emas mewajibkan bayaran, Pengenalan Pengakap Udara tidak. Menekan Hantar untuk siri itu mesti menghantar **kedua-duanya** — yang berbayar melalui bil, yang tidak berbayar terus ke giliran pengesahan. Sekolah tidak sepatutnya perlu tahu program mana yang mana.
+
+### 13.8 Kesan pada antara muka
+
+| Skrin | Perubahan |
+|---|---|
+| Butang Hantar | Berskop **siri**, bukan program. Label menyebut siri dan bilangan program |
+| Skrin bayaran | Memaparkan pecahan per program sebelum bayar, dan menamakan program yang dilangkau berserta sebabnya |
+| Resit PDF | Satu resit per bil, diperincikan mengikut program |
+| Rumusan Bayaran | Baris peringkat bil, boleh dikembangkan kepada pecahan program |
+| Barisan pengesahan | **Tidak berubah** (keputusan 13b) |
+
+### 13.9 Migrasi data
+
+1. Cipta `payment_bills`, tambah `payments.bill_id`
+2. Bagi setiap `payments` sedia ada, cipta satu bil 1:1 dan salin medan wang/gateway
+3. Jadikan `payments.bill_id` `not null` selepas backfill disahkan
+4. Alihkan indeks unik kod bil ke `payment_bills`
+5. RLS pada `payment_bills` mencerminkan `payments` — sekolah nampak sendiri, admin nampak skop
+
+Bayaran `pending` yang masih hidup semasa migrasi turut dipindahkan 1:1; ia tidak dibatalkan.
+
+### 13.10 Jurang yang masih terbuka
+
+| # | Jurang | Kenapa ia penting |
+|---|---|---|
+| 13g1 | Peserta ditambah selepas bil dijana tetapi sebelum dibayar | Bil membeku snapshot. Peserta tambahan tidak dibil — sama seperti §9b, tetapi kini merentas beberapa program sekaligus |
+| 13g3 | Refund apabila `no_seat` berlaku selepas bayaran | Sudah wujud hari ini untuk satu program; bil berbilang program menjadikan refund separa |
+
+**13g1 dan 13g3 sudah wujud hari ini** dan tidak menjadi lebih teruk secara struktur — ia hanya menjadi lebih kerap. Kedua-duanya kekal terbuka.
+
+### 13.11 Bil susulan dalam siri yang sama (keputusan 13d)
+
+Program yang dilangkau kerana tempat penuh **tidak** tersekat sehingga siri berikutnya. Selepas had dinaikkan, sekolah menekan Hantar semula untuk siri yang sama dan bil kedua dijana bagi program yang berbaki sahaja.
+
+Ini berkuat kuasa dengan sendirinya melalui indeks unik separa yang sudah dirancang: `payment_bills(school, year, siri)` **where status in ('pending','pending_review')**. Bil pertama sudah `paid`, jadi ia jatuh di luar indeks dan bil kedua dibenarkan. Yang dihalang ialah **dua bil terbuka serentak** bagi siri yang sama — bukan dua bil sepanjang hayat siri itu.
+
+Akibat yang mesti dikendalikan:
+
+- **Satu siri boleh menghasilkan beberapa resit.** Nombor resit sudah diterbitkan daripada ID bayaran, jadi ia kekal unik tanpa perubahan
+- Langkah 1 dalam §13.5 mesti melangkau program yang **sudah dibayar** untuk siri itu, bukan hanya yang sudah `submitted` — jika tidak sekolah akan dibil dua kali bagi program yang sama
+- Rumusan Bayaran memaparkan setiap bil berasingan; jumlah bagi satu siri ialah hasil tambah bil-bilnya

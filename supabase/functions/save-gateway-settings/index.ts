@@ -160,8 +160,23 @@ serve(async (req) => {
       } catch (_) { /* bukan JSON — tidak sah */ }
       sah = res.ok && !!kategori?.categoryName;
 
-      // Diagnosis tanpa mendedahkan kandungan: ToyyibPay kadang memantulkan input.
-      console.log('getCategoryDetails', { httpStatus: res.status, panjangRespons: teks.length, sah });
+      // Diagnosis: nama medan sahaja, bukan nilai. Ini mendedahkan bentuk
+      // respons (dan sebab padanan gagal) tanpa mencatat apa-apa kandungan —
+      // ToyyibPay kadang memantulkan input dalam mesej ralat.
+      let bentuk: string[] = [];
+      try {
+        const parsed = JSON.parse(teks);
+        const objek = Array.isArray(parsed) ? parsed[0] : parsed;
+        bentuk = objek && typeof objek === 'object' ? Object.keys(objek) : [`bukan-objek:${typeof objek}`];
+      } catch (_) {
+        bentuk = ['bukan-JSON'];
+      }
+      console.log('getCategoryDetails', {
+        httpStatus: res.status,
+        panjangRespons: teks.length,
+        medan: bentuk,
+        sah,
+      });
     } catch (_) {
       sah = false;
     }

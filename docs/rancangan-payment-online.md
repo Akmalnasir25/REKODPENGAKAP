@@ -34,7 +34,14 @@
 
 ### Langkah seterusnya, ikut urutan
 
-1. **Nyahpepijat borang gateway.** Log dalam Dashboard → Edge Functions → `save-gateway-settings` merekod `getCategoryDetails { httpStatus, panjangRespons, sah }`. `panjangRespons` kecil (7–20) bermakna kredensial tak sepadan; besar (80–150) bermakna penghuraian dalam kod yang silap. Hipotesis semasa: kod kategori dari akaun sandbox lama, bukan yang didaftar semula.
+1. **Nyahpepijat borang gateway.** Bacaan log terakhir: `{ httpStatus: 200, panjangRespons: 93, sah: false }`.
+
+   93 aksara terlalu panjang untuk `[FALSE]` dan hampir tepat dengan bentuk kategori yang didokumenkan, jadi **kredensial berkemungkinan besar SAH dan penghuraian dalam kod yang silap** — bertentangan dengan hipotesis awal.
+
+   Log kini turut merekod `medan: [...]`, iaitu nama medan JSON tanpa nilainya. Cuba borang sekali lagi dan baca baris itu:
+   - `medan: ["categoryName", ...]` → respons betul; padanan `!!kategori?.categoryName` yang gagal, siasat kenapa
+   - `medan: ["status","message"]` atau serupa → ToyyibPay memulangkan ralat; baca mesejnya di dashboard mereka
+   - `medan: ["bukan-JSON"]` → respons bukan JSON walaupun 200
 2. `check-payment-status` — lapisan 1, dipanggil bila sekolah kembali dari gateway
 3. `submit-payment-proof` — muat naik resit/cek → `pending_review`
 4. Skrin bayaran (UI tiga pilihan) selepas Hantar

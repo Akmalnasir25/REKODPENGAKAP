@@ -176,6 +176,13 @@ serve(async (req) => {
         panjangRespons: teks.length,
         medan: bentuk,
         sah,
+        // Panjang input, bukan nilainya. Respons kosong daripada ToyyibPay
+        // hampir selalunya bermakna satu parameter tidak sampai — dan punca
+        // paling lazim ialah kunci kosong kerana medan borang dibiar kosong
+        // sedangkan tiada kunci tersimpan untuk digunakan semula.
+        panjangKunci: kunciUntukUji.length,
+        panjangKategori: body.categoryCode.trim().length,
+        kunciDari: kunciBaharu ? 'borang' : 'vault',
       });
     } catch (_) {
       sah = false;

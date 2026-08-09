@@ -97,7 +97,9 @@ export const saveGatewaySettings = async (input: SaveGatewayInput): Promise<ApiR
 
     const hasil = await res.json().catch(() => null);
     if (!res.ok || hasil?.status !== 'success') {
-      return { status: 'error', message: hasil?.message || 'Gagal menyimpan tetapan gateway.' };
+      // Diagnostik ialah panjang & nama medan sahaja — tiada nilai rahsia.
+      const diag = hasil?.diagnostik ? ` · ${JSON.stringify(hasil.diagnostik)}` : '';
+      return { status: 'error', message: (hasil?.message || 'Gagal menyimpan tetapan gateway.') + diag };
     }
     return { status: 'success', message: hasil.message };
   } catch (error: any) {

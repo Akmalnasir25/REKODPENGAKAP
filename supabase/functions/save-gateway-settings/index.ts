@@ -131,6 +131,10 @@ serve(async (req) => {
 
     const hos = body.isSandbox ? 'https://dev.toyyibpay.com' : 'https://toyyibpay.com';
     let sah = false;
+    // Panjang dan nama medan sahaja — tiada nilai. Ini dipulangkan kepada
+    // pemanggil supaya punca kegagalan kelihatan terus dalam borang, tanpa
+    // perlu memburu log dalam dashboard.
+    let diagnostik: Record<string, unknown> = { nota: 'panggilan tidak sempat berjalan' };
     try {
       // getCategoryDetails mengesahkan kunci DAN kod kategori sekali gus —
       // kedua-duanya mesti betul untuk mendapat balasan yang bermakna.
@@ -171,6 +175,14 @@ serve(async (req) => {
       } catch (_) {
         bentuk = ['bukan-JSON'];
       }
+      diagnostik = {
+        httpStatus: res.status,
+        panjangRespons: teks.length,
+        medan: bentuk,
+        panjangKunci: kunciUntukUji.length,
+        panjangKategori: body.categoryCode.trim().length,
+        kunciDari: kunciBaharu ? 'borang' : 'vault',
+      };
       console.log('getCategoryDetails', {
         httpStatus: res.status,
         panjangRespons: teks.length,
@@ -184,8 +196,9 @@ serve(async (req) => {
         panjangKategori: body.categoryCode.trim().length,
         kunciDari: kunciBaharu ? 'borang' : 'vault',
       });
-    } catch (_) {
+    } catch (e: any) {
       sah = false;
+      diagnostik = { ralatRangkaian: String(e?.name || 'gagal') };
     }
 
     if (!sah) {
@@ -194,6 +207,7 @@ serve(async (req) => {
       return json({
         status: 'error',
         message: `Kunci atau kod kategori tidak sah untuk persekitaran ${body.isSandbox ? 'sandbox' : 'produksi'}. Semak semula dalam dashboard ToyyibPay.`,
+        diagnostik,
       }, 400);
     }
 

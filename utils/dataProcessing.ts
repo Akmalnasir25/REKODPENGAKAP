@@ -96,6 +96,12 @@ export function deduplicateRecords(data: SubmissionData[], schools: School[], sh
     if (item.school === '__SYSTEM_YEAR_MARKER__') return false;
     if (!item.student || typeof item.student !== 'string' || !item.student.trim()) return false;
 
+    // Draf belum dihantar — cth pendaftaran yang menunggu bayaran. Ditapis DI SINI
+    // dan bukan semasa fetch, kerana senarai penuh masih diperlukan oleh semakan
+    // pendua dalam UserForm: kalau draf disembunyikan dari situ, dua sekolah boleh
+    // mendaftar orang yang sama dan kedua-duanya membayar.
+    if (item.submissionStatus === 'draft') return false;
+
     let isApproved = false;
     if (showDrafts) {
       isApproved = true;

@@ -189,6 +189,7 @@ export const fetchCloudData = async (
         school: p.submission?.school?.name || '',
         schoolCode: p.submission?.school?.school_code || '',
         schoolType: p.submission?.school?.school_type || 'lain',
+        submissionStatus: p.submission?.status || 'submitted',
         negeriCode: p.submission?.school?.negeri?.code,
         daerahCode: p.submission?.school?.daerah?.code,
         badge: p.submission?.badge?.name || '',

@@ -37,6 +37,8 @@ export interface SubmissionData {
   school: string;
   schoolCode?: string;
   schoolType?: SchoolType;
+  /** Status baris submissions induk. 'draft' = belum dihantar (cth menunggu bayaran). */
+  submissionStatus?: string;
   negeriCode?: string;
   daerahCode?: string;
   badge: string;

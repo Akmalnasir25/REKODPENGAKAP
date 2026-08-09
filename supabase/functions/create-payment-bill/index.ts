@@ -241,7 +241,20 @@ serve(async (req) => {
 
     const hos = gw!.is_sandbox ? 'https://dev.toyyibpay.com' : 'https://toyyibpay.com';
     const pad = (n: number) => String(n).padStart(2, '0');
-    const expiryStr = `${pad(luput.getDate())}-${pad(luput.getMonth() + 1)}-${luput.getFullYear()} ${pad(luput.getHours())}:${pad(luput.getMinutes())}:${pad(luput.getSeconds())}`;
+
+    // billExpiryDate MESTI dalam waktu Malaysia (UTC+8).
+    //
+    // Edge Function berjalan pada UTC, jadi getHours() memulangkan jam UTC.
+    // ToyyibPay ialah perkhidmatan Malaysia dan membaca angka yang dihantar
+    // sebagai waktu tempatan — menghantar jam UTC bermakna setiap bil dicipta
+    // dengan tarikh luput lapan jam yang LALU, dan ToyyibPay memaparkan
+    // "This bill is inactive" serta-merta.
+    //
+    // Anjakan +8 jam kemudian baca komponen UTC memberi waktu Malaysia yang
+    // betul tanpa bergantung pada zon waktu pelayan.
+    const OFFSET_MYT_MS = 8 * 60 * 60 * 1000;
+    const luputMyt = new Date(luput.getTime() + OFFSET_MYT_MS);
+    const expiryStr = `${pad(luputMyt.getUTCDate())}-${pad(luputMyt.getUTCMonth() + 1)}-${luputMyt.getUTCFullYear()} ${pad(luputMyt.getUTCHours())}:${pad(luputMyt.getUTCMinutes())}:${pad(luputMyt.getUTCSeconds())}`;
 
     // urlencoded — lihat nota dalam save-gateway-settings.
     const borang = new URLSearchParams();

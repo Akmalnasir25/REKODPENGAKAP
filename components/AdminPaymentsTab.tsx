@@ -61,15 +61,17 @@ export const AdminPaymentsTab: React.FC = () => {
   }, [tahun]);
   useEffect(() => { muat(); }, [muat]);
 
+  // Satu bil boleh mengandungi beberapa program, jadi senarai pilihan dan
+  // penapisnya bekerja pada baris ANAK, bukan pada satu medan induk.
   const programList = useMemo(
-    () => Array.from(new Set(baris.map(r => r.badgeName))).sort(),
+    () => Array.from(new Set(baris.flatMap(r => r.programs.map(p => p.name)))).sort(),
     [baris]);
   const siriList = useMemo(
     () => Array.from(new Set(baris.map(r => r.siri))).sort((a, b) => a - b),
     [baris]);
 
   const ditapis = useMemo(() => baris.filter(r => {
-    if (fProgram && r.badgeName !== fProgram) return false;
+    if (fProgram && !r.programs.some(p => p.name === fProgram)) return false;
     if (fSiri && r.siri !== Number(fSiri)) return false;
     if (fStatus && r.status !== fStatus) return false;
     if (fKaedah && r.method !== fKaedah) return false;
@@ -103,9 +105,13 @@ export const AdminPaymentsTab: React.FC = () => {
   const muatTurunCSV = () => {
     const tajuk = ['Sekolah', 'Kod', 'Jenis', 'Daerah', 'Program', 'Siri', 'Peserta', 'Pemimpin',
       'Penolong', 'Yuran (RM)', 'Caj (RM)', 'Jumlah (RM)', 'Kaedah', 'Status', 'Rujukan', 'Kod Bil', 'Tarikh Bayar'];
+    // Satu baris CSV per BIL, dengan program disenaraikan dalam satu sel.
+    // Satu baris per program akan menggandakan jumlah bila dijumlahkan
+    // dalam Excel — kesilapan yang mudah dibuat dan sukar dikesan.
     const sel = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const isi = ditapis.map(r => [
-      r.schoolName, r.schoolCode, r.schoolType, r.daerahName, r.badgeName, r.siri,
+      r.schoolName, r.schoolCode, r.schoolType, r.daerahName,
+      r.programs.map(p => p.name).join(' + '), r.siri,
       r.bilPeserta, r.bilPemimpin, r.bilPenolong,
       r.amount.toFixed(2), r.transactionFee.toFixed(2), r.totalAmount.toFixed(2),
       namaKaedah(r.method), namaStatus[r.status] || r.status,
@@ -231,7 +237,16 @@ export const AdminPaymentsTab: React.FC = () => {
                       </span>
                     )}
                   </td>
-                  <td className="px-2.5 py-2 whitespace-nowrap">{r.badgeName}</td>
+                  <td className="px-2.5 py-2">
+                    {r.programs.length === 0 ? '—' : r.programs.map(p => (
+                      <span key={p.name} className="block whitespace-nowrap">
+                        {p.name}
+                        {r.programs.length > 1 && (
+                          <span className="text-slate-400 ml-1">{formatRM(p.amount)}</span>
+                        )}
+                      </span>
+                    ))}
+                  </td>
                   <td className="px-2.5 py-2 text-center">{r.siri}</td>
                   <td className="px-2.5 py-2 text-center whitespace-nowrap" title="Peserta / Pemimpin / Penolong">
                     {r.bilPeserta}{(r.bilPemimpin || r.bilPenolong) ? ` · ${r.bilPemimpin} · ${r.bilPenolong}` : ''}

@@ -830,13 +830,43 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const [siriBayaran, setSiriBayaran] = useState<number | null>(null);
 
+  // Program yang masih menunggu penghantaran dalam siri sasaran.
+  //
+  // Hantar kini berskop SIRI (§13): satu tekan menghantar semua program dalam
+  // siri itu, dan satu bil meliputi kesemuanya. Menghantar program satu per
+  // satu bermakna sekolah membayar dua kali untuk satu pusingan pendaftaran.
+  const programDalamSiri = (siriSasar: number) => {
+    const ada = new Set<string>();
+    allData.forEach((d: any) => {
+      if (d.badge !== selectedBadgeFilter && selectedBadgeFilter !== '') {
+        // Penapis program dihormati bila ditetapkan; jika tidak, semua program
+        // dalam siri itu dikumpulkan.
+        if (selectedBadgeFilter !== '') return;
+      }
+      let tahun: number;
+      try { tahun = new Date(d.date).getFullYear(); } catch { return; }
+      if (tahun !== selectedYear) return;
+      if ((d.siri || 1) !== siriSasar) return;
+      const k = getLockKey(d.badge, selectedYear, siriSasar);
+      if (lockedBadges.includes(k) || approvedBadges.includes(k)) return;
+      ada.add(d.badge);
+    });
+    return Array.from(ada).sort();
+  };
+
+  const perluBayarSiri = (program: string[]) => program.some(nama =>
+    programSettings.some(ps =>
+      ps.badgeName === nama && ps.year === selectedYear && ps.paymentOnlineRequired
+      && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
+        || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))));
+
   const handleFinalSubmit = async () => {
     if (!selectedBadgeFilter) return;
 
     // Pintu bayaran: pendaftaran TIDAK dihantar terus. Ia kekal draf sehingga
     // bayaran diuruskan; Edge Function yang menghantarnya selepas itu.
-    if (tetapanBayaranAktif) {
-      // Penapis diutamakan bila ditetapkan; jika tidak, siri diterbitkan.
+    // Siri sasaran diterbitkan daripada PESERTA SEBENAR, bukan penapis UI.
+    {
       const dipilih = selectedSiriFilter === '' ? null : Number(selectedSiriFilter);
       const sasar = dipilih ?? (siriBelumHantar.length === 1 ? siriBelumHantar[0] : null);
 
@@ -845,7 +875,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           siriBelumHantar.length === 0
             ? 'Tiada peserta yang belum dihantar untuk program ini.'
             : `Peserta program ini merangkumi Siri ${siriBelumHantar.join(' dan ')}.\n\n`
-              + 'Bayaran dikira satu siri pada satu masa. Sila tapis mengikut siri dahulu.',
+              + 'Penghantaran dibuat satu siri pada satu masa. Sila tapis mengikut siri dahulu.',
         );
         return;
       }
@@ -854,17 +884,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         return;
       }
 
-      setSiriBayaran(sasar);
-      setPaymentResume(undefined);
-      setShowPayment(true);
-      return;
+      // Satu bil meliputi SEMUA program dalam siri ini, jadi pintu bayaran
+      // terbuka sebaik mana-mana satu daripadanya memerlukan bayaran.
+      const program = programDalamSiri(sasar);
+      const senarai = program.length > 0 ? program : [selectedBadgeFilter];
+
+      if (perluBayarSiri(senarai)) {
+        setSiriBayaran(sasar);
+        setPaymentResume(undefined);
+        setShowPayment(true);
+        return;
+      }
+
+      if (!confirm(
+        `PENGESAHAN AKHIR (${selectedYear})\n\n`
+        + `Hantar pendaftaran Siri ${sasar} untuk:\n${senarai.map(p => `  • ${p}`).join('\n')}\n\n`
+        + 'Selepas ini data akan dikunci.'
+      )) return;
+
+      setIsLocking(true);
+      try {
+        // Setiap program dihantar berasingan kerana lockSchoolBadge berkunci
+        // pada satu program; yang dikongsi ialah TEKAN, bukan panggilan.
+        const hasil = await Promise.all(senarai.map(nama =>
+          lockSchoolBadge(scriptUrl, user.schoolName, getLockKey(nama, selectedYear, sasar))));
+        const gagal = hasil.filter(r => r.status !== 'success').length;
+        if (gagal === 0) { alert('Berjaya dihantar!'); onRefresh(); }
+        else alert(`${gagal} daripada ${senarai.length} program gagal dihantar. Sila cuba lagi.`);
+      } catch (e) { alert('Gagal menghubungi server.'); } finally { setIsLocking(false); }
     }
-    if (!confirm(`PENGESAHAN AKHIR (${selectedYear})\n\nAdakah anda pasti mahu menghantar pendaftaran untuk program '${selectedBadgeFilter}' pada tahun ${selectedYear}?\n\nSelepas ini data akan dikunci.`)) return;
-    setIsLocking(true);
-    try {
-        const res = await lockSchoolBadge(scriptUrl, user.schoolName, getLockKey(selectedBadgeFilter, selectedYear, activeSiri));
-        if (res.status === 'success') { alert("Berjaya dihantar!"); onRefresh(); } else alert("Ralat menghantar.");
-    } catch (e) { alert("Gagal menghubungi server."); } finally { setIsLocking(false); }
   };
 
   const handleSubmitRambu = async () => {

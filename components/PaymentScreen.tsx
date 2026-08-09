@@ -53,15 +53,21 @@ export const PaymentScreen: React.FC<Props> = ({
   // billReturnUrl memuat semula halaman sepenuhnya, jadi penapis program dan
   // siri dalam UI sudah kembali kepada nilai awalnya sebelum skrin ini dibuka
   // semula. Baris bayaran ialah satu-satunya sumber yang masih tahu.
-  const [asal, setAsal] = useState<{ badgeName: string; year: number; siri: number } | null>(null);
+  const [asal, setAsal] = useState<{ year: number; siri: number; programs: string[] } | null>(null);
   useEffect(() => {
     if (!paymentIdSediaAda) { setAsal(null); return; }
     getMaklumatBayaran(paymentIdSediaAda).then(setAsal);
   }, [paymentIdSediaAda]);
 
-  const namaProgram = asal?.badgeName || badgeName;
   const tahun = asal?.year || year;
   const siriKini = asal?.siri || siri;
+  // Satu bil meliputi beberapa program. Nama program hanya diperlukan untuk
+  // menyelesaikan akaun bayaran skop sekolah — mana-mana program dalam siri
+  // ini menyelesaikan kepada akaun yang sama.
+  const namaProgram = asal?.programs?.[0] || badgeName;
+  const senaraiProgram = asal?.programs?.length
+    ? asal.programs
+    : (bil?.pecahan?.map(p => p.program) ?? (badgeName ? [badgeName] : []));
 
   useEffect(() => {
     if (!namaProgram) return;   // menunggu maklumat bayaran dimuatkan
@@ -85,7 +91,7 @@ export const PaymentScreen: React.FC<Props> = ({
     setRalat('');
     setSibuk(true);
     try {
-      const hasil = await janaBil({ badgeName: namaProgram, year: tahun, siri: siriKini, method: k });
+      const hasil = await janaBil({ year: tahun, siri: siriKini, method: k });
       if (hasil.skipped) { onSelesai(); return; }
       setBil(hasil);
       if (k === 'toyyibpay' && hasil.billUrl) {
@@ -174,8 +180,10 @@ export const PaymentScreen: React.FC<Props> = ({
   return (
     <Bingkai onTutup={onTutup} tajuk="Bayaran Pendaftaran">
       <div className="bg-slate-50 rounded-lg p-3 mb-4 text-sm">
-        <p className="font-bold text-slate-800">{namaProgram || '—'}{siriKini > 1 ? ` · Siri ${siriKini}` : ''}</p>
-        <p className="text-slate-500 text-xs mt-0.5">Tahun {tahun}</p>
+        <p className="font-bold text-slate-800">Siri {siriKini} · Tahun {tahun}</p>
+        <p className="text-slate-500 text-xs mt-0.5">
+          {senaraiProgram.length > 0 ? senaraiProgram.join(' · ') : '—'}
+        </p>
       </div>
 
       <p className="text-xs text-slate-500 mb-3">
@@ -186,6 +194,47 @@ export const PaymentScreen: React.FC<Props> = ({
       {ralat && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold p-2.5 rounded-lg mb-3">
           {ralat}
+        </div>
+      )}
+
+      {/* Pecahan mengikut program. Satu bil merangkumi seluruh siri, jadi
+          sekolah mesti nampak apa yang mereka bayar sebelum membayar —
+          jumlah tunggal tidak boleh disemak terhadap senarai peserta. */}
+      {bil?.pecahan && bil.pecahan.length > 0 && (
+        <div className="border border-slate-200 rounded-lg overflow-hidden mb-3">
+          {bil.pecahan.map((p) => (
+            <div key={p.program} className="flex items-baseline justify-between gap-2 px-3 py-2 border-b border-slate-100 last:border-b-0">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">{p.program}</p>
+                <p className="text-[11px] text-slate-500">
+                  {[p.peserta && `${p.peserta} peserta`, p.pemimpin && `${p.pemimpin} pemimpin`,
+                    p.penolong && `${p.penolong} pen. pemimpin`].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+              <span className="text-sm font-bold text-slate-700 shrink-0">{formatRM(p.amount)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between px-3 py-2 bg-emerald-50">
+            <span className="text-xs font-bold text-emerald-800 uppercase">Jumlah</span>
+            <span className="text-base font-bold text-emerald-800">{formatRM(bil.totalAmount)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Program yang tidak masuk ke dalam bil dinamakan berserta sebabnya.
+          Sekolah yang mendaftar dua program dan nampak satu sahaja dibil akan
+          menganggap sistem tersilap kira. */}
+      {bil?.dilangkau && bil.dilangkau.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 mb-3">
+          <p className="text-[11px] font-bold text-amber-800 mb-1">Tidak termasuk dalam bil ini:</p>
+          <ul className="text-[11px] text-amber-700 space-y-0.5">
+            {bil.dilangkau.map((d) => (
+              <li key={d.program}>· <strong>{d.program}</strong> — {d.sebab}</li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-amber-600 mt-1.5">
+            Program ini kekal draf dan boleh dibayar kemudian.
+          </p>
         </div>
       )}
 

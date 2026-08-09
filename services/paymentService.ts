@@ -4,12 +4,28 @@ import { DataResit } from './receiptService';
 // ============================================================
 // Lapisan bayaran untuk sekolah.
 //
+// Satu BIL merangkumi semua program dalam satu siri (§13). `paymentId` di
+// seluruh fail ini bermaksud id bil — nama dikekalkan supaya URL pulangan
+// gateway yang sudah tersebar (?bayaran=<id>) kekal sah.
+//
 // Setiap jumlah datang dari server. Tiada fungsi di sini menghantar harga —
-// ia hanya memilih program, siri dan kaedah, dan menerima jumlah yang dikira
-// oleh Edge Function.
+// ia hanya memilih tahun, siri dan kaedah.
 // ============================================================
 
 export type KaedahBayaran = 'toyyibpay' | 'bank_transfer' | 'cheque';
+
+export interface PecahanProgram {
+  program: string;
+  amount: number;
+  peserta: number;
+  pemimpin: number;
+  penolong: number;
+}
+
+export interface ProgramDilangkau {
+  program: string;
+  sebab: string;
+}
 
 export interface BilDijana {
   paymentId: string;
@@ -18,7 +34,11 @@ export interface BilDijana {
   transactionFee: number;
   totalAmount: number;
   expiresAt: string;
-  /** true bila jumlah RM0 — pintu bayaran dilangkau, pendaftaran terus dihantar. */
+  /** Pecahan mengikut program — inilah yang sekolah perlu lihat sebelum bayar. */
+  pecahan?: PecahanProgram[];
+  /** Program yang tidak masuk ke dalam bil, berserta sebabnya. */
+  dilangkau?: ProgramDilangkau[];
+  /** true bila tiada yuran langsung — pintu bayaran dilangkau. */
   skipped?: boolean;
   message?: string;
 }
@@ -43,8 +63,9 @@ const panggil = async (fungsi: string, badan: unknown) => {
   return hasil;
 };
 
+/** Satu bil untuk seluruh siri. Server memilih program mana yang masuk. */
 export const janaBil = (input: {
-  badgeName: string; year: number; siri: number; method: KaedahBayaran;
+  year: number; siri: number; method: KaedahBayaran;
 }): Promise<BilDijana> => panggil('create-payment-bill', input);
 
 export interface StatusBayaran {
@@ -74,8 +95,7 @@ export const hantarBuktiBayaran = (input: {
  *
  * Melalui RPC berskop sekolah, BUKAN view payment_gateway_settings_public —
  * view itu berakhir dengan `else false` dan tidak memulangkan apa-apa kepada
- * pengguna sekolah. Itu yang menyebabkan skrin bayaran memaparkan pindahan
- * bank tanpa nombor akaun dan tidak pernah menawarkan ToyyibPay.
+ * pengguna sekolah.
  */
 export const getArahanBayaranManual = async (
   badgeName: string, year: number,
@@ -98,26 +118,26 @@ export const getArahanBayaranManual = async (
 };
 
 /**
- * Program, tahun dan siri yang bayaran ini sebenarnya milik.
+ * Tahun, siri dan program yang bil ini sebenarnya meliputi.
  *
  * Diperlukan kerana `billReturnUrl` menyebabkan MUAT SEMULA PENUH halaman.
- * Selepas itu penapis UI (`selectedBadgeFilter`, siri aktif) kembali kepada
- * nilai awalnya, jadi skrin bayaran yang dibuka semula tidak lagi tahu program
- * mana yang sedang dibayar. Baris bayaran tahu — tanya kepadanya.
+ * Selepas itu penapis UI kembali kepada nilai awalnya, jadi skrin bayaran yang
+ * dibuka semula tidak lagi tahu apa yang sedang dibayar. Bil tahu.
  */
 export const getMaklumatBayaran = async (
-  paymentId: string,
-): Promise<{ badgeName: string; year: number; siri: number } | null> => {
+  billId: string,
+): Promise<{ year: number; siri: number; programs: string[] } | null> => {
   try {
     const { data, error } = await supabase
-      .from('payments')
-      .select('year, siri, badge:badge_id(name)')
-      .eq('id', paymentId)
+      .from('payment_bills')
+      .select('year, siri, payments(badge:badge_id(name))')
+      .eq('id', billId)
       .maybeSingle();
     if (error || !data) return null;
-    const badge: any = Array.isArray(data.badge) ? data.badge[0] : data.badge;
-    if (!badge?.name) return null;
-    return { badgeName: badge.name, year: data.year, siri: data.siri ?? 1 };
+    const programs = ((data as any).payments || [])
+      .map((p: any) => (Array.isArray(p.badge) ? p.badge[0] : p.badge)?.name)
+      .filter(Boolean);
+    return { year: data.year, siri: data.siri ?? 1, programs };
   } catch (error) {
     console.error('getMaklumatBayaran error:', error);
     return null;
@@ -129,11 +149,11 @@ export const BALDI_BUKTI = 'payment-proofs';
 /**
  * Muat naik bukti bayaran ke baldi PERSENDIRIAN payment-proofs.
  *
- * Bukan R2. r2-presigned-upload tidak pernah di-deploy ke projek ini dan tiada
- * kredensial R2 ditetapkan, jadi setiap panggilan berakhir sebagai 404 yang
- * pelayar laporkan sebagai ralat CORS.
+ * Bukan R2 — r2-presigned-upload tidak pernah di-deploy ke projek ini dan
+ * tiada kredensial R2 ditetapkan, jadi setiap panggilan berakhir sebagai 404
+ * yang pelayar laporkan sebagai ralat CORS.
  *
- * Segmen pertama laluan MESTI paymentId — polisi storan (migrasi 038) membaca
+ * Segmen pertama laluan MESTI id bil — polisi storan (migrasi 038) membaca
  * segmen itu untuk menentukan siapa boleh melihat fail ini.
  */
 export const muatNaikBukti = async (
@@ -150,10 +170,7 @@ export const muatNaikBukti = async (
   return { fileName: fail.name, filePath: laluan, mimeType: fail.type, fileSize: fail.size };
 };
 
-/**
- * URL bertandatangan untuk melihat bukti. Baldi persendirian, jadi tiada URL
- * awam — pautan ini luput dalam 5 minit dan dijana hanya apabila diklik.
- */
+/** URL bertandatangan untuk melihat bukti. Luput dalam 5 minit. */
 export const urlBukti = async (filePath: string): Promise<string | null> => {
   const { data, error } = await supabase.storage
     .from(BALDI_BUKTI)
@@ -172,145 +189,75 @@ export const urlBukti = async (filePath: string): Promise<string | null> => {
 export interface BayaranUntukSemakan {
   id: string;
   schoolName: string;
-  badgeName: string;
   year: number;
   siri: number;
   amount: number;
   method: string;
   status: string;
+  /** 'no_seat' jika MANA-MANA program dalam bil ini tiada tempat. */
   seatStatus: string;
   referenceNumber: string | null;
   paidAt: string | null;
+  programs: Array<{ name: string; amount: number; seatStatus: string }>;
   bukti: Array<{ fileName: string; filePath: string }>;
 }
 
 /**
- * Bayaran yang memerlukan perhatian admin:
+ * Bil yang memerlukan perhatian admin:
  *   pending_review — bukti manual menunggu semakan
- *   no_seat        — duit diterima tetapi tempat sudah penuh
+ *   no_seat        — duit diterima tetapi tempat sudah penuh bagi sekurang-
+ *                    kurangnya satu program dalam bil itu
  *
- * RLS pada `payments` sudah mengehadkan hasil kepada skop admin, jadi tiada
- * penapisan skop diperlukan di sini.
+ * RLS pada `payment_bills` sudah mengehadkan hasil kepada skop admin.
  */
 export const getBayaranUntukSemakan = async (): Promise<BayaranUntukSemakan[]> => {
   try {
     const { data, error } = await supabase
-      .from('payments')
+      .from('payment_bills')
       .select(`
-        id, year, siri, amount, method, status, seat_status, reference_number, paid_at,
-        school:school_id(name), badge:badge_id(name),
+        id, year, siri, amount, method, status, reference_number, paid_at,
+        school:school_id(name),
+        payments(amount, seat_status, badge:badge_id(name)),
         attachments(file_name, file_path, category)
       `)
-      .or('status.eq.pending_review,seat_status.eq.no_seat')
       .order('paid_at', { ascending: false, nullsFirst: false });
     if (error) throw error;
 
-    return (data || []).map((r: any) => ({
-      id: r.id,
-      schoolName: (Array.isArray(r.school) ? r.school[0] : r.school)?.name || '-',
-      badgeName: (Array.isArray(r.badge) ? r.badge[0] : r.badge)?.name || '-',
-      year: r.year,
-      siri: r.siri ?? 1,
-      amount: Number(r.amount ?? 0),
-      method: r.method,
-      status: r.status,
-      seatStatus: r.seat_status,
-      referenceNumber: r.reference_number,
-      paidAt: r.paid_at,
-      bukti: (r.attachments || [])
-        .filter((a: any) => a.category === 'payment_proof')
-        .map((a: any) => ({ fileName: a.file_name, filePath: a.file_path })),
-    }));
+    return (data || [])
+      .map((r: any) => {
+        const programs = (r.payments || []).map((p: any) => ({
+          name: (Array.isArray(p.badge) ? p.badge[0] : p.badge)?.name || '-',
+          amount: Number(p.amount ?? 0),
+          seatStatus: p.seat_status,
+        }));
+        return {
+          id: r.id,
+          schoolName: (Array.isArray(r.school) ? r.school[0] : r.school)?.name || '-',
+          year: r.year,
+          siri: r.siri ?? 1,
+          amount: Number(r.amount ?? 0),
+          method: r.method,
+          status: r.status,
+          seatStatus: programs.some((p: any) => p.seatStatus === 'no_seat') ? 'no_seat' : 'ok',
+          referenceNumber: r.reference_number,
+          paidAt: r.paid_at,
+          programs,
+          bukti: (r.attachments || [])
+            .filter((a: any) => a.category === 'payment_proof')
+            .map((a: any) => ({ fileName: a.file_name, filePath: a.file_path })),
+        };
+      })
+      // Penapisan dibuat di klien kerana syarat "mana-mana program tiada
+      // tempat" hidup pada baris ANAK, dan PostgREST tidak boleh menapis
+      // induk berdasarkan keadaan anak dalam satu kueri bersarang.
+      .filter(b => b.status === 'pending_review' || b.seatStatus === 'no_seat');
   } catch (error) {
     console.error('getBayaranUntukSemakan error:', error);
     return [];
   }
 };
 
-export interface BarisRumusanBayaran {
-  id: string;
-  schoolName: string;
-  schoolCode: string | null;
-  schoolType: string | null;
-  daerahName: string | null;
-  badgeName: string;
-  year: number;
-  siri: number;
-  amount: number;
-  transactionFee: number;
-  totalAmount: number;
-  method: string;
-  status: string;
-  seatStatus: string;
-  referenceNumber: string | null;
-  billCode: string | null;
-  paidAt: string | null;
-  createdAt: string;
-  bilPeserta: number;
-  bilPemimpin: number;
-  bilPenolong: number;
-}
-
-/**
- * Setiap bayaran dalam skop admin — bukan hanya yang menunggu tindakan.
- *
- * Tiada penapisan skop di sini: RLS pada `payments` (migrasi 028) sudah
- * mengehadkan admin daerah kepada daerahnya dan admin negeri kepada
- * negerinya. Menulis semula syarat itu di sini hanya mencipta salinan kedua
- * yang boleh menyimpang daripada yang sebenar.
- */
-export const getRumusanBayaran = async (tahun?: number): Promise<BarisRumusanBayaran[]> => {
-  try {
-    let q = supabase
-      .from('payments')
-      .select(`
-        id, year, siri, amount, transaction_fee, total_amount, method, status,
-        seat_status, reference_number, external_bill_code, paid_at, created_at,
-        snapshot_peserta, snapshot_pemimpin, snapshot_penolong,
-        school:school_id(name, school_code, school_type, daerah:daerah_id(name)),
-        badge:badge_id(name)
-      `)
-      .order('created_at', { ascending: false });
-    if (tahun) q = q.eq('year', tahun);
-
-    const { data, error } = await q;
-    if (error) throw error;
-
-    return (data || []).map((r: any) => {
-      const sekolah = Array.isArray(r.school) ? r.school[0] : r.school;
-      const badge = Array.isArray(r.badge) ? r.badge[0] : r.badge;
-      const daerah = Array.isArray(sekolah?.daerah) ? sekolah.daerah[0] : sekolah?.daerah;
-      return {
-        id: r.id,
-        schoolName: sekolah?.name || '-',
-        schoolCode: sekolah?.school_code ?? null,
-        schoolType: sekolah?.school_type ?? null,
-        daerahName: daerah?.name ?? null,
-        badgeName: badge?.name || '-',
-        year: r.year,
-        siri: r.siri ?? 1,
-        amount: Number(r.amount ?? 0),
-        transactionFee: Number(r.transaction_fee ?? 0),
-        totalAmount: Number(r.total_amount ?? 0),
-        method: r.method,
-        status: r.status,
-        seatStatus: r.seat_status,
-        referenceNumber: r.reference_number,
-        billCode: r.external_bill_code,
-        paidAt: r.paid_at,
-        createdAt: r.created_at,
-        bilPeserta: r.snapshot_peserta ?? 0,
-        bilPemimpin: r.snapshot_pemimpin ?? 0,
-        bilPenolong: r.snapshot_penolong ?? 0,
-      };
-    });
-  } catch (error) {
-    console.error('getRumusanBayaran error:', error);
-    return [];
-  }
-};
-
-/** Sahkan atau tolak bukti manual. Kebenaran disemak dalam fungsi DB. */
+/** Sahkan atau tolak bukti manual bagi keseluruhan bil. */
 export const semakBuktiBayaran = async (
   paymentId: string, terima: boolean, sebab?: string,
 ): Promise<{ ok: boolean; message: string }> => {
@@ -336,39 +283,128 @@ export const semakBuktiBayaran = async (
   }
 };
 
+export interface BarisRumusanBayaran {
+  id: string;
+  schoolName: string;
+  schoolCode: string | null;
+  schoolType: string | null;
+  daerahName: string | null;
+  year: number;
+  siri: number;
+  amount: number;
+  transactionFee: number;
+  totalAmount: number;
+  method: string;
+  status: string;
+  seatStatus: string;
+  referenceNumber: string | null;
+  billCode: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  programs: Array<{ name: string; amount: number; peserta: number; pemimpin: number; penolong: number }>;
+  bilPeserta: number;
+  bilPemimpin: number;
+  bilPenolong: number;
+}
+
+/**
+ * Setiap bil dalam skop admin — bukan hanya yang menunggu tindakan.
+ *
+ * Tiada penapisan skop di sini: RLS pada `payment_bills` (migrasi 040) sudah
+ * mengehadkan admin daerah kepada daerahnya dan admin negeri kepada negerinya.
+ */
+export const getRumusanBayaran = async (tahun?: number): Promise<BarisRumusanBayaran[]> => {
+  try {
+    let q = supabase
+      .from('payment_bills')
+      .select(`
+        id, year, siri, amount, transaction_fee, total_amount, method, status,
+        reference_number, external_bill_code, paid_at, created_at,
+        school:school_id(name, school_code, school_type, daerah:daerah_id(name)),
+        payments(amount, seat_status, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, badge:badge_id(name))
+      `)
+      .order('created_at', { ascending: false });
+    if (tahun) q = q.eq('year', tahun);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    return (data || []).map((r: any) => {
+      const sekolah = Array.isArray(r.school) ? r.school[0] : r.school;
+      const daerah = Array.isArray(sekolah?.daerah) ? sekolah.daerah[0] : sekolah?.daerah;
+      const items = (r.payments || []).map((p: any) => ({
+        name: (Array.isArray(p.badge) ? p.badge[0] : p.badge)?.name || '-',
+        amount: Number(p.amount ?? 0),
+        peserta: p.snapshot_peserta ?? 0,
+        pemimpin: p.snapshot_pemimpin ?? 0,
+        penolong: p.snapshot_penolong ?? 0,
+        seatStatus: p.seat_status,
+      }));
+      return {
+        id: r.id,
+        schoolName: sekolah?.name || '-',
+        schoolCode: sekolah?.school_code ?? null,
+        schoolType: sekolah?.school_type ?? null,
+        daerahName: daerah?.name ?? null,
+        year: r.year,
+        siri: r.siri ?? 1,
+        amount: Number(r.amount ?? 0),
+        transactionFee: Number(r.transaction_fee ?? 0),
+        totalAmount: Number(r.total_amount ?? 0),
+        method: r.method,
+        status: r.status,
+        seatStatus: items.some((i: any) => i.seatStatus === 'no_seat') ? 'no_seat' : 'ok',
+        referenceNumber: r.reference_number,
+        billCode: r.external_bill_code,
+        paidAt: r.paid_at,
+        createdAt: r.created_at,
+        programs: items,
+        bilPeserta: items.reduce((n: number, i: any) => n + i.peserta, 0),
+        bilPemimpin: items.reduce((n: number, i: any) => n + i.pemimpin, 0),
+        bilPenolong: items.reduce((n: number, i: any) => n + i.penolong, 0),
+      };
+    });
+  } catch (error) {
+    console.error('getRumusanBayaran error:', error);
+    return [];
+  }
+};
 
 /**
  * Data untuk resit. Bilangan peserta diambil dari SNAPSHOT yang disimpan
  * semasa bil dicipta, bukan dikira semula — resit mesti mencerminkan apa yang
  * sebenarnya dibil, walaupun senarai peserta berubah selepas itu.
- *
- * RLS pada `payments` mengehadkan sekolah kepada bayaran sendiri.
  */
-export const getDataResit = async (paymentId: string): Promise<DataResit | null> => {
+export const getDataResit = async (billId: string): Promise<DataResit | null> => {
   try {
     const { data, error } = await supabase
-      .from('payments')
+      .from('payment_bills')
       .select(`
         id, year, siri, amount, transaction_fee, total_amount, method,
         reference_number, paid_at, confirmed_at,
-        snapshot_peserta, snapshot_pemimpin, snapshot_penolong,
         school:school_id(name, school_code, daerah:daerah_id(name), negeri:negeri_id(name)),
-        badge:badge_id(name)
+        payments(amount, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, badge:badge_id(name))
       `)
-      .eq('id', paymentId)
+      .eq('id', billId)
       .maybeSingle();
     if (error || !data) return null;
 
     const sekolah: any = Array.isArray(data.school) ? data.school[0] : data.school;
-    const badge: any = Array.isArray(data.badge) ? data.badge[0] : data.badge;
     const daerah: any = Array.isArray(sekolah?.daerah) ? sekolah.daerah[0] : sekolah?.daerah;
     const negeri: any = Array.isArray(sekolah?.negeri) ? sekolah.negeri[0] : sekolah?.negeri;
+
+    const items = ((data as any).payments || []).map((p: any) => ({
+      program: (Array.isArray(p.badge) ? p.badge[0] : p.badge)?.name || '-',
+      amount: Number(p.amount ?? 0),
+      peserta: p.snapshot_peserta ?? 0,
+      pemimpin: p.snapshot_pemimpin ?? 0,
+      penolong: p.snapshot_penolong ?? 0,
+    }));
 
     return {
       paymentId: data.id,
       schoolName: sekolah?.name || '-',
       schoolCode: sekolah?.school_code,
-      badgeName: badge?.name || '-',
       siri: data.siri ?? 1,
       year: data.year,
       amount: Number(data.amount ?? 0),
@@ -380,9 +416,7 @@ export const getDataResit = async (paymentId: string): Promise<DataResit | null>
       confirmedAt: data.confirmed_at,
       daerahName: daerah?.name,
       negeriName: negeri?.name,
-      bilPeserta: data.snapshot_peserta ?? 0,
-      bilPemimpin: data.snapshot_pemimpin ?? 0,
-      bilPenolong: data.snapshot_penolong ?? 0,
+      items,
     };
   } catch (error) {
     console.error('getDataResit error:', error);

@@ -58,8 +58,11 @@ serve(async (req) => {
   try {
     const ambang = new Date(Date.now() - USIA_MINIMUM_MINIT * 60 * 1000).toISOString();
 
+    // Peringkat BIL (§13). Satu bil merangkumi semua program dalam satu siri;
+    // memburu baris program satu per satu akan menanya gateway berkali-kali
+    // untuk billCode yang sama.
     const { data: senarai } = await admin
-      .from('payments')
+      .from('payment_bills')
       .select('id, external_bill_code, gateway_settings_id, total_amount, expires_at, method')
       .eq('status', 'pending')
       .eq('method', 'toyyibpay')
@@ -109,30 +112,29 @@ serve(async (req) => {
           // ditambah caj gateway, jadi hanya KEKURANGAN yang salah.
           const dibayar = Number(String(medan(berjaya, 'billpaymentAmount') ?? '0').replace(/[^0-9.]/g, ''));
           if (dibayar < Number(bayaran.total_amount) - 0.01) {
-            await admin.from('payments').update({
-              status: 'failed',
-              notes: `Reconciliation: jumlah tidak sepadan (${dibayar} vs ${bayaran.total_amount})`,
-            }).eq('id', bayaran.id);
+            const nota = `Reconciliation: jumlah tidak sepadan (${dibayar} vs ${bayaran.total_amount})`;
+            await admin.from('payment_bills').update({ status: 'failed', notes: nota }).eq('id', bayaran.id);
+            await admin.from('payments').update({ status: 'failed', notes: nota }).eq('bill_id', bayaran.id);
             ringkasan.gagal++;
             continue;
           }
 
           const lebihan = dibayar - Number(bayaran.total_amount);
           if (lebihan > 0.01) {
-            await admin.from('payments').update({
+            await admin.from('payment_bills').update({
               transaction_fee: Number(lebihan.toFixed(2)),
               total_amount: dibayar,
             }).eq('id', bayaran.id);
           }
 
-          // Urutan yang sama dengan webhook dan check-status (migrasi 033).
-          const { data: hasil } = await admin.rpc('finalize_payment', {
-            p_payment_id: bayaran.id, p_new_status: 'paid',
+          // Urutan yang sama dengan webhook dan check-status (migrasi 040).
+          const { data: hasil } = await admin.rpc('finalize_bill', {
+            p_bill_id: bayaran.id, p_new_status: 'paid',
           });
           ringkasan.disahkan++;
           await admin.from('audit_logs').insert({
             action: 'bayaran_disahkan_oleh_reconciliation',
-            entity_type: 'payments', entity_id: bayaran.id,
+            entity_type: 'payment_bills', entity_id: bayaran.id,
             details: { dibayar, hasil },
           }).then(() => {}, () => {});
           continue;
@@ -148,10 +150,9 @@ serve(async (req) => {
 
         // Semua percubaan gagal (3): sekolah boleh menjana bil baharu.
         if (statusSemua.length > 0 && statusSemua.every((x) => x === '3')) {
-          await admin.from('payments').update({
-            status: 'failed',
-            notes: 'Reconciliation: semua percubaan bayaran gagal di gateway',
-          }).eq('id', bayaran.id);
+          const nota = 'Reconciliation: semua percubaan bayaran gagal di gateway';
+          await admin.from('payment_bills').update({ status: 'failed', notes: nota }).eq('id', bayaran.id);
+          await admin.from('payments').update({ status: 'failed', notes: nota }).eq('bill_id', bayaran.id);
           ringkasan.gagal++;
           continue;
         }
@@ -160,10 +161,9 @@ serve(async (req) => {
         // pautan tetapi tidak pernah cuba membayar. Selamat dibatalkan.
         const luput = bayaran.expires_at ? new Date(bayaran.expires_at).getTime() : 0;
         if (statusSemua.length === 0 && luput && Date.now() > luput) {
-          await admin.from('payments').update({
-            status: 'cancelled',
-            notes: 'Reconciliation: bil luput tanpa sebarang percubaan bayaran',
-          }).eq('id', bayaran.id);
+          const nota = 'Reconciliation: bil luput tanpa sebarang percubaan bayaran';
+          await admin.from('payment_bills').update({ status: 'cancelled', notes: nota }).eq('id', bayaran.id);
+          await admin.from('payments').update({ status: 'cancelled', notes: nota }).eq('bill_id', bayaran.id);
           // school_badge_status.payment_status kekal 'pending' — sekolah
           // masih perlu membayar, dan bil yang dibatalkan tidak mengubah itu.
           // (Kemas kini di sini pernah ditulis tanpa penapis penuh, yang akan

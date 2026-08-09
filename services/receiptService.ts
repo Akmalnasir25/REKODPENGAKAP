@@ -14,11 +14,18 @@ import { formatRM } from './programSummary';
 // nombor yang tidak berturutan.
 // ============================================================
 
+export interface ItemResit {
+  program: string;
+  amount: number;
+  peserta: number;
+  pemimpin: number;
+  penolong: number;
+}
+
 export interface DataResit {
   paymentId: string;
   schoolName: string;
   schoolCode?: string;
-  badgeName: string;
   siri: number;
   year: number;
   amount: number;              // yuran sahaja
@@ -30,9 +37,8 @@ export interface DataResit {
   confirmedAt?: string | null;
   daerahName?: string;
   negeriName?: string;
-  bilPeserta: number;
-  bilPemimpin: number;
-  bilPenolong: number;
+  /** Satu resit meliputi semua program dalam satu siri (§13). */
+  items: ItemResit[];
   logoUrl?: string;
 }
 
@@ -95,23 +101,43 @@ export const janaResitPDF = (data: DataResit): jsPDF => {
   doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(0);
   doc.text('MAKLUMAT PENDAFTARAN', L, y); y += 7;
   baris('Sekolah', data.schoolName + (data.schoolCode ? ` (${data.schoolCode})` : ''), true);
-  baris('Program', `${data.badgeName}${data.siri > 1 ? ` · Siri ${data.siri}` : ''}`);
+  baris('Siri', `Siri ${data.siri}`);
   baris('Tahun', String(data.year));
 
   y += 4;
   doc.setFont('helvetica', 'bold').setFontSize(10);
   doc.text('BUTIRAN BAYARAN', L, y); y += 7;
 
-  // Hanya peranan yang benar-benar didaftarkan dipaparkan — baris "0 pemimpin"
-  // hanya menambah bunyi pada dokumen yang perlu dibaca pantas.
-  const peranan: Array<[string, number]> = [
-    ['Peserta', data.bilPeserta],
-    ['Pemimpin', data.bilPemimpin],
-    ['Penolong Pemimpin', data.bilPenolong],
-  ];
-  peranan.filter(([, n]) => n > 0).forEach(([nama, n]) => baris(nama, `${n} orang`));
-
+  // Satu bil merangkumi beberapa program, jadi resit mesti menunjukkan
+  // pecahannya. Sekolah yang menuntut balik daripada kewangan perlu tahu
+  // program mana menyumbang berapa — jumlah tunggal tidak boleh disemak.
+  doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(120);
+  doc.text('PROGRAM', L, y);
+  doc.text('BILANGAN', L + 78, y);
+  doc.text('JUMLAH', R, y, { align: 'right' });
   y += 2;
+  doc.setDrawColor(220).line(L, y, R, y);
+  y += 5;
+
+  data.items.forEach((it) => {
+    // Peranan tanpa seorang pun tidak disenaraikan — "0 pemimpin" hanya
+    // menambah bunyi pada dokumen yang perlu dibaca pantas.
+    const bil = [
+      it.peserta ? `${it.peserta} peserta` : '',
+      it.pemimpin ? `${it.pemimpin} pemimpin` : '',
+      it.penolong ? `${it.penolong} pen. pemimpin` : '',
+    ].filter(Boolean).join(', ') || '-';
+
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(0);
+    doc.text(it.program, L, y, { maxWidth: 74 });
+    doc.setFontSize(8).setTextColor(90);
+    doc.text(bil, L + 78, y, { maxWidth: 58 });
+    doc.setFontSize(9).setTextColor(0);
+    doc.text(formatRM(it.amount), R, y, { align: 'right' });
+    y += 6.5;
+  });
+
+  y += 1;
   doc.setDrawColor(230).line(L, y, R, y); y += 7;
 
   baris('Yuran', formatRM(data.amount));

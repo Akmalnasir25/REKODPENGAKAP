@@ -228,7 +228,17 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-slate-800 text-sm">{b.schoolName}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-600">
-                    <span>{b.badgeName}{b.siri > 1 ? ` \u00b7 Siri ${b.siri}` : ''}</span>
+                    {/* Satu bil meliputi beberapa program; yang tiada tempat
+                        ditandakan supaya admin nampak yang mana. */}
+                    <span>Siri {b.siri}</span>
+                    {b.programs.map(p => (
+                      <span key={p.name}
+                        className={`px-1.5 py-0.5 rounded border ${p.seatStatus === 'no_seat'
+                          ? 'bg-red-50 text-red-700 border-red-200'
+                          : 'bg-white text-slate-600 border-slate-200'}`}>
+                        {p.name} · {formatRM(p.amount)}
+                      </span>
+                    ))}
                     <span className="font-bold text-emerald-700">{formatRM(b.amount)}</span>
                     <span className="bg-white border border-slate-200 px-2 py-0.5 rounded">
                       {b.method === 'cheque' ? 'Cek' : b.method === 'bank_transfer' ? 'Pindahan bank' : b.method}

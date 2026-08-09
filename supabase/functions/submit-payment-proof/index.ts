@@ -62,12 +62,19 @@ serve(async (req) => {
       return json({ status: 'error', message: 'No. rujukan bayaran diperlukan.' }, 400);
     }
 
+    // paymentId ialah id BIL (§13). Bukti dilampirkan pada bil, bukan pada
+    // satu baris program — satu slip bank membayar keseluruhan siri.
     const { data: bayaran } = await admin
-      .from('payments')
-      .select('id, school_id, submission_id, status, method')
+      .from('payment_bills')
+      .select('id, school_id, status, method')
       .eq('id', body.paymentId)
       .maybeSingle();
     if (!bayaran) return json({ status: 'error', message: 'Bil tidak dijumpai.' }, 404);
+
+    // submission_id untuk lampiran diambil dari baris program pertama —
+    // attachments.submission_id ialah rujukan audit, bukan kunci padanan.
+    const { data: itemPertama } = await admin
+      .from('payments').select('submission_id').eq('bill_id', bayaran.id).limit(1).maybeSingle();
 
     // Sekolah hanya boleh menghantar bukti untuk bilnya sendiri.
     const { data: profile } = await admin
@@ -88,7 +95,7 @@ serve(async (req) => {
     // daripada bayaran 'pending_review' tanpa apa-apa untuk disemak admin.
     if (body.bukti?.filePath) {
       const { error: lampiranErr } = await admin.from('attachments').insert({
-        submission_id: bayaran.submission_id,
+        submission_id: itemPertama?.submission_id ?? null,
         payment_id: bayaran.id,
         category: 'payment_proof',
         file_name: body.bukti.fileName,
@@ -100,7 +107,7 @@ serve(async (req) => {
       if (lampiranErr) throw lampiranErr;
     }
 
-    await admin.from('payments').update({
+    await admin.from('payment_bills').update({
       method: body.method,
       reference_number: body.referenceNumber.trim(),
       notes: body.notes?.trim() || null,
@@ -108,17 +115,22 @@ serve(async (req) => {
       rejected_reason: null,        // percubaan baharu selepas penolakan
     }).eq('id', bayaran.id);
 
+    await admin.from('payments').update({
+      method: body.method,
+      reference_number: body.referenceNumber.trim(),
+    }).eq('bill_id', bayaran.id);
+
     // pending_review mengambil tempat — duit sudah keluar dari sekolah.
-    // Urutan dikongsi dengan laluan ToyyibPay (migrasi 033).
-    const { data: hasil, error: finErr } = await admin.rpc('finalize_payment', {
-      p_payment_id: bayaran.id,
+    // Urutan dikongsi dengan laluan ToyyibPay (migrasi 040).
+    const { data: hasil, error: finErr } = await admin.rpc('finalize_bill', {
+      p_bill_id: bayaran.id,
       p_new_status: 'pending_review',
     });
     if (finErr) throw finErr;
 
     await admin.from('audit_logs').insert({
       action: hasil?.ok ? 'bukti_bayaran_dihantar' : 'bukti_bayaran_tanpa_tempat',
-      entity_type: 'payments', entity_id: bayaran.id,
+      entity_type: 'payment_bills', entity_id: bayaran.id,
       details: { method: body.method, rujukan: body.referenceNumber.trim(), hasil },
     }).then(() => {}, () => {});
 

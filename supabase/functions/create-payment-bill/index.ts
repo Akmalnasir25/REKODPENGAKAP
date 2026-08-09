@@ -1,21 +1,26 @@
 // Supabase Edge Function: create-payment-bill
 //
-// Mencipta bil bagi satu pendaftaran (sekolah × program × tahun × siri).
+// Mencipta SATU bil bagi satu siri (sekolah × tahun × siri), merangkumi semua
+// program yang mempunyai peserta draf dalam siri itu.
+//
+// Rujuk docs/rancangan-payment-online.md §13.
 //
 // PERATURAN YANG DIKUATKUASAKAN DI SINI
-//   - Jumlah dikira SEPENUHNYA di server. Tiada angka dari pelayar dipercayai;
-//     badan permintaan hanya memilih program, siri dan kaedah bayaran
+//   - Jumlah dikira SEPENUHNYA di server. Badan permintaan hanya memilih
+//     tahun, siri dan kaedah bayaran — tiada nama program, tiada angka
 //   - Peranan yang dicaj datang dari program_settings; jumlahnya dari
 //     resolve_program_fees (override siri / jenis sekolah)
-//   - Caj FPX dikenakan kepada pembayar oleh gateway (billChargeToCustomer=0),
-//     bukan ditambah ke jumlah bil kita. Penganjur menerima jumlah yuran yang
-//     tepat, dan kita tidak perlu meneka kadar caj
-//   - Akaun gateway diselesaikan mengikut skop. TIADA fallback senyap:
-//     daerah tanpa akaun tidak akan tersilap mengutip ke akaun daerah lain
-//   - Jumlah RM0 melangkau pintu bayaran sepenuhnya, bukan mencipta bil RM0
-//     yang mustahil dibayar
+//   - Program yang tempatnya tidak mencukupi DILANGKAU dan kekal draf
+//     (keputusan 13a). Ia boleh dibil kemudian bila had dinaikkan
+//   - Program berjumlah RM0 atau tanpa pintu bayaran dihantar TERUS ke
+//     giliran pengesahan, tanpa masuk ke dalam bil
+//   - Caj FPX dikenakan kepada pembayar oleh gateway (billChargeToCustomer=0)
+//   - Akaun gateway diselesaikan mengikut skop program. TIADA fallback senyap
 //
-// Rujuk docs/rancangan-payment-online.md §6.1.
+// KENAPA SEBAB DILANGKAU DIKUMPUL DAN DIPULANGKAN
+//   Sekolah yang menekan Hantar dan tidak nampak apa-apa berlaku akan
+//   menganggap sistem rosak. Setiap program yang tidak masuk ke dalam bil
+//   mesti dinamakan berserta sebabnya.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -32,14 +37,11 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
-
 // Baca medan tanpa mengira huruf besar-kecil.
 //
 // getCategoryDetails memulangkan "CategoryName" sedangkan dokumentasi rasmi
 // menunjukkan "categoryName". Memandangkan satu endpoint sudah menyimpang,
-// yang lain tidak boleh dipercayai kekal seperti didokumenkan — dan dalam
-// laluan bayaran, padanan medan yang gagal bermakna bayaran sah tidak pernah
-// diakui, tanpa apa-apa yang kelihatan rosak.
+// yang lain tidak boleh dipercayai kekal seperti didokumenkan.
 const medan = (objek: any, nama: string): any => {
   if (!objek || typeof objek !== 'object') return undefined;
   const kunci = Object.keys(objek).find((k) => k.toLowerCase() === nama.toLowerCase());
@@ -51,10 +53,22 @@ const TEMPOH_BIL_MINIT = 30;
 type Kaedah = 'toyyibpay' | 'bank_transfer' | 'cheque';
 
 interface Body {
-  badgeName: string;
   year: number;
   siri: number;
   method: Kaedah;
+}
+
+interface Item {
+  badgeId: string;
+  badgeName: string;
+  amount: number;
+  kira: { peserta: number; pemimpin: number; penolong: number };
+  gatewayId: string | null;
+}
+
+interface Dilangkau {
+  program: string;
+  sebab: string;
 }
 
 serve(async (req) => {
@@ -87,171 +101,305 @@ serve(async (req) => {
     const body = (await req.json()) as Body;
     const siri = Number(body?.siri) || 1;
     const year = Number(body?.year);
-    if (!body?.badgeName || !year || !body?.method) {
-      return json({ status: 'error', message: 'Program, tahun dan kaedah bayaran diperlukan.' }, 400);
+    if (!year || !body?.method) {
+      return json({ status: 'error', message: 'Tahun dan kaedah bayaran diperlukan.' }, 400);
     }
 
     const schoolId = profile.school_id as string;
 
     const { data: school } = await admin
       .from('schools').select('id, name, school_type, negeri_id, daerah_id').eq('id', schoolId).single();
-    const { data: badge } = await admin
-      .from('badges').select('id, name, scope').eq('name', body.badgeName).maybeSingle();
-    if (!school || !badge) return json({ status: 'error', message: 'Sekolah atau program tidak dijumpai.' }, 404);
+    if (!school) return json({ status: 'error', message: 'Sekolah tidak dijumpai.' }, 404);
 
-    // ── Tetapan program ikut skop ─────────────────────────────────────
-    const { data: psId } = await admin.rpc('resolve_program_setting', {
-      p_school_id: schoolId, p_badge_id: badge.id, p_year: year,
-    });
-    if (!psId) return json({ status: 'error', message: 'Tetapan yuran untuk program ini belum ditetapkan.' }, 400);
+    // ── Bil terbuka sedia ada ─────────────────────────────────────────
+    // Disemak SEBELUM sebarang kerja: bukti yang sedang disemak admin tidak
+    // boleh dibatalkan secara senyap oleh sekolah menekan Hantar sekali lagi.
+    const { data: bilTerbuka } = await admin
+      .from('payment_bills')
+      .select('id, status')
+      .eq('school_id', schoolId).eq('year', year).eq('siri', siri)
+      .in('status', ['pending', 'pending_review'])
+      .maybeSingle();
 
-    const { data: ps } = await admin
-      .from('program_settings')
-      .select('id, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, negeri_id, daerah_id')
-      .eq('id', psId).single();
-    if (!ps?.payment_online_required) {
-      return json({ status: 'error', message: 'Program ini tidak memerlukan bayaran online.' }, 400);
+    if (bilTerbuka?.status === 'pending_review') {
+      return json({
+        status: 'error',
+        message: 'Bukti bayaran anda bagi siri ini sedang disemak admin. Sila tunggu keputusannya.',
+      }, 409);
     }
 
-    // ── Kira bilangan mengikut peranan ────────────────────────────────
+    // ── Program yang mempunyai peserta dalam siri ini ─────────────────
     const { data: subs } = await admin
-      .from('submissions').select('id')
-      .eq('school_id', schoolId).eq('badge_id', badge.id).eq('submission_year', year);
-    const subIds = (subs || []).map((s: any) => s.id);
-    if (subIds.length === 0) return json({ status: 'error', message: 'Tiada pendaftaran dijumpai.' }, 404);
+      .from('submissions').select('id, badge_id')
+      .eq('school_id', schoolId).eq('submission_year', year);
+    const semuaSubIds = (subs || []).map((s: any) => s.id);
+    if (semuaSubIds.length === 0) {
+      return json({ status: 'error', message: 'Tiada pendaftaran dijumpai untuk tahun ini.' }, 404);
+    }
 
-    const { data: people } = await admin
-      .from('submission_people').select('role')
-      .in('submission_id', subIds)
+    const { data: orang } = await admin
+      .from('submission_people').select('submission_id, role')
+      .in('submission_id', semuaSubIds)
       .eq('siri', siri)
       .eq('is_deleted', false)
       .or('is_withdrawn.is.null,is_withdrawn.eq.false');
 
-    // Siri tanpa seorang pun peserta BUKAN pendaftaran percuma — ia siri yang
-    // salah. Tanpa semakan ini kedua-duanya menghasilkan RM0, dan cabang RM0 di
-    // bawah menghantar pendaftaran terus ke pengesahan tanpa bayaran. Sekolah
-    // masuk statistik secara percuma, dan tiada apa-apa yang kelihatan rosak.
-    if ((people || []).length === 0) {
+    if (!orang || orang.length === 0) {
       return json({
         status: 'error',
-        message: `Tiada peserta direkodkan untuk Siri ${siri} dalam program ini. `
-               + `Sila semak penapis siri anda sebelum menghantar.`,
+        message: `Tiada peserta direkodkan untuk Siri ${siri}. Sila semak penapis siri anda sebelum menghantar.`,
       }, 400);
     }
 
-    const kira = { peserta: 0, pemimpin: 0, penolong: 0 };
-    (people || []).forEach((p: any) => {
+    const badgeBagiSub = new Map<string, string>();
+    (subs || []).forEach((s: any) => badgeBagiSub.set(s.id, s.badge_id));
+
+    // Kiraan peranan bagi setiap program dalam siri ini.
+    const kiraanIkutBadge = new Map<string, { peserta: number; pemimpin: number; penolong: number }>();
+    orang.forEach((p: any) => {
+      const badgeId = badgeBagiSub.get(p.submission_id);
+      if (!badgeId) return;
+      const k = kiraanIkutBadge.get(badgeId) || { peserta: 0, pemimpin: 0, penolong: 0 };
       const r = String(p.role || 'PESERTA').toUpperCase();
-      if (r === 'PESERTA' || r === 'PENERIMA RAMBU') kira.peserta++;
-      else if (r === 'PEMIMPIN') kira.pemimpin++;
-      else if (r.includes('PENOLONG')) kira.penolong++;
+      if (r === 'PESERTA' || r === 'PENERIMA RAMBU') k.peserta++;
+      else if (r === 'PEMIMPIN') k.pemimpin++;
+      else if (r.includes('PENOLONG')) k.penolong++;
       // PENGUJI sengaja diabaikan — tiada lajur yuran untuknya
+      kiraanIkutBadge.set(badgeId, k);
     });
 
-    // ── Yuran: peranan dari program_settings, jumlah dari override ────
-    const { data: yuranRows } = await admin.rpc('resolve_program_fees', {
-      p_program_setting_id: psId,
-      p_siri: siri,
-      p_school_type: school.school_type || 'lain',
-    });
-    const yuran = Array.isArray(yuranRows) ? yuranRows[0] : yuranRows;
+    const badgeIds = Array.from(kiraanIkutBadge.keys());
+    const { data: badges } = await admin
+      .from('badges').select('id, name, scope').in('id', badgeIds);
+    const badgeById = new Map<string, any>();
+    (badges || []).forEach((b: any) => badgeById.set(b.id, b));
 
-    const amount =
-      (ps.fee_peserta  !== null ? kira.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
-      (ps.fee_pemimpin !== null ? kira.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
-      (ps.fee_penolong !== null ? kira.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0);
+    // Siri yang sudah dihantar atau disahkan tidak dibil semula.
+    const { data: statusSedia } = await admin
+      .from('school_badge_status').select('badge_id, status, payment_status')
+      .eq('school_id', schoolId).eq('year', year).eq('siri', siri);
+    const statusBagiBadge = new Map<string, any>();
+    (statusSedia || []).forEach((r: any) => statusBagiBadge.set(r.badge_id, r));
 
-    // ── Jumlah RM0: langkau pintu bayaran ─────────────────────────────
-    // Berlaku bila sekolah mendaftar hanya peranan yang tidak dicaj. Mencipta
-    // bil RM0 akan menyekat mereka pada skrin yang mustahil dilepasi.
-    if (amount <= 0) {
+    // Program yang SUDAH DIBAYAR bagi siri ini dilangkau. Tanpa ini, bil kedua
+    // selepas had dinaikkan (§13.11) akan mengecaj semula program yang sudah
+    // dijelaskan dalam bil pertama.
+    const { data: bayaranSedia } = await admin
+      .from('payments').select('badge_id, status')
+      .eq('school_id', schoolId).eq('year', year).eq('siri', siri)
+      .in('status', ['paid', 'pending_review']);
+    const sudahBayar = new Set((bayaranSedia || []).map((r: any) => r.badge_id));
+
+    // ── Nilai setiap program ──────────────────────────────────────────
+    const item: Item[] = [];
+    const dilangkau: Dilangkau[] = [];
+    const terusHantar: string[] = [];   // badge_id yang tidak perlu bayaran
+
+    for (const badgeId of badgeIds) {
+      const badge = badgeById.get(badgeId);
+      if (!badge) continue;
+      const nama = badge.name as string;
+      const kira = kiraanIkutBadge.get(badgeId)!;
+
+      const sedia = statusBagiBadge.get(badgeId);
+      if (sedia && ['submitted', 'approved'].includes(sedia.status)) {
+        continue;   // sudah dalam giliran; bukan dilangkau, cuma tiada kerja
+      }
+      if (sudahBayar.has(badgeId)) continue;
+
+      const { data: psId } = await admin.rpc('resolve_program_setting', {
+        p_school_id: schoolId, p_badge_id: badgeId, p_year: year,
+      });
+
+      // Tiada tetapan program = tiada pintu bayaran. Hantar terus.
+      if (!psId) { terusHantar.push(badgeId); continue; }
+
+      const { data: ps } = await admin
+        .from('program_settings')
+        .select('id, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, negeri_id, daerah_id')
+        .eq('id', psId).single();
+
+      if (!ps?.payment_online_required) { terusHantar.push(badgeId); continue; }
+
+      const { data: yuranRows } = await admin.rpc('resolve_program_fees', {
+        p_program_setting_id: psId,
+        p_siri: siri,
+        p_school_type: school.school_type || 'lain',
+      });
+      const yuran = Array.isArray(yuranRows) ? yuranRows[0] : yuranRows;
+
+      const amount =
+        (ps.fee_peserta  !== null ? kira.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
+        (ps.fee_pemimpin !== null ? kira.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
+        (ps.fee_penolong !== null ? kira.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0);
+
+      // RM0 bermakna tiada peranan yang didaftarkan dicaj. Bil RM0 akan
+      // menyekat sekolah pada skrin yang mustahil dilepasi.
+      if (amount <= 0) { terusHantar.push(badgeId); continue; }
+
+      // Tempat yang diminta = peranan yang DICAJ, sama seperti claim_siri_seats.
+      const minta =
+        (ps.fee_peserta  !== null ? kira.peserta  : 0) +
+        (ps.fee_pemimpin !== null ? kira.pemimpin : 0) +
+        (ps.fee_penolong !== null ? kira.penolong : 0);
+
+      const { data: sedia2 } = await admin.rpc('check_siri_availability', {
+        p_school_id: schoolId, p_badge_id: badgeId, p_year: year,
+        p_siri: siri, p_minta: minta,
+      });
+      if (sedia2 && sedia2.ok === false) {
+        dilangkau.push({
+          program: nama,
+          sebab: sedia2.sebab === 'siri_ditutup' ? 'siri telah ditutup'
+            : sedia2.sebab === 'tarikh_tutup_berlalu' ? 'tarikh tutup bayaran telah berlalu'
+            : sedia2.sebab === 'tempat_penuh'
+              ? `tempat tidak mencukupi (baki ${sedia2.baki ?? 0}, perlu ${minta})`
+              : 'pendaftaran tidak dibuka',
+        });
+        continue;
+      }
+
+      // Akaun gateway ikut skop program.
+      let gq = admin.from('payment_gateway_settings')
+        .select('id, category_code, secret_vault_id, is_sandbox, is_active')
+        .eq('provider', 'toyyibpay');
+      gq = (badge.scope || 'daerah') === 'negeri'
+        ? gq.eq('negeri_id', ps.negeri_id).is('daerah_id', null)
+        : gq.eq('daerah_id', ps.daerah_id).is('negeri_id', null);
+      const { data: gw } = await gq.maybeSingle();
+      const bolehOnline = !!(gw?.is_active && gw.category_code && gw.secret_vault_id);
+
+      if (body.method === 'toyyibpay' && !bolehOnline) {
+        dilangkau.push({ program: nama, sebab: 'bayaran online tidak tersedia untuk skop ini' });
+        continue;
+      }
+
+      item.push({ badgeId, badgeName: nama, amount, kira, gatewayId: gw?.id ?? null });
+    }
+
+    // ── Satu bil, satu akaun gateway ──────────────────────────────────
+    // Program berskop negeri dan berskop daerah boleh menyelesaikan kepada
+    // akaun BERBEZA. Satu bil ToyyibPay hanya boleh masuk ke satu akaun, jadi
+    // yang tidak sepadan dilangkau dan dinamakan — bukan dikutip ke akaun
+    // orang lain secara senyap.
+    let itemDibil = item;
+    if (body.method === 'toyyibpay' && item.length > 0) {
+      const gatewayUtama = item[0].gatewayId;
+      itemDibil = item.filter(i => i.gatewayId === gatewayUtama);
+      item.filter(i => i.gatewayId !== gatewayUtama).forEach(i =>
+        dilangkau.push({ program: i.badgeName, sebab: 'akaun bayaran berbeza; perlu dibayar berasingan' }));
+    }
+
+    // ── Program tanpa bayaran: hantar terus ───────────────────────────
+    for (const badgeId of terusHantar) {
       await admin.from('school_badge_status').upsert({
-        school_id: schoolId, badge_id: badge.id, year, siri,
+        school_id: schoolId, badge_id: badgeId, year, siri,
         payment_status: 'not_required', status: 'submitted',
         submitted_at: new Date().toISOString(),
       }, { onConflict: 'school_id,badge_id,year,siri' });
-      await admin.from('submissions').update({ status: 'submitted' })
-        .in('id', subIds).eq('status', 'draft');
-      return json({ status: 'success', skipped: true, message: 'Tiada yuran dikenakan. Pendaftaran terus dihantar untuk pengesahan.' });
+      const subIdsBadge = (subs || []).filter((s: any) => s.badge_id === badgeId).map((s: any) => s.id);
+      if (subIdsBadge.length > 0) {
+        await admin.from('submissions').update({ status: 'submitted' })
+          .in('id', subIdsBadge).eq('status', 'draft');
+      }
     }
 
-    // ── Tempat & tarikh tutup ─────────────────────────────────────────
-    const { data: sedia } = await admin.rpc('check_siri_availability', {
-      p_school_id: schoolId, p_badge_id: badge.id, p_year: year, p_siri: siri,
-    });
-    if (sedia && sedia.ok === false) {
-      const sebab = sedia.sebab === 'siri_ditutup' ? 'Siri ini telah ditutup.'
-        : sedia.sebab === 'tarikh_tutup_berlalu' ? 'Tarikh tutup bayaran telah berlalu.'
-        : sedia.sebab === 'tempat_penuh' || sedia.baki === 0 ? 'Tempat bagi siri ini telah penuh.'
-        : 'Pendaftaran bagi siri ini tidak dibuka.';
-      return json({ status: 'error', message: sebab }, 400);
-    }
-
-    // ── Akaun gateway ikut skop, tiada fallback ───────────────────────
-    let gq = admin.from('payment_gateway_settings')
-      .select('id, category_code, secret_vault_id, transaction_fee_flat, is_sandbox, is_active')
-      .eq('provider', 'toyyibpay');
-    gq = (badge.scope || 'daerah') === 'negeri'
-      ? gq.eq('negeri_id', ps.negeri_id).is('daerah_id', null)
-      : gq.eq('daerah_id', ps.daerah_id).is('negeri_id', null);
-    const { data: gw } = await gq.maybeSingle();
-
-    const bolehOnline = !!(gw?.is_active && gw.category_code && gw.secret_vault_id);
-    if (body.method === 'toyyibpay' && !bolehOnline) {
+    if (itemDibil.length === 0) {
+      if (terusHantar.length > 0) {
+        return json({
+          status: 'success', skipped: true, dilangkau,
+          message: dilangkau.length > 0
+            ? 'Sebahagian program dihantar tanpa bayaran; selebihnya dilangkau.'
+            : 'Tiada yuran dikenakan. Pendaftaran terus dihantar untuk pengesahan.',
+        });
+      }
       return json({
         status: 'error',
-        message: 'Bayaran online tidak tersedia untuk daerah/negeri ini. Sila guna pindahan bank atau cek.',
+        dilangkau,
+        message: dilangkau.length > 0
+          ? `Tiada program yang boleh dibil: ${dilangkau.map(d => `${d.program} (${d.sebab})`).join('; ')}.`
+          : 'Tiada program yang memerlukan bayaran untuk siri ini.',
       }, 400);
     }
 
     // ── Batalkan bil terbuka sedia ada ────────────────────────────────
-    // Indeks unik separa membenarkan hanya satu bil terbuka per siri. Bil lama
-    // dibatalkan supaya senarai peserta yang berubah tidak dibil pada jumlah lapuk.
-    await admin.from('payments')
-      .update({ status: 'cancelled', notes: 'Digantikan oleh bil baharu' })
-      .eq('school_id', schoolId).eq('badge_id', badge.id).eq('year', year).eq('siri', siri)
-      .eq('status', 'pending');
+    if (bilTerbuka?.id) {
+      await admin.from('payments')
+        .update({ status: 'cancelled', notes: 'Digantikan oleh bil baharu' })
+        .eq('bill_id', bilTerbuka.id).eq('status', 'pending');
+      await admin.from('payment_bills')
+        .update({ status: 'cancelled', notes: 'Digantikan oleh bil baharu' })
+        .eq('id', bilTerbuka.id);
+    }
 
+    const amount = itemDibil.reduce((n, i) => n + i.amount, 0);
     // Caj FPX dikenakan kepada pembayar oleh gateway sendiri melalui
     // billChargeToCustomer=0, jadi ia TIDAK ditambah ke jumlah bil kita.
-    // Kesannya: penganjur menerima jumlah yuran yang tepat, dan kita tidak
-    // perlu meneka kadar caj yang boleh berubah tanpa kita sedar.
     const caj = 0;
     const total = amount;
     const luput = new Date(Date.now() + TEMPOH_BIL_MINIT * 60 * 1000);
+    const gatewayId = itemDibil[0].gatewayId;
 
-    const { data: bayaran, error: insErr } = await admin.from('payments').insert({
-      school_id: schoolId, badge_id: badge.id, year, siri,
-      submission_id: subIds[0],
+    const { data: bil, error: bilErr } = await admin.from('payment_bills').insert({
+      school_id: schoolId, year, siri,
       amount, transaction_fee: caj, total_amount: total,
-      snapshot_peserta: kira.peserta, snapshot_pemimpin: kira.pemimpin, snapshot_penolong: kira.penolong,
       method: body.method,
       status: 'pending',
-      gateway_settings_id: gw?.id ?? null,
+      gateway_settings_id: gatewayId,
       expires_at: luput.toISOString(),
     }).select('id').single();
-    if (insErr) throw insErr;
+    if (bilErr) throw bilErr;
 
-    await admin.from('school_badge_status').upsert({
-      school_id: schoolId, badge_id: badge.id, year, siri, payment_status: 'pending',
-    }, { onConflict: 'school_id,badge_id,year,siri' });
+    const { error: itemErr } = await admin.from('payments').insert(
+      itemDibil.map(i => ({
+        bill_id: bil.id,
+        school_id: schoolId, badge_id: i.badgeId, year, siri,
+        submission_id: (subs || []).find((s: any) => s.badge_id === i.badgeId)?.id ?? null,
+        amount: i.amount, transaction_fee: 0, total_amount: i.amount,
+        snapshot_peserta: i.kira.peserta,
+        snapshot_pemimpin: i.kira.pemimpin,
+        snapshot_penolong: i.kira.penolong,
+        method: body.method,
+        status: 'pending',
+        gateway_settings_id: gatewayId,
+        expires_at: luput.toISOString(),
+      })),
+    );
+    if (itemErr) throw itemErr;
+
+    for (const i of itemDibil) {
+      await admin.from('school_badge_status').upsert({
+        school_id: schoolId, badge_id: i.badgeId, year, siri, payment_status: 'pending',
+      }, { onConflict: 'school_id,badge_id,year,siri' });
+    }
+
+    const pecahan = itemDibil.map(i => ({
+      program: i.badgeName, amount: i.amount,
+      peserta: i.kira.peserta, pemimpin: i.kira.pemimpin, penolong: i.kira.penolong,
+    }));
 
     // ── Kaedah manual: tiada panggilan gateway ────────────────────────
     if (body.method !== 'toyyibpay') {
       return json({
         status: 'success',
-        paymentId: bayaran.id,
+        paymentId: bil.id,
         amount, transactionFee: 0, totalAmount: total,
         expiresAt: luput.toISOString(),
+        pecahan, dilangkau,
         message: 'Bil dijana. Sila buat bayaran dan muat naik bukti.',
       });
     }
 
     // ── ToyyibPay createBill ──────────────────────────────────────────
-    const { data: rahsia, error: vaultErr } = await admin.rpc('read_gateway_secret', { p_id: gw!.secret_vault_id });
+    const { data: gwPenuh } = await admin
+      .from('payment_gateway_settings')
+      .select('category_code, secret_vault_id, is_sandbox')
+      .eq('id', gatewayId).single();
+
+    const { data: rahsia, error: vaultErr } = await admin.rpc('read_gateway_secret', { p_id: gwPenuh!.secret_vault_id });
     if (vaultErr || !rahsia) throw new Error('Kunci gateway tidak dapat dibaca');
 
-    const hos = gw!.is_sandbox ? 'https://dev.toyyibpay.com' : 'https://toyyibpay.com';
+    const hos = gwPenuh!.is_sandbox ? 'https://dev.toyyibpay.com' : 'https://toyyibpay.com';
     const pad = (n: number) => String(n).padStart(2, '0');
 
     // billExpiryDate MESTI dalam waktu Malaysia (UTC+8).
@@ -261,27 +409,25 @@ serve(async (req) => {
     // sebagai waktu tempatan — menghantar jam UTC bermakna setiap bil dicipta
     // dengan tarikh luput lapan jam yang LALU, dan ToyyibPay memaparkan
     // "This bill is inactive" serta-merta.
-    //
-    // Anjakan +8 jam kemudian baca komponen UTC memberi waktu Malaysia yang
-    // betul tanpa bergantung pada zon waktu pelayan.
     const OFFSET_MYT_MS = 8 * 60 * 60 * 1000;
     const luputMyt = new Date(luput.getTime() + OFFSET_MYT_MS);
     const expiryStr = `${pad(luputMyt.getUTCDate())}-${pad(luputMyt.getUTCMonth() + 1)}-${luputMyt.getUTCFullYear()} ${pad(luputMyt.getUTCHours())}:${pad(luputMyt.getUTCMinutes())}:${pad(luputMyt.getUTCSeconds())}`;
 
+    const senaraiProgram = itemDibil.map(i => i.badgeName).join(', ');
+
     // urlencoded — lihat nota dalam save-gateway-settings.
     const borang = new URLSearchParams();
     borang.set('userSecretKey', rahsia as string);
-    borang.set('categoryCode', gw!.category_code!);
+    borang.set('categoryCode', gwPenuh!.category_code!);
     // billName dihadkan 30 aksara oleh ToyyibPay
-    borang.set('billName', `${badge.name} S${siri}`.slice(0, 30));
-    borang.set('billDescription', `${school.name} · ${badge.name} Siri ${siri} ${year}`.slice(0, 100));
+    borang.set('billName', `Pendaftaran Siri ${siri}`.slice(0, 30));
+    borang.set('billDescription', `${school.name} · Siri ${siri} ${year} · ${senaraiProgram}`.slice(0, 100));
     borang.set('billPriceSetting', '1');          // jumlah tetap — pembayar tak boleh ubah
     borang.set('billPayorInfo', '1');
-    // Jumlah yuran sahaja. Caj FPX ditambah oleh gateway di atas ini.
     borang.set('billAmount', String(Math.round(total * 100)));   // sen; Math.round elak ralat float
-    borang.set('billReturnUrl', `${appUrl}/?bayaran=${bayaran.id}`);
+    borang.set('billReturnUrl', `${appUrl}/?bayaran=${bil.id}`);
     borang.set('billCallbackUrl', `${supabaseUrl}/functions/v1/toyyibpay-callback`);
-    borang.set('billExternalReferenceNo', bayaran.id);
+    borang.set('billExternalReferenceNo', bil.id);
     borang.set('billTo', school.name);
     borang.set('billEmail', user.email || 'noreply@scoutnadi.my');
     borang.set('billPhone', '0000000000');
@@ -303,20 +449,23 @@ serve(async (req) => {
 
     if (!billCode) {
       // Bil gagal dicipta di gateway; jangan tinggalkan baris pending yatim.
-      await admin.from('payments').update({ status: 'failed', notes: 'createBill gagal' }).eq('id', bayaran.id);
+      await admin.from('payments').update({ status: 'failed', notes: 'createBill gagal' }).eq('bill_id', bil.id);
+      await admin.from('payment_bills').update({ status: 'failed', notes: 'createBill gagal' }).eq('id', bil.id);
       console.error('createBill gagal', { status: res.status });
       return json({ status: 'error', message: 'Gagal menjana bil di ToyyibPay. Sila cuba lagi atau guna bayaran manual.' }, 502);
     }
 
     const billUrl = `${hos}/${billCode}`;
-    await admin.from('payments').update({ external_bill_code: billCode, bill_url: billUrl }).eq('id', bayaran.id);
+    await admin.from('payment_bills')
+      .update({ external_bill_code: billCode, bill_url: billUrl }).eq('id', bil.id);
 
     return json({
       status: 'success',
-      paymentId: bayaran.id,
+      paymentId: bil.id,
       billUrl,
       amount, transactionFee: caj, totalAmount: total,
       expiresAt: luput.toISOString(),
+      pecahan, dilangkau,
     });
   } catch (error: any) {
     console.error('create-payment-bill error:', error?.message);

@@ -103,9 +103,11 @@ serve(async (req) => {
     if (!orderId) return ok('order_id tiada');
 
     // ── Bil ini milik kita? ───────────────────────────────────────────
+    // order_id ialah id BIL (§13), bukan id baris program. Satu bil
+    // merangkumi semua program dalam satu siri.
     const { data: bayaran } = await admin
-      .from('payments')
-      .select('id, school_id, badge_id, year, siri, total_amount, status, seat_status, gateway_settings_id')
+      .from('payment_bills')
+      .select('id, school_id, year, siri, total_amount, status, gateway_settings_id')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -141,7 +143,7 @@ serve(async (req) => {
       if (dijangkaHash !== hashCb.toLowerCase()) {
         await admin.from('audit_logs').insert({
           action: 'toyyibpay_hash_tidak_sah',
-          entity_type: 'payments', entity_id: bayaran.id,
+          entity_type: 'payment_bills', entity_id: bayaran.id,
           details: { billcode, refno, statusCb },
         }).then(() => {}, () => {});
         return ok('hash tidak sah — callback ditolak');
@@ -196,13 +198,20 @@ serve(async (req) => {
     const dibayar = Number(String(medan(berjaya, 'billpaymentAmount') ?? '0').replace(/[^0-9.]/g, ''));
     const dijangka = Number(bayaran.total_amount);
     if (dibayar < dijangka - 0.01) {
-      await admin.from('payments').update({
+      // Bil DAN setiap baris program ditandakan gagal. Meninggalkan baris
+      // program sebagai 'pending' bermakna reconciliation akan memburunya
+      // semula selama-lamanya terhadap bil yang sudah mati.
+      await admin.from('payment_bills').update({
         status: 'failed',
         notes: `Jumlah tidak sepadan: dibayar ${dibayar}, dijangka ${dijangka}`,
       }).eq('id', bayaran.id);
+      await admin.from('payments').update({
+        status: 'failed',
+        notes: `Jumlah tidak sepadan: dibayar ${dibayar}, dijangka ${dijangka}`,
+      }).eq('bill_id', bayaran.id);
       await admin.from('audit_logs').insert({
         action: 'toyyibpay_jumlah_tidak_sepadan',
-        entity_type: 'payments', entity_id: bayaran.id,
+        entity_type: 'payment_bills', entity_id: bayaran.id,
         details: { dibayar, dijangka, billcode },
       }).then(() => {}, () => {});
       return ok('jumlah tidak sepadan');
@@ -212,7 +221,7 @@ serve(async (req) => {
       // benar-benar berlaku, dan menjadikan semakan idempoten seterusnya padan
       // dengan tepat.
     if (dibayar > dijangka + 0.01) {
-      await admin.from('payments').update({
+      await admin.from('payment_bills').update({
         transaction_fee: Number((dibayar - dijangka).toFixed(2)),
         total_amount: dibayar,
       }).eq('id', bayaran.id);
@@ -220,19 +229,23 @@ serve(async (req) => {
 
     // ── PINTU TEMPAT + penyelesaian ───────────────────────────────────
     // Urutan (tuntut tempat → hantar pendaftaran → kemas kini status) tinggal
-    // dalam finalize_payment supaya laluan ini dan check-payment-status tidak
-    // boleh menyimpang. Lihat migrasi 033.
-    const { data: hasil, error: finErr } = await admin.rpc('finalize_payment', {
-      p_payment_id: bayaran.id,
+    // dalam finalize_bill supaya laluan ini dan check-payment-status tidak
+    // boleh menyimpang. Lihat migrasi 040.
+    //
+    // Satu bil boleh berakhir SEBAHAGIAN berjaya: satu program mendapat
+    // tempat, satu lagi penuh. Itu keadaan sah, bukan ralat.
+    const { data: hasil, error: finErr } = await admin.rpc('finalize_bill', {
+      p_bill_id: bayaran.id,
       p_new_status: 'paid',
     });
     if (finErr) throw finErr;
 
-    const dapatTempat = hasil?.ok === true;
+    const tiadaTempat = Number(hasil?.tiadaTempat ?? 0);
+    const dapatTempat = tiadaTempat === 0;
 
     await admin.from('audit_logs').insert({
       action: dapatTempat ? 'bayaran_disahkan' : 'bayaran_tanpa_tempat',
-      entity_type: 'payments', entity_id: bayaran.id,
+      entity_type: 'payment_bills', entity_id: bayaran.id,
       details: { billcode, dibayar, hasil },
     }).then(() => {}, () => {});
 
@@ -251,7 +264,7 @@ serve(async (req) => {
           title: dapatTempat ? 'Bayaran diterima' : 'Bayaran diterima TANPA TEMPAT',
           message: dapatTempat
             ? `${sekolah?.name} telah membayar RM${dijangka.toFixed(2)} — sedia untuk disahkan.`
-            : `${sekolah?.name} membayar RM${dijangka.toFixed(2)} tetapi tempat sudah penuh. Perlu tindakan.`,
+            : `${sekolah?.name} membayar RM${dijangka.toFixed(2)} tetapi tempat bagi ${tiadaTempat} program sudah penuh. Perlu tindakan.`,
         })));
       }
     } catch (_) { /* diabaikan dengan sengaja */ }

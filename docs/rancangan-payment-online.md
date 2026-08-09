@@ -45,7 +45,8 @@ Kesemuanya jenis yang sama: setiap bahagian menjawab dengan betul secara berasin
 | Akaun gateway | Kinta Utara · **sandbox · disahkan** · kredensial dalam Vault · maklumat akaun bank diisi |
 | Aliran ToyyibPay | **Diuji berjaya** — FPX, SBI BANK A |
 | Aliran manual | **Diuji berjaya** — bukti dimuat naik, dibuka admin, disahkan, masuk statistik |
-| Reconciliation | pg_cron setiap 5 minit · **disahkan benar-benar sampai** ke Edge Function |
+| Reconciliation | pg_cron setiap 5 minit · **diuji sebagai pihak yang mengesahkan** — bil dipulangkan ke `pending`, lapisan 3 mengesahkannya sendiri dari `getBillTransactions` |
+| Ketiga-tiga lapisan | Webhook, semakan semasa kembali, dan reconciliation — kesemuanya disaksikan berfungsi |
 | Storan bukti | Baldi persendirian `payment-proofs`; skop diwarisi dari RLS `payments` |
 | Resit PDF | Nombor diterbitkan dari ID bayaran; bilangan dari snapshot bil |
 
@@ -54,8 +55,13 @@ Kesemuanya jenis yang sama: setiap bahagian menjawab dengan betul secara berasin
 ### Langkah seterusnya, ikut urutan
 
 **Belum diuji:**
-1. **SBI BANK C** (pending 30 minit) — menguji lapisan reconciliation dan peraturan jangan-batalkan-transaksi-tergantung. Paling berharga; paling mudah tersilap. Percubaan pertama terhenti apabila bil manual mengambil tempat bil tergantung itu (satu bil terbuka sahaja per sekolah × program × tahun × siri), jadi ulang pada program atau siri lain
-2. **SBI BANK B** (gagal) — sekolah boleh jana bil baharu
+1. **SBI BANK B** (gagal) — sekolah boleh jana bil baharu
+
+> **Nota tentang SBI Bank C.** Bank ujian itu tidak menahan bayaran selama 30 minit seperti dijangka — callback sampai dalam masa tiga minit, jadi webhook memenangi perlumbaan dan reconciliation tidak sempat menyentuhnya. Lapisan 3 akhirnya dibuktikan dengan cara yang lebih langsung: bil yang sudah dibayar dipulangkan ke `pending` dalam pangkalan data kita sementara ToyyibPay masih mengingatinya sebagai berjaya. Itu tepat keadaan "webhook hilang dalam perjalanan", dan pusingan cron berikutnya mengesahkannya sendiri.
+>
+> Ia selamat diulang bila-bila kerana tempat dikira secara **terbitan**, bukan kaunter — `siri_seats_taken` mengira peserta sebenar setiap kali dan mengecualikan bayaran yang sedang diproses, jadi menjalankan semula `finalize_payment` tidak menggandakan apa-apa.
+>
+> Peraturan jangan-batalkan-transaksi-tergantung juga sudah diperhatikan berfungsi secara berasingan: bil `eh7tc8mi` dilaporkan `tergantung: 1` pusingan demi pusingan dan tidak pernah dibatalkan, walaupun sudah melepasi masa luputnya.
 
 **Belum diputuskan:**
 3. Jurang §9b — peserta ditambah selepas pengesahan tanpa dibil

@@ -12,6 +12,44 @@
 > ⚠ Keputusan siri ini ialah **satu-satunya** yang memaksa perubahan pada `utils/dataProcessing.ts` —
 > semua keputusan lain berjaya mengelak fail tersebut. Lihat §7.
 
+
+---
+
+## 0. Status Semasa · 9 Ogos 2026
+
+**Terakhir dikerjakan:** borang tetapan gateway gagal dengan "kunci atau kod kategori tidak sah" (400). Punca belum dipastikan.
+
+### Sudah siap & hidup di produksi
+
+| | |
+|---|---|
+| Migrasi 027–032 | Dipasang, disahkan terhadap data sebenar |
+| Kunci/pengesahan ikut siri | Sekolah boleh hantar Siri 2 selepas Siri 1 |
+| Kategori sekolah SR/SM | Ditetapkan semasa daftar, boleh diedit |
+| Kadar yuran per siri × jenis | Grid dalam modal tetapan program |
+| Penapis jenis sekolah | AdminDashboard, AdminHistory, DaerahProgramAnalysis |
+| Edge Functions | `save-gateway-settings`, `create-payment-bill`, `toyyibpay-callback` — ketiga-tiganya di-deploy |
+
+`toyyibpay-callback` di-deploy dengan `--no-verify-jwt`. Jangan deploy semula tanpanya.
+
+### Langkah seterusnya, ikut urutan
+
+1. **Nyahpepijat borang gateway.** Log dalam Dashboard → Edge Functions → `save-gateway-settings` merekod `getCategoryDetails { httpStatus, panjangRespons, sah }`. `panjangRespons` kecil (7–20) bermakna kredensial tak sepadan; besar (80–150) bermakna penghuraian dalam kod yang silap. Hipotesis semasa: kod kategori dari akaun sandbox lama, bukan yang didaftar semula.
+2. `check-payment-status` — lapisan 1, dipanggil bila sekolah kembali dari gateway
+3. `submit-payment-proof` — muat naik resit/cek → `pending_review`
+4. Skrin bayaran (UI tiga pilihan) selepas Hantar
+5. Lencana bayaran + giliran "dibayar tanpa tempat" dalam `PengesahanTab`
+6. Job cron reconciliation (pg_cron + pg_net sudah aktif & diuji)
+7. Resit PDF
+
+### Belum diaktifkan
+
+`payment_online_required` masih `false` untuk **semua** program. Tiada sekolah nampak apa-apa perubahan berkaitan bayaran. Togol ini ialah langkah terakhir sebelum ujian sebenar, bukan pertama.
+
+### Perintis
+
+Keris Perak 2026 · Kinta Utara · skop daerah · yuran peserta RM80 · siri aktif (maks 3).
+
 ---
 
 ## 1. Konteks & Masalah

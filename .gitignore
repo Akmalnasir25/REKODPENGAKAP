@@ -41,3 +41,6 @@ UJI-KERING-*.sql
 
 PASANG-*.sql
 PINDAH-*.sql
+supabase/.temp/
+Screenshot *.png
+ujian-toyyibpay.txt

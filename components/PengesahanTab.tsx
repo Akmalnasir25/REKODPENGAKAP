@@ -6,6 +6,7 @@ import { badgeStatusKey } from '../utils/dataProcessing';
 import { getBayaranUntukSemakan, semakBuktiBayaran, urlBukti, BayaranUntukSemakan } from '../services/paymentService';
 import { formatRM } from '../services/programSummary';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { tarikhPendek } from '../utils/tarikh';
 
 interface PengesahanTabProps {
   daerahCode?: string;
@@ -339,7 +340,7 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
               const daerah = item.school?.daerah?.code || '';
               const siri = item.siri ?? 1;
               const participantCount = getParticipantCount(schoolName, badgeName, siri);
-              const submittedDate = item.submitted_at ? new Date(item.submitted_at).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+              const submittedDate = item.submitted_at ? tarikhPendek(item.submitted_at) : '-';
               const isApproving = actionLoading === `approve-${schoolName}-${badgeName}-${siri}`;
               const isReopening = actionLoading === `reopen-${schoolName}-${badgeName}-${siri}`;
               const isDaerahApproveStep = !!daerahCode && !!item.badge?.requires_daerah_approval && (item.badge?.scope === 'negeri');

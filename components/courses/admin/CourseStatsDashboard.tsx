@@ -12,6 +12,7 @@ import {
 } from '../../../services/courseService';
 import { generateAndUploadCertificate } from '../../../services/certificateService';
 import type { Course, CourseRegistration } from '../../../types';
+import { tarikhPendek } from '../../../utils/tarikh';
 
 interface CourseStatsDashboardProps {
   course: Course;
@@ -146,7 +147,7 @@ export const CourseStatsDashboard: React.FC<CourseStatsDashboardProps> = ({
   };
 
   const formatDate = (d: string) => {
-    try { return new Date(d).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' }); }
+    try { return tarikhPendek(d, false); }
     catch { return d; }
   };
 

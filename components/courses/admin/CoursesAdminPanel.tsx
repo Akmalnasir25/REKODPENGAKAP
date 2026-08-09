@@ -9,6 +9,7 @@ import { supabase } from '../../../services/supabaseClient';
 import type { Course, CourseScope, CourseStatus } from '../../../types';
 import { CourseFormModal } from './CourseFormModal';
 import { CourseStatsDashboard } from './CourseStatsDashboard';
+import { tarikhPendek } from '../../../utils/tarikh';
 
 interface CoursesAdminPanelProps {
   adminScope: 'negeri' | 'daerah' | 'developer';
@@ -22,7 +23,7 @@ interface DaerahRow { id: string; code: string; name: string; negeri_id: string;
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+    return tarikhPendek(dateStr, false);
   } catch { return dateStr; }
 }
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Award, Download, Calendar, MapPin } from 'lucide-react';
 import type { CourseRegistration } from '../../types';
+import { tarikhPendek } from '../../utils/tarikh';
 
 interface MyCertificatesTabProps {
   registrations: CourseRegistration[];
@@ -8,7 +9,7 @@ interface MyCertificatesTabProps {
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+    return tarikhPendek(dateStr, false);
   } catch {
     return dateStr;
   }

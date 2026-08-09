@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Search, MapPin, Calendar, Phone, FileText, UserPlus, Loader, User, School as SchoolIcon, RefreshCw, Undo2, Download, X, ArrowRightLeft } from 'lucide-react';
 import { getFloatedStudents, pullStudent, unfloatStudent, getActiveSchoolsForAssign, FloatedStudent, AssignSchoolOption } from '../services/supabaseApi';
+import { tarikhPendek } from '../utils/tarikh';
 
 export interface FloatedStudentsTabProps {
   schoolCode?: string;
@@ -188,7 +189,7 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
 
   const formatDate = (d: string) => {
     if (!d) return '-';
-    return new Date(d).toLocaleDateString('ms-MY', { day: '2-digit', month: 'short', year: 'numeric' });
+    return tarikhPendek(d);
   };
 
   return (

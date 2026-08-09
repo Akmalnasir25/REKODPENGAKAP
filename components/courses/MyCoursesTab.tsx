@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { cancelRegistration } from '../../services/courseService';
 import type { CourseRegistration } from '../../types';
+import { tarikhPendek } from '../../utils/tarikh';
 
 interface MyCoursesTabProps {
   registrations: CourseRegistration[];
@@ -14,7 +15,7 @@ interface MyCoursesTabProps {
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+    return tarikhPendek(dateStr, false);
   } catch {
     return dateStr;
   }

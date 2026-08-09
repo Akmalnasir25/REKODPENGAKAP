@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, MapPin, Users, DollarSign, Tag, ChevronRight, CheckCircle, Clock } from 'lucide-react';
 import type { Course, CourseRegistration } from '../../types';
+import { tarikhPendek } from '../../utils/tarikh';
 
 interface CourseListPublicProps {
   courses: Course[];
@@ -10,7 +11,7 @@ interface CourseListPublicProps {
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('ms-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+    return tarikhPendek(dateStr, false);
   } catch {
     return dateStr;
   }

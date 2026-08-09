@@ -17,7 +17,9 @@
 
 ## 0. Status Semasa · 9 Ogos 2026
 
-**Terakhir dikerjakan:** borang tetapan gateway gagal dengan "kunci atau kod kategori tidak sah" (400). Punca belum dipastikan.
+**Terakhir dikerjakan:** tetapan gateway sandbox Kinta Utara **berjaya disimpan & disahkan**. Kredensial dalam Vault, akaun sedia mencipta bil.
+
+**Pepijat yang diselesaikan:** `getCategoryDetails` memulangkan `CategoryName` dengan **C besar**, sedangkan dokumentasi rasmi ToyyibPay menunjukkan `categoryName` huruf kecil. Padanan peka huruf menolak kredensial yang sah selama beberapa pusingan. Semua bacaan medan ToyyibPay kini tidak peka huruf besar-kecil — termasuk `BillCode`, `billpaymentStatus` dan `billpaymentAmount`, kerana kegagalan padanan dalam callback bermakna bayaran sah tidak pernah diakui tanpa apa-apa yang kelihatan rosak.
 
 ### Sudah siap & hidup di produksi
 
@@ -29,19 +31,15 @@
 | Kadar yuran per siri × jenis | Grid dalam modal tetapan program |
 | Penapis jenis sekolah | AdminDashboard, AdminHistory, DaerahProgramAnalysis |
 | Edge Functions | `save-gateway-settings`, `create-payment-bill`, `toyyibpay-callback` — ketiga-tiganya di-deploy |
+| Akaun gateway | Kinta Utara · **sandbox · disahkan** · kredensial dalam Vault |
 
 `toyyibpay-callback` di-deploy dengan `--no-verify-jwt`. Jangan deploy semula tanpanya.
 
 ### Langkah seterusnya, ikut urutan
 
-1. **Nyahpepijat borang gateway.** Bacaan log terakhir: `{ httpStatus: 200, panjangRespons: 93, sah: false }`.
+1. ~~Nyahpepijat borang gateway~~ → **selesai.** Punca: padanan medan peka huruf besar-kecil.
 
-   93 aksara terlalu panjang untuk `[FALSE]` dan hampir tepat dengan bentuk kategori yang didokumenkan, jadi **kredensial berkemungkinan besar SAH dan penghuraian dalam kod yang silap** — bertentangan dengan hipotesis awal.
-
-   Log kini turut merekod `medan: [...]`, iaitu nama medan JSON tanpa nilainya. Cuba borang sekali lagi dan baca baris itu:
-   - `medan: ["categoryName", ...]` → respons betul; padanan `!!kategori?.categoryName` yang gagal, siasat kenapa
-   - `medan: ["status","message"]` atau serupa → ToyyibPay memulangkan ralat; baca mesejnya di dashboard mereka
-   - `medan: ["bukan-JSON"]` → respons bukan JSON walaupun 200
+   Diagnostik dikekalkan dalam mesej ralat borang (panjang & nama medan sahaja, tiada nilai) sehingga aliran bayaran penuh terbukti berfungsi.
 2. `check-payment-status` — lapisan 1, dipanggil bila sekolah kembali dari gateway
 3. `submit-payment-proof` — muat naik resit/cek → `pending_review`
 4. Skrin bayaran (UI tiga pilihan) selepas Hantar

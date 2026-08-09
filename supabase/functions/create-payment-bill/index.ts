@@ -7,8 +7,9 @@
 //     badan permintaan hanya memilih program, siri dan kaedah bayaran
 //   - Peranan yang dicaj datang dari program_settings; jumlahnya dari
 //     resolve_program_fees (override siri / jenis sekolah)
-//   - Caj transaksi hanya untuk ToyyibPay. Pindahan bank & cek tiada caj
-//     gateway, jadi tiada caj ditambah
+//   - Caj FPX dikenakan kepada pembayar oleh gateway (billChargeToCustomer=0),
+//     bukan ditambah ke jumlah bil kita. Penganjur menerima jumlah yuran yang
+//     tepat, dan kita tidak perlu meneka kadar caj
 //   - Akaun gateway diselesaikan mengikut skop. TIADA fallback senyap:
 //     daerah tanpa akaun tidak akan tersilap mengutip ke akaun daerah lain
 //   - Jumlah RM0 melangkau pintu bayaran sepenuhnya, bukan mencipta bil RM0
@@ -185,8 +186,12 @@ serve(async (req) => {
       .eq('school_id', schoolId).eq('badge_id', badge.id).eq('year', year).eq('siri', siri)
       .eq('status', 'pending');
 
-    const caj = body.method === 'toyyibpay' ? Number(gw?.transaction_fee_flat ?? 1) : 0;
-    const total = amount + caj;
+    // Caj FPX dikenakan kepada pembayar oleh gateway sendiri melalui
+    // billChargeToCustomer=0, jadi ia TIDAK ditambah ke jumlah bil kita.
+    // Kesannya: penganjur menerima jumlah yuran yang tepat, dan kita tidak
+    // perlu meneka kadar caj yang boleh berubah tanpa kita sedar.
+    const caj = 0;
+    const total = amount;
     const luput = new Date(Date.now() + TEMPOH_BIL_MINIT * 60 * 1000);
 
     const { data: bayaran, error: insErr } = await admin.from('payments').insert({
@@ -233,6 +238,7 @@ serve(async (req) => {
     borang.set('billDescription', `${school.name} · ${badge.name} Siri ${siri} ${year}`.slice(0, 100));
     borang.set('billPriceSetting', '1');          // jumlah tetap — pembayar tak boleh ubah
     borang.set('billPayorInfo', '1');
+    // Jumlah yuran sahaja. Caj FPX ditambah oleh gateway di atas ini.
     borang.set('billAmount', String(Math.round(total * 100)));   // sen; Math.round elak ralat float
     borang.set('billReturnUrl', `${appUrl}/?bayaran=${bayaran.id}`);
     borang.set('billCallbackUrl', `${supabaseUrl}/functions/v1/toyyibpay-callback`);
@@ -241,6 +247,7 @@ serve(async (req) => {
     borang.set('billEmail', user.email || 'noreply@scoutnadi.my');
     borang.set('billPhone', '0000000000');
     borang.set('billPaymentChannel', '0');        // FPX sahaja — caj kad ialah peratusan
+    borang.set('billChargeToCustomer', '0');      // caj FPX ditanggung sekolah, dikutip gateway
     borang.set('billExpiryDate', expiryStr);
 
     const res = await fetch(`${hos}/index.php/api/createBill`, {

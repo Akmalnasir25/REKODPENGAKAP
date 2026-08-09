@@ -4,7 +4,7 @@ import {
   AlertTriangle, Clock, Upload, ExternalLink, X, Download,
 } from 'lucide-react';
 import {
-  janaBil, semakStatusBayaran, hantarBuktiBayaran, getArahanBayaranManual,
+  janaBil, semakStatusBayaran, hantarBuktiBayaran, getArahanBayaranManual, getMaklumatBayaran,
   KaedahBayaran, BilDijana, StatusBayaran,
 } from '../services/paymentService';
 import { getDataResit, muatNaikBukti } from '../services/paymentService';
@@ -49,9 +49,24 @@ export const PaymentScreen: React.FC<Props> = ({
   const [memuatNaik, setMemuatNaik] = useState(false);
   const [menjanaResit, setMenjanaResit] = useState(false);
 
+  // Sambungan selepas kembali dari gateway TIDAK boleh mempercayai props.
+  // billReturnUrl memuat semula halaman sepenuhnya, jadi penapis program dan
+  // siri dalam UI sudah kembali kepada nilai awalnya sebelum skrin ini dibuka
+  // semula. Baris bayaran ialah satu-satunya sumber yang masih tahu.
+  const [asal, setAsal] = useState<{ badgeName: string; year: number; siri: number } | null>(null);
   useEffect(() => {
-    getArahanBayaranManual(badgeName, year).then(setArahan);
-  }, [badgeName, year]);
+    if (!paymentIdSediaAda) { setAsal(null); return; }
+    getMaklumatBayaran(paymentIdSediaAda).then(setAsal);
+  }, [paymentIdSediaAda]);
+
+  const namaProgram = asal?.badgeName || badgeName;
+  const tahun = asal?.year || year;
+  const siriKini = asal?.siri || siri;
+
+  useEffect(() => {
+    if (!namaProgram) return;   // menunggu maklumat bayaran dimuatkan
+    getArahanBayaranManual(namaProgram, tahun).then(setArahan);
+  }, [namaProgram, tahun]);
 
   // Sambung semula selepas kembali dari gateway: semak status sebelum
   // memaparkan apa-apa, supaya sekolah tidak melihat "belum bayar" sedangkan
@@ -70,7 +85,7 @@ export const PaymentScreen: React.FC<Props> = ({
     setRalat('');
     setSibuk(true);
     try {
-      const hasil = await janaBil({ badgeName, year, siri, method: k });
+      const hasil = await janaBil({ badgeName: namaProgram, year: tahun, siri: siriKini, method: k });
       if (hasil.skipped) { onSelesai(); return; }
       setBil(hasil);
       if (k === 'toyyibpay' && hasil.billUrl) {
@@ -159,8 +174,8 @@ export const PaymentScreen: React.FC<Props> = ({
   return (
     <Bingkai onTutup={onTutup} tajuk="Bayaran Pendaftaran">
       <div className="bg-slate-50 rounded-lg p-3 mb-4 text-sm">
-        <p className="font-bold text-slate-800">{badgeName}{siri > 1 ? ` · Siri ${siri}` : ''}</p>
-        <p className="text-slate-500 text-xs mt-0.5">Tahun {year}</p>
+        <p className="font-bold text-slate-800">{namaProgram || '—'}{siriKini > 1 ? ` · Siri ${siriKini}` : ''}</p>
+        <p className="text-slate-500 text-xs mt-0.5">Tahun {tahun}</p>
       </div>
 
       <p className="text-xs text-slate-500 mb-3">

@@ -97,6 +97,33 @@ export const getArahanBayaranManual = async (
   }
 };
 
+/**
+ * Program, tahun dan siri yang bayaran ini sebenarnya milik.
+ *
+ * Diperlukan kerana `billReturnUrl` menyebabkan MUAT SEMULA PENUH halaman.
+ * Selepas itu penapis UI (`selectedBadgeFilter`, siri aktif) kembali kepada
+ * nilai awalnya, jadi skrin bayaran yang dibuka semula tidak lagi tahu program
+ * mana yang sedang dibayar. Baris bayaran tahu — tanya kepadanya.
+ */
+export const getMaklumatBayaran = async (
+  paymentId: string,
+): Promise<{ badgeName: string; year: number; siri: number } | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('year, siri, badge:badge_id(name)')
+      .eq('id', paymentId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const badge: any = Array.isArray(data.badge) ? data.badge[0] : data.badge;
+    if (!badge?.name) return null;
+    return { badgeName: badge.name, year: data.year, siri: data.siri ?? 1 };
+  } catch (error) {
+    console.error('getMaklumatBayaran error:', error);
+    return null;
+  }
+};
+
 export const BALDI_BUKTI = 'payment-proofs';
 
 /**

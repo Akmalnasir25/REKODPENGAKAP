@@ -19,6 +19,8 @@ interface AdminBadgesProps {
   };
 }
 
+type BarisOverride = { siri: number | null; schoolType: SchoolType | null; peserta: string; pemimpin: string; penolong: string };
+
 export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl, onRefresh, scopeContext }) => {
   const [newBadge, setNewBadge] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,9 +42,10 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formFeePenolong, setFormFeePenolong] = useState('');
   // Override yuran: kadar berbeza ikut siri dan/atau jenis sekolah (migrasi 031).
   // Yuran asas di atas menentukan SIAPA dicaj; baris di sini hanya BERAPA.
-  type BarisOverride = { siri: number | null; schoolType: SchoolType | null; peserta: string; pemimpin: string; penolong: string };
   const [formOverrides, setFormOverrides] = useState<BarisOverride[]>([]);
   const [allOverrides, setAllOverrides] = useState<ProgramFeeOverride[]>([]);
+  // Tab jenis sekolah yang sedang disunting dalam grid kadar. null = semua jenis.
+  const [overrideType, setOverrideType] = useState<SchoolType | null>(null);
   const [formShirtEnabled, setFormShirtEnabled] = useState(false);
   const [formSiriEnabled, setFormSiriEnabled] = useState(false);
   const [formMaxSiri, setFormMaxSiri] = useState(5);
@@ -76,6 +79,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormShirtEnabled(s?.shirtEnabled || false);
     setFormSiriEnabled(s?.siriEnabled || false);
     setFormMaxSiri(s?.maxSiri || 5);
+    setOverrideType(null);
     setFormOverrides(
       allOverrides
         .filter(o => s && o.programSettingId === s.id)
@@ -87,6 +91,29 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
           penolong: o.feePenolong != null ? String(o.feePenolong) : '',
         })),
     );
+  };
+
+  // Baris grid: satu per siri bila siri aktif, satu baris "semua" bila tidak.
+  const barisSiri: (number | null)[] = formSiriEnabled
+    ? Array.from({ length: formMaxSiri }, (_, i) => i + 1)
+    : [null];
+
+  const cariBaris = (siri: number | null) =>
+    formOverrides.find(r => r.siri === siri && r.schoolType === overrideType);
+
+  const bacaSel = (siri: number | null, peranan: 'peserta' | 'pemimpin' | 'penolong') =>
+    cariBaris(siri)?.[peranan] ?? '';
+
+  const tulisSel = (siri: number | null, peranan: 'peserta' | 'pemimpin' | 'penolong', nilai: string) => {
+    const sedia = cariBaris(siri);
+    if (sedia) {
+      setFormOverrides(formOverrides.map(r => (r === sedia ? { ...r, [peranan]: nilai } : r)));
+    } else {
+      setFormOverrides([
+        ...formOverrides,
+        { siri, schoolType: overrideType, peserta: '', pemimpin: '', penolong: '', [peranan]: nilai } as BarisOverride,
+      ]);
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -498,86 +525,73 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                       </div>
                     ))}
 
-                    {/* KADAR BERBEZA - override ikut siri / jenis sekolah */}
+                    {/* KADAR IKUT SIRI & JENIS SEKOLAH */}
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-bold text-teal-700 uppercase">Kadar Berbeza (opsyenal)</span>
-                        <button
-                          type="button"
-                          onClick={() => setFormOverrides([...formOverrides, { siri: null, schoolType: 'menengah', peserta: '', pemimpin: '', penolong: '' }])}
-                          className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2.5 py-1 hover:bg-teal-100 transition"
-                        >
-                          + Tambah kadar
-                        </button>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold text-teal-700 uppercase">
+                          Kadar Ikut {formSiriEnabled ? 'Siri & ' : ''}Jenis Sekolah
+                        </span>
+                        <div className="flex gap-1">
+                          {([[null, 'Semua'], ['rendah', 'SR'], ['menengah', 'SM']] as [SchoolType | null, string][]).map(([jenis, label]) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => setOverrideType(jenis)}
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition ${
+                                overrideType === jenis
+                                  ? 'bg-teal-600 text-white border-teal-600'
+                                  : 'bg-white text-teal-700 border-teal-200 hover:bg-teal-50'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <p className="text-[10px] text-gray-400 mb-2">
-                        Kosongkan medan untuk guna kadar asas di atas. Peranan tanpa yuran asas tidak
-                        boleh dicaj di sini - kadar berbeza hanya menukar jumlah, bukan siapa dicaj.
+                        Biar kosong untuk guna kadar asas di atas. Peranan tanpa yuran asas tidak boleh
+                        dicaj di sini - kadar ini menukar jumlah, bukan siapa dicaj.
                       </p>
 
-                      {formOverrides.length === 0 && (
-                        <p className="text-[11px] text-gray-400 italic">Semua sekolah dan siri guna kadar asas.</p>
-                      )}
-
-                      <div className="space-y-2">
-                        {formOverrides.map((row, i) => {
-                          const ubah = (patch: Partial<typeof row>) =>
-                            setFormOverrides(formOverrides.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-                          return (
-                            <div key={i} className="bg-teal-50/60 border border-teal-200 rounded-lg p-2 space-y-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  value={row.siri === null ? '' : String(row.siri)}
-                                  onChange={(e) => ubah({ siri: e.target.value === '' ? null : Number(e.target.value) })}
-                                  className="flex-1 p-1.5 border border-teal-200 rounded text-[11px] font-semibold bg-white"
-                                >
-                                  <option value="">Semua Siri</option>
-                                  {Array.from({ length: formSiriEnabled ? formMaxSiri : 1 }, (_, k) => k + 1)
-                                    .map(n => <option key={n} value={n}>Siri {n}</option>)}
-                                </select>
-                                <select
-                                  value={row.schoolType === null ? '' : row.schoolType}
-                                  onChange={(e) => ubah({ schoolType: e.target.value === '' ? null : (e.target.value as SchoolType) })}
-                                  className="flex-1 p-1.5 border border-teal-200 rounded text-[11px] font-semibold bg-white"
-                                >
-                                  <option value="">Semua Jenis</option>
-                                  <option value="rendah">SR sahaja</option>
-                                  <option value="menengah">SM sahaja</option>
-                                  <option value="lain">Lain-lain</option>
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={() => setFormOverrides(formOverrides.filter((_, j) => j !== i))}
-                                  className="text-gray-400 hover:text-red-500 p-1"
-                                  title="Buang kadar ini"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                              <div className="grid grid-cols-3 gap-1.5">
-                                {([
-                                  ['Peserta', row.peserta, (v: string) => ubah({ peserta: v }), !formFeePeserta.trim()],
-                                  ['Pemimpin', row.pemimpin, (v: string) => ubah({ pemimpin: v }), !formFeePemimpin.trim()],
-                                  ['Penolong', row.penolong, (v: string) => ubah({ penolong: v }), !formFeePenolong.trim()],
-                                ] as [string, string, (v: string) => void, boolean][]).map(([label, val, set, disabled]) => (
-                                  <div key={label}>
-                                    <label className="block text-[9px] font-bold text-gray-400 uppercase">{label}</label>
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="text-gray-400">
+                            <th className="text-left font-bold uppercase text-[9px] pb-1">
+                              {formSiriEnabled ? 'Siri' : 'Kadar'}
+                            </th>
+                            <th className="font-bold uppercase text-[9px] pb-1">Peserta</th>
+                            <th className="font-bold uppercase text-[9px] pb-1">Pemimpin</th>
+                            <th className="font-bold uppercase text-[9px] pb-1">Penolong</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {barisSiri.map(siri => (
+                            <tr key={String(siri)}>
+                              <td className="pr-2 py-0.5 font-bold text-teal-800 whitespace-nowrap">
+                                {siri === null ? 'Semua' : `Siri ${siri}`}
+                              </td>
+                              {(['peserta', 'pemimpin', 'penolong'] as const).map(peranan => {
+                                const asas = peranan === 'peserta' ? formFeePeserta
+                                  : peranan === 'pemimpin' ? formFeePemimpin : formFeePenolong;
+                                const mati = !asas.trim();
+                                return (
+                                  <td key={peranan} className="px-0.5 py-0.5">
                                     <input
                                       type="number" min="0" step="0.01"
-                                      value={val}
-                                      disabled={disabled}
-                                      onChange={(e) => set(e.target.value)}
-                                      placeholder={disabled ? 'tak dicaj' : 'asas'}
-                                      title={disabled ? 'Peranan ini tiada yuran asas, jadi ia tidak dicaj langsung' : undefined}
-                                      className="w-full p-1.5 border border-teal-200 rounded text-[11px] bg-white disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                                      value={bacaSel(siri, peranan)}
+                                      disabled={mati}
+                                      onChange={(e) => tulisSel(siri, peranan, e.target.value)}
+                                      placeholder={mati ? '-' : asas}
+                                      title={mati ? 'Peranan ini tiada yuran asas, jadi ia tidak dicaj langsung' : `Kosong = ikut kadar asas (RM${asas})`}
+                                      className="w-full p-1.5 border border-teal-200 rounded text-center bg-white disabled:bg-gray-100 disabled:text-gray-300 disabled:cursor-not-allowed focus:ring-2 focus:ring-teal-400 outline-none"
                                     />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}

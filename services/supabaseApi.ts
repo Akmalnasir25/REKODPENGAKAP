@@ -754,7 +754,15 @@ export const approveSchoolBadge = async (_url: string, schoolName: string, badge
     const school = await getSchoolByCodeOrName(undefined, schoolName);
     const badge = await getBadgeByName(badgeName);
     if (!school || !badge) return { status: 'error', message: 'Sekolah atau badge tidak dijumpai.' };
-    await supabase.from('school_badge_status').upsert({ school_id: school.id, badge_id: badge.id, year: year || currentYear(), siri, status: 'approved' }, { onConflict: 'school_id,badge_id,year,siri' });
+    // Ralat MESTI diperiksa. Pencetus enforce_payment_before_approval boleh
+    // menolak peralihan ini, dan supabase-js memulangkan ralat itu — ia tidak
+    // membuangnya. Tanpa semakan ini, kelulusan yang ditolak dilaporkan
+    // sebagai berjaya dan butang Sahkan kelihatan seperti tidak berfungsi.
+    const { error } = await supabase.from('school_badge_status').upsert(
+      { school_id: school.id, badge_id: badge.id, year: year || currentYear(), siri, status: 'approved' },
+      { onConflict: 'school_id,badge_id,year,siri' },
+    );
+    if (error) throw error;
     return { status: 'success' };
   } catch (error: any) {
     return { status: 'error', message: error.message || 'Gagal approve badge.' };

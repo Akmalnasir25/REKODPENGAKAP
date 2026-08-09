@@ -38,3 +38,5 @@ nano opencode.json
 
 # Fail uji-kering yang dijana daripada migrasi — jangan commit (boleh jadi lapuk)
 UJI-KERING-*.sql
+
+PASANG-*.sql

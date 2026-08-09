@@ -142,16 +142,32 @@ serve(async (req) => {
       });
     }
 
-    // Jumlah mesti sepadan sebelum diakui.
+    // Pembayar membayar yuran DITAMBAH caj FPX (billChargeToCustomer=0), jadi
+    // billpaymentAmount melaporkan jumlah yang keluar dari poket mereka - bukan
+    // jumlah bil kita. Padanan tepat menolak setiap bayaran yang sah.
+    //
+    // Kurang daripada jumlah bil TIDAK mungkin berlaku: billPriceSetting=1
+    // mengunci amaun di gateway. Jadi lebihan sentiasa caj gateway, dan hanya
+    // kekurangan yang menandakan sesuatu yang salah.
     const dibayar = Number(String(medan(berjaya, 'billpaymentAmount') ?? '0').replace(/[^0-9.]/g, ''));
     const dijangka = Number(bayaran.total_amount);
-    if (Math.abs(dibayar - dijangka) > 0.01) {
+    if (dibayar < dijangka - 0.01) {
       await admin.from('audit_logs').insert({
         action: 'semak_status_jumlah_tidak_sepadan',
         entity_type: 'payments', entity_id: bayaran.id,
         details: { dibayar, dijangka },
       }).then(() => {}, () => {});
       return json({ status: 'error', message: 'Jumlah bayaran tidak sepadan. Hubungi admin.' }, 409);
+    }
+
+      // Rekod caj sebenar. Ini menjadikan baris bayaran mencerminkan apa yang
+      // benar-benar berlaku, dan menjadikan semakan idempoten seterusnya padan
+      // dengan tepat.
+    if (dibayar > dijangka + 0.01) {
+      await admin.from('payments').update({
+        transaction_fee: Number((dibayar - dijangka).toFixed(2)),
+        total_amount: dibayar,
+      }).eq('id', bayaran.id);
     }
 
     // Urutan selepas pengesahan dikongsi dengan webhook — lihat migrasi 033.

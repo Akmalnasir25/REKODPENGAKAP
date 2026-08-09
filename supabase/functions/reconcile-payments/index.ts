@@ -105,14 +105,24 @@ serve(async (req) => {
         const berjaya = transaksi.find((t) => String(medan(t, 'billpaymentStatus') ?? '') === '1');
 
         if (berjaya) {
+          // Lihat nota dalam toyyibpay-callback: pembayar membayar yuran
+          // ditambah caj gateway, jadi hanya KEKURANGAN yang salah.
           const dibayar = Number(String(medan(berjaya, 'billpaymentAmount') ?? '0').replace(/[^0-9.]/g, ''));
-          if (Math.abs(dibayar - Number(bayaran.total_amount)) > 0.01) {
+          if (dibayar < Number(bayaran.total_amount) - 0.01) {
             await admin.from('payments').update({
               status: 'failed',
               notes: `Reconciliation: jumlah tidak sepadan (${dibayar} vs ${bayaran.total_amount})`,
             }).eq('id', bayaran.id);
             ringkasan.gagal++;
             continue;
+          }
+
+          const lebihan = dibayar - Number(bayaran.total_amount);
+          if (lebihan > 0.01) {
+            await admin.from('payments').update({
+              transaction_fee: Number(lebihan.toFixed(2)),
+              total_amount: dibayar,
+            }).eq('id', bayaran.id);
           }
 
           // Urutan yang sama dengan webhook dan check-status (migrasi 033).

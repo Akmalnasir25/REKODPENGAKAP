@@ -186,10 +186,16 @@ serve(async (req) => {
       return ok('gateway tidak mengesahkan bayaran berjaya');
     }
 
-    // Jumlah mesti sepadan dengan total_amount (yuran + caj), bukan amount.
+    // Pembayar membayar yuran DITAMBAH caj FPX (billChargeToCustomer=0), jadi
+    // billpaymentAmount melaporkan jumlah yang keluar dari poket mereka - bukan
+    // jumlah bil kita. Padanan tepat menolak setiap bayaran yang sah.
+    //
+    // Kurang daripada jumlah bil TIDAK mungkin berlaku: billPriceSetting=1
+    // mengunci amaun di gateway. Jadi lebihan sentiasa caj gateway, dan hanya
+    // kekurangan yang menandakan sesuatu yang salah.
     const dibayar = Number(String(medan(berjaya, 'billpaymentAmount') ?? '0').replace(/[^0-9.]/g, ''));
     const dijangka = Number(bayaran.total_amount);
-    if (Math.abs(dibayar - dijangka) > 0.01) {
+    if (dibayar < dijangka - 0.01) {
       await admin.from('payments').update({
         status: 'failed',
         notes: `Jumlah tidak sepadan: dibayar ${dibayar}, dijangka ${dijangka}`,
@@ -200,6 +206,16 @@ serve(async (req) => {
         details: { dibayar, dijangka, billcode },
       }).then(() => {}, () => {});
       return ok('jumlah tidak sepadan');
+    }
+
+      // Rekod caj sebenar. Ini menjadikan baris bayaran mencerminkan apa yang
+      // benar-benar berlaku, dan menjadikan semakan idempoten seterusnya padan
+      // dengan tepat.
+    if (dibayar > dijangka + 0.01) {
+      await admin.from('payments').update({
+        transaction_fee: Number((dibayar - dijangka).toFixed(2)),
+        total_amount: dibayar,
+      }).eq('id', bayaran.id);
     }
 
     // ── PINTU TEMPAT + penyelesaian ───────────────────────────────────

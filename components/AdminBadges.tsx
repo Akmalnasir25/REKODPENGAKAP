@@ -38,6 +38,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [settingsModalBadge, setSettingsModalBadge] = useState<Badge | null>(null);
   const [settingsYear, setSettingsYear] = useState(currentYear);
   const [formPaymentEnabled, setFormPaymentEnabled] = useState(false);
+  const [formOnlineRequired, setFormOnlineRequired] = useState(false);
   const [formFeePeserta, setFormFeePeserta] = useState('');
   const [formFeePemimpin, setFormFeePemimpin] = useState('');
   const [formFeePenolong, setFormFeePenolong] = useState('');
@@ -74,6 +75,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setSettingsModalBadge(b);
     setSettingsYear(year);
     setFormPaymentEnabled(s?.paymentEnabled || false);
+    setFormOnlineRequired(s?.paymentOnlineRequired || false);
     setFormFeePeserta(s?.feePeserta != null ? String(s.feePeserta) : '');
     setFormFeePemimpin(s?.feePemimpin != null ? String(s.feePemimpin) : '');
     setFormFeePenolong(s?.feePenolong != null ? String(s.feePenolong) : '');
@@ -129,6 +131,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         negeriCode: negeriOf(b),
         daerahCode: daerahOf(b),
         paymentEnabled: formPaymentEnabled,
+        paymentOnlineRequired: formOnlineRequired,
         feePeserta: formFeePeserta.trim() ? Number(formFeePeserta) : null,
         feePemimpin: formFeePemimpin.trim() ? Number(formFeePemimpin) : null,
         feePenolong: formFeePenolong.trim() ? Number(formFeePenolong) : null,
@@ -534,6 +537,28 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                         />
                       </div>
                     ))}
+
+                    {/* PINTU BAYARAN — togol yang menghidupkan aliran sebenar */}
+                    <label className="flex items-start justify-between gap-3 mt-3 pt-3 border-t border-dashed border-gray-200 cursor-pointer">
+                      <span>
+                        <span className="block font-bold text-sm text-red-700">Wajib Bayar Sebelum Hantar</span>
+                        <span className="block text-[10px] text-gray-500 mt-0.5">
+                          Sekolah mesti membayar atau memuat naik bukti sebelum pendaftaran masuk
+                          giliran pengesahan. Biarkan mati untuk kekalkan yuran sebagai paparan sahaja.
+                        </span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={formOnlineRequired}
+                        onChange={(e) => setFormOnlineRequired(e.target.checked)}
+                        className="w-5 h-5 accent-red-600 shrink-0 mt-0.5"
+                      />
+                    </label>
+                    {formOnlineRequired && (
+                      <p className="text-[10px] text-red-600 font-semibold bg-red-50 border border-red-200 rounded p-2">
+                        Aktif: sekolah TIDAK boleh menghantar pendaftaran program ini tanpa menyelesaikan bayaran.
+                      </p>
+                    )}
 
                     {/* KADAR IKUT SIRI & JENIS SEKOLAH */}
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-200">

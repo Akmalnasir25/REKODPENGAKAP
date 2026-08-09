@@ -1849,6 +1849,9 @@ export const saveProgramFeeOverrides = async (
 export interface ProgramSetting {
   id: string;
   badgeName: string;
+  /** Mengaktifkan pintu bayaran sebenar. Berasingan daripada paymentEnabled,
+   *  yang kekal sebagai paparan caj informational. */
+  paymentOnlineRequired: boolean;
   scope: 'negeri' | 'daerah';
   negeriCode?: string | null;
   daerahCode?: string | null;
@@ -1869,7 +1872,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1889,6 +1892,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         daerahCode: daerah?.code || null,
         year: r.year,
         paymentEnabled: !!r.payment_enabled,
+        paymentOnlineRequired: !!r.payment_online_required,
         feePeserta: r.fee_peserta !== null && r.fee_peserta !== undefined ? Number(r.fee_peserta) : null,
         feePemimpin: r.fee_pemimpin !== null && r.fee_pemimpin !== undefined ? Number(r.fee_pemimpin) : null,
         feePenolong: r.fee_penolong !== null && r.fee_penolong !== undefined ? Number(r.fee_penolong) : null,
@@ -1903,6 +1907,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
 };
 
 export interface UpsertProgramSettingInput {
+  paymentOnlineRequired?: boolean;
   badgeName: string;
   year: number;
   scope: 'negeri' | 'daerah';
@@ -1935,6 +1940,9 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       daerah_id: daerahId,
       year: input.year,
       payment_enabled: input.paymentEnabled,
+      // Hanya bermakna bila ada yuran — tanpa yuran, jumlahnya RM0 dan pintu
+      // bayaran akan menyekat sekolah pada skrin yang mustahil dilepasi.
+      payment_online_required: input.paymentEnabled ? !!input.paymentOnlineRequired : false,
       fee_peserta: input.paymentEnabled ? input.feePeserta : null,
       fee_pemimpin: input.paymentEnabled ? input.feePemimpin : null,
       fee_penolong: input.paymentEnabled ? input.feePenolong : null,

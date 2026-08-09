@@ -13,6 +13,7 @@ const getSubmissionYear = (value?: string | null) => {
 };
 import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri } from '../services/supabaseApi';
 import { badgeStatusKey } from '../utils/dataProcessing';
+import { PaymentScreen } from './PaymentScreen';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
 import { ExportButton } from './ui/ExportButton';
@@ -59,6 +60,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBadgeFilter, setSelectedBadgeFilter] = useState('');
   const [selectedSiriFilter, setSelectedSiriFilter] = useState<number | ''>('');
+  // Skrin bayaran. paymentResume diisi bila sekolah kembali dari gateway,
+  // supaya status disemak serta-merta dan bukan menunggu webhook.
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentResume, setPaymentResume] = useState<string | undefined>(undefined);
   
   // Views
   const [showHistoryView, setShowHistoryView] = useState(false);
@@ -111,6 +116,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
   const [importTargetSiri, setImportTargetSiri] = useState(1);
   useEffect(() => { getProgramSettings(selectedYear).then(setProgramSettings); }, [selectedYear]);
+
+  // Kembali dari gateway: billReturnUrl membawa ?bayaran=<paymentId>. Buka
+  // semula skrin bayaran supaya statusnya disemak sebelum sekolah tertanya.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('bayaran');
+    if (id) {
+      setPaymentResume(id);
+      setShowPayment(true);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
   // Password State
   const [oldPassword, setOldPassword] = useState('');
@@ -752,8 +769,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     } catch (e) { alert('Ralat server.'); } finally { setSavingEdit(false); }
   };
 
+  // Program yang mewajibkan bayaran untuk sekolah ini pada tahun semasa.
+  const tetapanBayaranAktif = useMemo(() => programSettings.find(ps =>
+    ps.badgeName === selectedBadgeFilter && ps.year === selectedYear && ps.paymentOnlineRequired
+    && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
+      || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))),
+    [programSettings, selectedBadgeFilter, selectedYear, currentSchoolSettings]);
+
   const handleFinalSubmit = async () => {
     if (!selectedBadgeFilter) return;
+
+    // Pintu bayaran: pendaftaran TIDAK dihantar terus. Ia kekal draf sehingga
+    // bayaran diuruskan; Edge Function yang menghantarnya selepas itu.
+    if (tetapanBayaranAktif) { setPaymentResume(undefined); setShowPayment(true); return; }
     if (!confirm(`PENGESAHAN AKHIR (${selectedYear})\n\nAdakah anda pasti mahu menghantar pendaftaran untuk program '${selectedBadgeFilter}' pada tahun ${selectedYear}?\n\nSelepas ini data akan dikunci.`)) return;
     setIsLocking(true);
     try {
@@ -2090,6 +2118,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             setShowProfileModal(false);
             setShowPasswordModal(true);
           }}
+        />
+      )}
+
+      {showPayment && (
+        <PaymentScreen
+          badgeName={selectedBadgeFilter}
+          year={selectedYear}
+          siri={activeSiri}
+          negeriCode={currentSchoolSettings?.negeriCode}
+          daerahCode={currentSchoolSettings?.daerahCode}
+          paymentIdSediaAda={paymentResume}
+          onTutup={() => { setShowPayment(false); setPaymentResume(undefined); }}
+          onSelesai={() => { setShowPayment(false); setPaymentResume(undefined); onRefresh(); }}
         />
       )}
     </div>

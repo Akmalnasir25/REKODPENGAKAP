@@ -96,11 +96,16 @@ export function deduplicateRecords(data: SubmissionData[], schools: School[], sh
     if (item.school === '__SYSTEM_YEAR_MARKER__') return false;
     if (!item.student || typeof item.student !== 'string' || !item.student.trim()) return false;
 
-    // Draf belum dihantar — cth pendaftaran yang menunggu bayaran. Ditapis DI SINI
-    // dan bukan semasa fetch, kerana senarai penuh masih diperlukan oleh semakan
-    // pendua dalam UserForm: kalau draf disembunyikan dari situ, dua sekolah boleh
-    // mendaftar orang yang sama dan kedua-duanya membayar.
-    if (item.submissionStatus === 'draft') return false;
+    // NOTA: JANGAN tapis submissionStatus === 'draft' di sini.
+    // Dicuba dan digulung semula: dalam sistem ini 'draft' bukan sahaja bermakna
+    // "menunggu bayaran" — ia juga keadaan biasa bagi peserta yang ditambah
+    // SELEPAS sekolah menekan Hantar (cth melalui Import Naik). Peserta tersebut
+    // menumpang pengesahan sedia ada dan memang dikira hari ini; menapisnya akan
+    // melenyapkan rekod sah daripada laporan rasmi.
+    //
+    // Pintu bayaran tidak memerlukannya: trigger enforce_payment_before_approval
+    // (migrasi 029) menghalang 'approved' selagi bayaran belum selesai, dan
+    // statistik hanya mengira yang 'approved'.
 
     let isApproved = false;
     if (showDrafts) {

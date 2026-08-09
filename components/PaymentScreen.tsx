@@ -48,8 +48,8 @@ export const PaymentScreen: React.FC<Props> = ({
   const [memuatNaik, setMemuatNaik] = useState(false);
 
   useEffect(() => {
-    getArahanBayaranManual(negeriCode, daerahCode).then(setArahan);
-  }, [negeriCode, daerahCode]);
+    getArahanBayaranManual(badgeName, year).then(setArahan);
+  }, [badgeName, year]);
 
   // Sambung semula selepas kembali dari gateway: semak status sebelum
   // memaparkan apa-apa, supaya sekolah tidak melihat "belum bayar" sedangkan

@@ -68,32 +68,30 @@ export const hantarBuktiBayaran = (input: {
   notes?: string;
 }): Promise<StatusBayaran> => panggil('submit-payment-proof', input);
 
-/** Maklumat akaun bank bagi skop sekolah — dipapar untuk bayaran manual. */
+/**
+ * Kaedah bayaran yang tersedia untuk sekolah pemanggil bagi program ini.
+ *
+ * Melalui RPC berskop sekolah, BUKAN view payment_gateway_settings_public —
+ * view itu berakhir dengan `else false` dan tidak memulangkan apa-apa kepada
+ * pengguna sekolah. Itu yang menyebabkan skrin bayaran memaparkan pindahan
+ * bank tanpa nombor akaun dan tidak pernah menawarkan ToyyibPay.
+ */
 export const getArahanBayaranManual = async (
-  negeriCode?: string, daerahCode?: string,
+  badgeName: string, year: number,
 ): Promise<{ bankAccountInfo: string | null; adaOnline: boolean }> => {
   try {
-    let q = supabase.from('payment_gateway_settings_public')
-      .select('bank_account_info, category_code, is_active');
-    if (daerahCode) {
-      const { data: d } = await supabase.from('daerah').select('id').eq('code', daerahCode).maybeSingle();
-      if (!d?.id) return { bankAccountInfo: null, adaOnline: false };
-      q = q.eq('daerah_id', d.id);
-    } else if (negeriCode) {
-      const { data: n } = await supabase.from('negeri').select('id').eq('code', negeriCode).maybeSingle();
-      if (!n?.id) return { bankAccountInfo: null, adaOnline: false };
-      q = q.eq('negeri_id', n.id);
-    } else {
-      return { bankAccountInfo: null, adaOnline: false };
-    }
-    const { data } = await q.maybeSingle();
+    const { data, error } = await supabase.rpc('get_payment_methods', {
+      p_badge_name: badgeName,
+      p_year: year,
+    });
+    if (error) throw error;
+    const baris = Array.isArray(data) ? data[0] : data;
     return {
-      bankAccountInfo: data?.bank_account_info ?? null,
-      // ToyyibPay hanya ditawarkan bila skop ini benar-benar ada akaun aktif.
-      // Daerah tanpa akaun mendapat pindahan bank & cek sahaja.
-      adaOnline: !!(data?.is_active && data?.category_code),
+      bankAccountInfo: baris?.bank_account_info ?? null,
+      adaOnline: !!baris?.online_available,
     };
-  } catch {
+  } catch (error) {
+    console.error('getArahanBayaranManual error:', error);
     return { bankAccountInfo: null, adaOnline: false };
   }
 };

@@ -19,11 +19,28 @@
 --   1. Baca rahsia yang dijana:
 --        select public.reconciliation_secret_sekali();
 --   2. Tetapkan nilai yang SAMA sebagai rahsia Edge Function:
---        npx supabase secrets set RECONCILE_SECRET=<nilai>
+--        npx supabase secrets set RECONCILE_SECRET=nilai_yang_dibaca_tadi
 --        npx supabase functions deploy reconcile-payments --no-verify-jwt
+--
+--      Nilai itu MENTAH — tiada tanda kurungan, petikan atau ruang. Kesilapan
+--      ini sudah pernah berlaku sekali: placeholder ditulis sebagai <nilai>,
+--      dan tanda kurungan tersalin sekali ke dalam rahsia Edge Function. Cron
+--      menghantar nilai yang betul, fungsi menjangka nilai berkurungan, dan
+--      setiap larian ditolak 401 selama berjam-jam tanpa apa-apa tanda.
 --
 --   Tanpa langkah 2, setiap larian cron akan mendapat 401 dan reconciliation
 --   tidak pernah berjalan — secara senyap.
+--
+-- CARA MENGESAN KEGAGALAN INI
+--   BUKAN melalui cron.job_run_details. pg_net bersifat fire-and-forget, jadi
+--   larian dilaporkan 'succeeded' selagi SQL berjaya dihantar — walaupun Edge
+--   Function menolaknya 401.
+--
+--   Penunjuk sebenar ialah audit_logs. Setiap larian yang benar-benar sampai
+--   menulis satu baris:
+--     select to_char(created_at,'HH24:MI:SS'), details from audit_logs
+--     where action = 'reconciliation_dijalankan' order by created_at desc limit 5;
+--   Tiada baris baharu dalam 10 minit lepas bermakna ia sedang mati senyap.
 -- ============================================================
 
 

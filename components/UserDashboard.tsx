@@ -658,17 +658,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     });
   };
 
+  // Pilih Semua mesti menghormati kebenaran yang sama seperti kotak semak
+  // individu. Kotak individu dilumpuhkan untuk baris terkunci, tetapi Pilih
+  // Semua dahulunya memilih SETIAP baris — jadi menutup Peserta menghalang
+  // setiap kotak satu per satu sambil membiarkan satu klik memilih kesemuanya,
+  // dan padam pukal terus memadamnya.
+  const indeksBolehUbah = () =>
+    filteredData.map((d, i) => (canModifyRecord(d) ? i : -1)).filter(i => i >= 0);
+
   const toggleSelectAll = () => {
-    if (selectedForDelete.size === filteredData.length) {
-      setSelectedForDelete(new Set());
-    } else {
-      setSelectedForDelete(new Set(filteredData.map((_, i) => i)));
-    }
+    const boleh = indeksBolehUbah();
+    setSelectedForDelete(selectedForDelete.size >= boleh.length ? new Set() : new Set(boleh));
   };
 
   const handleBulkDelete = async () => {
     if (selectedForDelete.size === 0) return;
-    const selItems = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean);
+    const dipilih = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean);
+
+    // Pengadang sebenar. Kotak semak yang dilumpuhkan hanya memudahkan;
+    // pemilihan boleh bertahan merentas perubahan penapis, dan kebenaran
+    // boleh berubah selepas baris dipilih.
+    const selItems = dipilih.filter(d => canModifyRecord(d));
+    const disekat = dipilih.length - selItems.length;
+    if (selItems.length === 0) {
+      alert('Tiada rekod yang boleh dipadam. Rekod yang dipilih terkunci, sudah disahkan, atau peranannya telah ditutup oleh admin.');
+      return;
+    }
+
     const yrOf = (d: any) => { try { return new Date(d.date).getFullYear(); } catch { return '?'; } };
     const programs = [...new Set(selItems.map(d => `${d.badge} ${yrOf(d)}`))];
     const schoolsAff = [...new Set(selItems.map(d => d.school).filter(Boolean))];
@@ -679,6 +695,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       `Program: ${programs.join(', ')}\n` +
       `Sekolah: ${schoolsAff.join(', ')}\n\n` +
       `${preview}${more}\n\n` +
+      (disekat > 0 ? `(${disekat} rekod lain dilangkau — terkunci atau peranannya ditutup.)\n\n` : '') +
       `Rekod ini akan dikeluarkan dari senarai pendaftaran.`
     )) return;
     // Pengesahan kedua untuk padaman banyak (elak tersilap padam pukal).
@@ -720,12 +737,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const handleBulkSetSiri = async (siri: number) => {
     if (selectedForDelete.size === 0) return;
-    const selItems = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean);
+    const dipilih = Array.from(selectedForDelete).map(i => filteredData[i]).filter(Boolean);
+    // Menukar siri ialah pengubahsuaian rekod, jadi ia terikat pada kebenaran
+    // yang sama seperti sunting dan padam.
+    const selItems = dipilih.filter(d => canModifyRecord(d));
+    if (selItems.length === 0) {
+      alert('Tiada rekod yang boleh diubah. Rekod yang dipilih terkunci, sudah disahkan, atau peranannya telah ditutup oleh admin.');
+      return;
+    }
     const eligible = selItems.filter(d => siriEnabledBadgeNames.has(d.badge));
-    const skipped = selItems.length - eligible.length;
+    const skipped = dipilih.length - eligible.length;
     if (eligible.length === 0) { alert('Tiada peserta dipilih yang program-nya aktifkan Siri.'); return; }
     const personIds = eligible.map(d => d.participantId).filter((id): id is string => !!id);
-    if (!confirm(`Tandakan ${personIds.length} peserta sebagai Siri ${siri}?${skipped > 0 ? `\n(${skipped} peserta lain diabaikan kerana program mereka tak aktifkan Siri.)` : ''}`)) return;
+    if (!confirm(`Tandakan ${personIds.length} peserta sebagai Siri ${siri}?${skipped > 0 ? `\n(${skipped} peserta lain diabaikan — program tidak aktifkan Siri, atau rekod terkunci/peranan ditutup.)` : ''}`)) return;
     setIsSettingSiri(true);
     try {
       const res = await setParticipantsSiri(personIds, siri);
@@ -1669,7 +1693,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold">
                                 <tr>
                                     <th className="px-3 py-3 w-8">
-                                      <input type="checkbox" checked={filteredData.length > 0 && selectedForDelete.size === filteredData.length} onChange={toggleSelectAll} className="rounded" />
+                                      {/* Dikira terhadap baris yang boleh diubah sahaja — jika tidak
+                                          kotak ini tidak pernah bertanda apabila sebahagian rekod
+                                          terkunci, walaupun semua yang boleh dipilih sudah dipilih. */}
+                                      <input type="checkbox" checked={(() => { const b = indeksBolehUbah().length; return b > 0 && selectedForDelete.size >= b; })()} onChange={toggleSelectAll} className="rounded" />
                                     </th>
                                     <th className="px-4 py-3">Nama</th>
                                     <th className="px-4 py-3">KP / Program</th>

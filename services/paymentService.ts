@@ -97,3 +97,91 @@ export const getArahanBayaranManual = async (
     return { bankAccountInfo: null, adaOnline: false };
   }
 };
+
+// ============================================================
+// Sebelah admin
+// ============================================================
+
+export interface BayaranUntukSemakan {
+  id: string;
+  schoolName: string;
+  badgeName: string;
+  year: number;
+  siri: number;
+  amount: number;
+  method: string;
+  status: string;
+  seatStatus: string;
+  referenceNumber: string | null;
+  paidAt: string | null;
+  bukti: Array<{ fileName: string; filePath: string }>;
+}
+
+/**
+ * Bayaran yang memerlukan perhatian admin:
+ *   pending_review — bukti manual menunggu semakan
+ *   no_seat        — duit diterima tetapi tempat sudah penuh
+ *
+ * RLS pada `payments` sudah mengehadkan hasil kepada skop admin, jadi tiada
+ * penapisan skop diperlukan di sini.
+ */
+export const getBayaranUntukSemakan = async (): Promise<BayaranUntukSemakan[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('payments')
+      .select(`
+        id, year, siri, amount, method, status, seat_status, reference_number, paid_at,
+        school:school_id(name), badge:badge_id(name),
+        attachments(file_name, file_path, category)
+      `)
+      .or('status.eq.pending_review,seat_status.eq.no_seat')
+      .order('paid_at', { ascending: false, nullsFirst: false });
+    if (error) throw error;
+
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      schoolName: (Array.isArray(r.school) ? r.school[0] : r.school)?.name || '-',
+      badgeName: (Array.isArray(r.badge) ? r.badge[0] : r.badge)?.name || '-',
+      year: r.year,
+      siri: r.siri ?? 1,
+      amount: Number(r.amount ?? 0),
+      method: r.method,
+      status: r.status,
+      seatStatus: r.seat_status,
+      referenceNumber: r.reference_number,
+      paidAt: r.paid_at,
+      bukti: (r.attachments || [])
+        .filter((a: any) => a.category === 'payment_proof')
+        .map((a: any) => ({ fileName: a.file_name, filePath: a.file_path })),
+    }));
+  } catch (error) {
+    console.error('getBayaranUntukSemakan error:', error);
+    return [];
+  }
+};
+
+/** Sahkan atau tolak bukti manual. Kebenaran disemak dalam fungsi DB. */
+export const semakBuktiBayaran = async (
+  paymentId: string, terima: boolean, sebab?: string,
+): Promise<{ ok: boolean; message: string }> => {
+  try {
+    const { data, error } = await supabase.rpc('admin_review_payment', {
+      p_payment_id: paymentId,
+      p_terima: terima,
+      p_sebab: sebab ?? null,
+    });
+    if (error) throw error;
+    if (data?.ok) return { ok: true, message: terima ? 'Bayaran disahkan.' : 'Bukti ditolak.' };
+
+    const sebabMesej: Record<string, string> = {
+      tiada_kebenaran: 'Anda tiada kebenaran untuk tindakan ini.',
+      luar_skop: 'Bayaran ini di luar skop anda.',
+      bayaran_tidak_dijumpai: 'Bayaran tidak dijumpai.',
+      bukan_menunggu_semakan: 'Bayaran ini bukan lagi menunggu semakan.',
+      sebab_diperlukan: 'Sila nyatakan sebab penolakan.',
+    };
+    return { ok: false, message: sebabMesej[data?.sebab] || 'Gagal menyemak bayaran.' };
+  } catch (error: any) {
+    return { ok: false, message: error?.message || 'Ralat sambungan.' };
+  }
+};

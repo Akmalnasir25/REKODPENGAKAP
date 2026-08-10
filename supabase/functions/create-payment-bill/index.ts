@@ -216,6 +216,10 @@ serve(async (req) => {
     const dilangkau: Dilangkau[] = [];
     const sudahDibayar: SudahDibayar[] = [];
     const terusHantar: string[] = [];   // badge_id yang tidak perlu bayaran
+    // Sudah dibayar sepenuhnya tetapi belum berada dalam giliran — cth kerana
+    // admin membukanya semula. Wang sudah masuk, jadi ia mesti boleh kembali
+    // ke giliran tanpa membayar dua kali.
+    const hantarSemula: string[] = [];
 
     for (const badgeId of badgeIds) {
       const badge = badgeById.get(badgeId);
@@ -266,6 +270,13 @@ serve(async (req) => {
           dibayarUntuk: lindung.peserta + lindung.pemimpin + lindung.penolong,
           kini: kira.peserta + kira.pemimpin + kira.penolong,
         });
+        // Sudah dibayar tetapi belum dalam giliran. Berlaku apabila admin
+        // membuka semula pendaftaran yang sudah dijelaskan: melangkaunya
+        // sahaja meninggalkan sekolah tersekat selama-lamanya — mereka tidak
+        // boleh dibil semula, dan tiada apa lagi menghantar pendaftaran itu.
+        if (!sedia || !['submitted', 'approved'].includes(sedia.status)) {
+          hantarSemula.push(badgeId);
+        }
         continue;
       }
 
@@ -361,13 +372,32 @@ serve(async (req) => {
       }
     }
 
+    // ── Sudah dibayar, dikembalikan ke giliran ────────────────────────
+    // payment_status TIDAK disentuh: ia sudah 'paid', dan menulis semula
+    // 'not_required' seperti laluan terusHantar akan memadam fakta bahawa
+    // wang pernah diterima.
+    for (const badgeId of hantarSemula) {
+      await admin.from('school_badge_status')
+        .update({ status: 'submitted' })
+        .eq('school_id', schoolId).eq('badge_id', badgeId)
+        .eq('year', year).eq('siri', siri)
+        .neq('status', 'approved');
+      const subIdsBadge = (subs || []).filter((s: any) => s.badge_id === badgeId).map((s: any) => s.id);
+      if (subIdsBadge.length > 0) {
+        await admin.from('submissions').update({ status: 'submitted' })
+          .in('id', subIdsBadge).eq('status', 'draft');
+      }
+    }
+
     if (itemDibil.length === 0) {
-      if (terusHantar.length > 0) {
+      if (terusHantar.length > 0 || hantarSemula.length > 0) {
         return json({
           status: 'success', skipped: true, dilangkau, sudahDibayar,
-          message: dilangkau.length > 0
-            ? 'Sebahagian program dihantar tanpa bayaran; selebihnya dilangkau.'
-            : 'Tiada yuran dikenakan. Pendaftaran terus dihantar untuk pengesahan.',
+          message: hantarSemula.length > 0
+            ? 'Program yang sudah dibayar dikembalikan ke giliran pengesahan.'
+            : dilangkau.length > 0
+              ? 'Sebahagian program dihantar tanpa bayaran; selebihnya dilangkau.'
+              : 'Tiada yuran dikenakan. Pendaftaran terus dihantar untuk pengesahan.',
         });
       }
       if (sudahDibayar.length > 0) {

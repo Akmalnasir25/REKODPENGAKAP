@@ -196,14 +196,19 @@ serve(async (req) => {
       .eq('school_id', schoolId).eq('year', year).eq('siri', siri)
       .in('status', ['paid', 'pending_review']);
 
-    // Bilangan orang yang bayaran sedia ada BENAR-BENAR meliputi. Kehadiran
-    // baris 'paid' sahaja tidak mencukupi untuk diketahui: peserta yang
-    // ditambah selepas bil dijana tidak pernah dibil (§9b), dan tanpa angka
-    // ini kekurangan itu tidak kelihatan oleh sesiapa.
-    const dilindungi = new Map<string, number>();
+    // Berapa orang yang bayaran sedia ada BENAR-BENAR meliputi, per peranan.
+    //
+    // Kehadiran baris 'paid' tidak memberitahu bilangannya. Snapshot
+    // memberitahu — dan perbandingan mesti per PERANAN, bukan jumlah
+    // keseluruhan: sekolah yang membayar 2 peserta kemudian menambah seorang
+    // pemimpin mempunyai jumlah yang sama tetapi hutang yang berbeza.
+    const dilindungi = new Map<string, { peserta: number; pemimpin: number; penolong: number }>();
     (bayaranSedia || []).forEach((r: any) => {
-      const n = (r.snapshot_peserta ?? 0) + (r.snapshot_pemimpin ?? 0) + (r.snapshot_penolong ?? 0);
-      dilindungi.set(r.badge_id, (dilindungi.get(r.badge_id) ?? 0) + n);
+      const d = dilindungi.get(r.badge_id) || { peserta: 0, pemimpin: 0, penolong: 0 };
+      d.peserta  += r.snapshot_peserta  ?? 0;
+      d.pemimpin += r.snapshot_pemimpin ?? 0;
+      d.penolong += r.snapshot_penolong ?? 0;
+      dilindungi.set(r.badge_id, d);
     });
 
     // ── Nilai setiap program ──────────────────────────────────────────
@@ -222,18 +227,6 @@ serve(async (req) => {
       if (sedia && ['submitted', 'approved'].includes(sedia.status)) {
         continue;   // sudah dalam giliran; bukan dilangkau, cuma tiada kerja
       }
-      if (dilindungi.has(badgeId)) {
-        // Dilangkau supaya sekolah tidak dibil dua kali — tetapi DILAPORKAN,
-        // kerana program yang hilang dari bil tanpa penjelasan kelihatan
-        // seperti sistem tersilap kira.
-        sudahDibayar.push({
-          program: nama,
-          dibayarUntuk: dilindungi.get(badgeId) ?? 0,
-          kini: kira.peserta + kira.pemimpin + kira.penolong,
-        });
-        continue;
-      }
-
       const { data: psId } = await admin.rpc('resolve_program_setting', {
         p_school_id: schoolId, p_badge_id: badgeId, p_year: year,
       });
@@ -255,20 +248,42 @@ serve(async (req) => {
       });
       const yuran = Array.isArray(yuranRows) ? yuranRows[0] : yuranRows;
 
+      // Hanya yang BELUM dilindungi oleh bayaran terdahulu dicaj (§13.12).
+      // Bil susulan mengecaj beza, bukan jumlah penuh dan bukan tiada apa-apa.
+      const lindung = dilindungi.get(badgeId) || { peserta: 0, pemimpin: 0, penolong: 0 };
+      const baki = {
+        peserta:  Math.max(0, kira.peserta  - lindung.peserta),
+        pemimpin: Math.max(0, kira.pemimpin - lindung.pemimpin),
+        penolong: Math.max(0, kira.penolong - lindung.penolong),
+      };
+
+      if (dilindungi.has(badgeId) && baki.peserta + baki.pemimpin + baki.penolong === 0) {
+        // Dilindungi sepenuhnya. Dilangkau supaya sekolah tidak dibil dua
+        // kali — tetapi DILAPORKAN, kerana program yang hilang dari bil tanpa
+        // penjelasan kelihatan seperti sistem tersilap kira.
+        sudahDibayar.push({
+          program: nama,
+          dibayarUntuk: lindung.peserta + lindung.pemimpin + lindung.penolong,
+          kini: kira.peserta + kira.pemimpin + kira.penolong,
+        });
+        continue;
+      }
+
       const amount =
-        (ps.fee_peserta  !== null ? kira.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
-        (ps.fee_pemimpin !== null ? kira.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
-        (ps.fee_penolong !== null ? kira.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0);
+        (ps.fee_peserta  !== null ? baki.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
+        (ps.fee_pemimpin !== null ? baki.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
+        (ps.fee_penolong !== null ? baki.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0);
 
       // RM0 bermakna tiada peranan yang didaftarkan dicaj. Bil RM0 akan
       // menyekat sekolah pada skrin yang mustahil dilepasi.
       if (amount <= 0) { terusHantar.push(badgeId); continue; }
 
-      // Tempat yang diminta = peranan yang DICAJ, sama seperti claim_siri_seats.
+      // Tempat yang diminta = peranan DICAJ yang belum dilindungi, sama
+      // seperti claim_siri_seats yang membaca snapshot bil ini sendiri.
       const minta =
-        (ps.fee_peserta  !== null ? kira.peserta  : 0) +
-        (ps.fee_pemimpin !== null ? kira.pemimpin : 0) +
-        (ps.fee_penolong !== null ? kira.penolong : 0);
+        (ps.fee_peserta  !== null ? baki.peserta  : 0) +
+        (ps.fee_pemimpin !== null ? baki.pemimpin : 0) +
+        (ps.fee_penolong !== null ? baki.penolong : 0);
 
       const { data: sedia2 } = await admin.rpc('check_siri_availability', {
         p_school_id: schoolId, p_badge_id: badgeId, p_year: year,
@@ -301,7 +316,9 @@ serve(async (req) => {
         continue;
       }
 
-      item.push({ badgeId, badgeName: nama, amount, kira, gatewayId: gw?.id ?? null });
+      // kira → baki: snapshot MESTI merekod apa yang bil ini bayar, bukan
+      // keseluruhan siri. Pengiraan tempat membaca snapshot ini (migrasi 043).
+      item.push({ badgeId, badgeName: nama, amount, kira: baki, gatewayId: gw?.id ?? null });
     }
 
     // ── Satu bil, satu akaun gateway ──────────────────────────────────

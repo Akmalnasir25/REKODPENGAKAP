@@ -1113,3 +1113,42 @@ Akibat yang mesti dikendalikan:
 - **Satu siri boleh menghasilkan beberapa resit.** Nombor resit sudah diterbitkan daripada ID bayaran, jadi ia kekal unik tanpa perubahan
 - Langkah 1 dalam §13.5 mesti melangkau program yang **sudah dibayar** untuk siri itu, bukan hanya yang sudah `submitted` — jika tidak sekolah akan dibil dua kali bagi program yang sama
 - Rumusan Bayaran memaparkan setiap bil berasingan; jumlah bagi satu siri ialah hasil tambah bil-bilnya
+
+### 13.12 Bil susulan untuk peserta yang ditambah selepas bayaran (menutup 13g1)
+
+**Masalah, dijumpai semasa ujian 10 Ogos 2026.** SK Pengkalan membayar Keris Emas Siri 2 untuk seorang peserta. Seorang lagi ditambah selepas itu. `create-payment-bill` melangkau program yang sudah mempunyai bayaran, jadi peserta kedua tidak boleh dibil langsung — tetapi dia tetap dikira dalam statistik selepas pengesahan admin.
+
+**Keputusan:** bil susulan mengecaj **bezanya sahaja**. Keris Emas dibayar untuk 1, kini 2, jadi bil kedua ialah 1 × RM70 — bukan RM140, dan bukan tiada apa-apa.
+
+#### Liputan dikira per peranan
+
+Kehadiran baris `paid` tidak memberitahu berapa orang ia meliputi. Snapshot memberitahu:
+
+```
+dilindungi.peserta  = Σ snapshot_peserta  bagi bayaran paid/pending_review
+tertunggak.peserta  = max(0, peserta_kini - dilindungi.peserta)
+jumlah              = Σ tertunggak.peranan × yuran.peranan
+```
+
+Perbandingan dibuat **per peranan**, bukan pada jumlah keseluruhan. Sekolah yang membayar untuk 2 peserta kemudian menambah 1 pemimpin mempunyai jumlah yang sama tetapi hutang yang berbeza.
+
+Bayaran yang meliputi kesemuanya dilaporkan sebagai sudah dibayar dan dilangkau, seperti sekarang.
+
+#### Pengiraan tempat MESTI berubah serentak
+
+`siri_seats_taken` menyertai setiap peserta kepada setiap baris bayaran yang sepadan:
+
+```sql
+join public.payments pay
+  on pay.school_id = sc.id and pay.badge_id = ps.badge_id ...
+```
+
+Dengan satu bayaran per program × siri ia betul. Bil susulan mencipta **dua**, dan setiap peserta lalu dikira dua kali — program kelihatan penuh pada separuh bilangan sebenar. Ia tidak menggigit hari ini kerana had masih kosong; ia menggigit pada hari pertama had ditetapkan.
+
+**Tempat kini dikira daripada SNAPSHOT bayaran, bukan dengan menyertai peserta.** Jumlah snapshot merentas bayaran berbayar ialah tepat "berapa tempat sudah dijual". Ia tidak boleh berganda tidak kira berapa banyak bil wujud, dan ia menyokong bil susulan tanpa kes khas.
+
+`claim_siri_seats` turut berubah: tempat yang diminta ialah snapshot bayaran **itu sendiri**, bukan kiraan semula semua peserta sekolah. Mengira semula bermakna bil susulan meminta tempat yang bil pertama sudah bayar.
+
+#### Skop yang TIDAK disentuh
+
+Program yang sudah `submitted` atau `approved` kekal dilangkau. Membenarkan bil susulan pada pendaftaran yang sudah disahkan membuka soalan berasingan — sama ada peserta baharu masuk ke pusingan yang sudah ditutup — dan itu bukan soalan yang sama. Ia kekal terbuka.

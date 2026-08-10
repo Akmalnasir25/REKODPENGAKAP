@@ -57,6 +57,10 @@ export const PaymentScreen: React.FC<Props> = ({
   const [fail, setFail] = useState<File | null>(null);
   const [memuatNaik, setMemuatNaik] = useState(false);
   const [menjanaResit, setMenjanaResit] = useState(false);
+  // Bil yang dilangkau sepenuhnya. Ia BUKAN kegagalan — pendaftaran memang
+  // dihantar — tetapi menutup skrin tanpa berkata apa-apa menjadikannya
+  // kelihatan seperti butang yang rosak.
+  const [dilangkauPenuh, setDilangkauPenuh] = useState<BilDijana | null>(null);
 
   // Sambungan selepas kembali dari gateway TIDAK boleh mempercayai props.
   // billReturnUrl memuat semula halaman sepenuhnya, jadi penapis program dan
@@ -106,7 +110,7 @@ export const PaymentScreen: React.FC<Props> = ({
     setSibuk(true);
     try {
       const hasil = await janaBil({ year: tahun, siri: siriKini, method: k });
-      if (hasil.skipped) { onSelesai(); return; }
+      if (hasil.skipped) { setDilangkauPenuh(hasil); return; }
       setBil(hasil);
       if (k === 'toyyibpay' && hasil.billUrl) {
         // Ke gateway. Bila sekolah kembali, App membuka semula skrin ini
@@ -140,6 +144,52 @@ export const PaymentScreen: React.FC<Props> = ({
       setMemuatNaik(false);
     }
   };
+
+  // ── Dihantar tanpa bayaran ──────────────────────────────────────────
+  if (dilangkauPenuh) {
+    return (
+      <Bingkai onTutup={onTutup} tajuk="Pendaftaran Dihantar">
+        <div className="rounded-xl p-4 border bg-blue-50 border-blue-300">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 size={22} className="text-blue-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-blue-800">Tiada bayaran diperlukan</p>
+              <p className="text-sm text-slate-600 mt-1">
+                {dilangkauPenuh.message || 'Pendaftaran anda terus dihantar untuk pengesahan.'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {dilangkauPenuh.sudahDibayar && dilangkauPenuh.sudahDibayar.length > 0 && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mt-3">
+            <p className="text-[11px] font-bold text-slate-700 mb-1">Sudah dibayar sebelum ini:</p>
+            <ul className="text-[11px] text-slate-600 space-y-0.5">
+              {dilangkauPenuh.sudahDibayar.map((d) => (
+                <li key={d.program}>· <strong>{d.program}</strong> — {d.dibayarUntuk} orang</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {dilangkauPenuh.dilangkau && dilangkauPenuh.dilangkau.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-3">
+            <p className="text-[11px] font-bold text-amber-800 mb-1">Tidak dihantar:</p>
+            <ul className="text-[11px] text-amber-700 space-y-0.5">
+              {dilangkauPenuh.dilangkau.map((d) => (
+                <li key={d.program}>· <strong>{d.program}</strong> — {d.sebab}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <button onClick={onSelesai}
+          className="w-full mt-4 py-2.5 rounded-lg font-bold text-white bg-slate-800 hover:bg-slate-900 transition">
+          Selesai
+        </button>
+      </Bingkai>
+    );
+  }
 
   // ── Keadaan akhir ───────────────────────────────────────────────────
   if (status && ['paid', 'pending_review'].includes(status.paymentStatus)) {

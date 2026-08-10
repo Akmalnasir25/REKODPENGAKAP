@@ -29,6 +29,12 @@ comment on column public.payment_gateway_settings.allow_fpx is
   'menghidupkannya tanpa akaun yang berfungsi.';
 
 
+-- Lajur pulangan bertambah, jadi jenis barisnya berubah — dan `create or
+-- replace` tidak boleh mengubah jenis baris OUT. Fungsi lama digugurkan
+-- dahulu. Pemanggilnya semua melalui RPC dengan nama, jadi tiada kebergantungan
+-- yang perlu disusun semula selepas ini.
+drop function if exists public.get_payment_methods(text, integer);
+
 create or replace function public.get_payment_methods(
   p_badge_name text,
   p_year integer

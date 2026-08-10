@@ -619,12 +619,70 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Tindakan peringkat program (hantar/status) beroperasi pada siri yang sedang
   // ditapis; tanpa tapisan siri ia merujuk Siri 1, sama seperti program tanpa siri.
   const activeSiri = selectedSiriFilter === '' ? 1 : Number(selectedSiriFilter);
+  const siriBelumHantar = useMemo(() => {
+    if (!selectedBadgeFilter) return [] as number[];
+    const ada = new Set<number>();
+    allData.forEach((d: any) => {
+      if (d.badge !== selectedBadgeFilter) return;
+      let tahun: number;
+      try { tahun = new Date(d.date).getFullYear(); } catch { return; }
+      if (tahun !== selectedYear) return;
+      ada.add(d.siri || 1);
+    });
+    return Array.from(ada)
+      .filter(s => {
+        const k = getLockKey(selectedBadgeFilter, selectedYear, s);
+        return !lockedBadges.includes(k) && !approvedBadges.includes(k);
+      })
+      .sort((a, b) => a - b);
+  }, [allData, selectedBadgeFilter, selectedYear, lockedBadges, approvedBadges]);
+
+  const [siriBayaran, setSiriBayaran] = useState<number | null>(null);
+
+  // Program yang masih menunggu penghantaran dalam siri sasaran.
+  //
+  // Hantar kini berskop SIRI (§13): satu tekan menghantar semua program dalam
+  // siri itu, dan satu bil meliputi kesemuanya. Menghantar program satu per
+  // satu bermakna sekolah membayar dua kali untuk satu pusingan pendaftaran.
+  const programDalamSiri = (siriSasar: number) => {
+    const ada = new Set<string>();
+    allData.forEach((d: any) => {
+      if (d.badge !== selectedBadgeFilter && selectedBadgeFilter !== '') {
+        // Penapis program dihormati bila ditetapkan; jika tidak, semua program
+        // dalam siri itu dikumpulkan.
+        if (selectedBadgeFilter !== '') return;
+      }
+      let tahun: number;
+      try { tahun = new Date(d.date).getFullYear(); } catch { return; }
+      if (tahun !== selectedYear) return;
+      if ((d.siri || 1) !== siriSasar) return;
+      const k = getLockKey(d.badge, selectedYear, siriSasar);
+      if (lockedBadges.includes(k) || approvedBadges.includes(k)) return;
+      ada.add(d.badge);
+    });
+    return Array.from(ada).sort();
+  };
+
+  const perluBayarSiri = (program: string[]) => program.some(nama =>
+    programSettings.some(ps =>
+      ps.badgeName === nama && ps.year === selectedYear && ps.paymentOnlineRequired
+      && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
+        || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))));
+
   const currentLockKey = selectedBadgeFilter ? getLockKey(selectedBadgeFilter, selectedYear, activeSiri) : '';
   const isSelectedBadgeLocked = selectedBadgeFilter !== '' && lockedBadges.includes(currentLockKey);
   const isSelectedBadgeApproved = selectedBadgeFilter !== '' && approvedBadges.includes(currentLockKey);
   
   // Show submit button if: Registration Open AND At least one permission allowed AND Badge not submitted/approved
-  const showSubmitButton = selectedBadgeFilter !== '' && isAnyAllowed && !isSelectedBadgeLocked && !isSelectedBadgeApproved;
+  // Hantar berskop SIRI (§13), jadi ia tidak lagi memerlukan penapis program.
+  // Sekolah yang mendaftar dua program dalam satu siri memilih "Semua program"
+  // dan menghantar sekali — itulah keseluruhan tujuan perubahan ini.
+  const siriSasarHantar = selectedSiriFilter === ''
+    ? (siriBelumHantar.length === 1 ? siriBelumHantar[0] : null)
+    : Number(selectedSiriFilter);
+  const programSiriSasar = siriSasarHantar === null ? [] : programDalamSiri(siriSasarHantar);
+  const showSubmitButton = isAnyAllowed && programSiriSasar.length > 0
+    && !isSelectedBadgeLocked && !isSelectedBadgeApproved;
 
   const handleEditClick = (item: SubmissionData) => {
       if (!canModifyRecord(item)) return;
@@ -810,58 +868,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // itu: penapis kosong bermakna Siri 1, sedangkan peserta berada dalam Siri 2.
   // Jumlah dikira untuk siri kosong, keluar RM0, dan pintu bayaran dilangkau —
   // sekolah masuk statistik tanpa membayar sesen pun.
-  const siriBelumHantar = useMemo(() => {
-    if (!selectedBadgeFilter) return [] as number[];
-    const ada = new Set<number>();
-    allData.forEach((d: any) => {
-      if (d.badge !== selectedBadgeFilter) return;
-      let tahun: number;
-      try { tahun = new Date(d.date).getFullYear(); } catch { return; }
-      if (tahun !== selectedYear) return;
-      ada.add(d.siri || 1);
-    });
-    return Array.from(ada)
-      .filter(s => {
-        const k = getLockKey(selectedBadgeFilter, selectedYear, s);
-        return !lockedBadges.includes(k) && !approvedBadges.includes(k);
-      })
-      .sort((a, b) => a - b);
-  }, [allData, selectedBadgeFilter, selectedYear, lockedBadges, approvedBadges]);
-
-  const [siriBayaran, setSiriBayaran] = useState<number | null>(null);
-
-  // Program yang masih menunggu penghantaran dalam siri sasaran.
-  //
-  // Hantar kini berskop SIRI (§13): satu tekan menghantar semua program dalam
-  // siri itu, dan satu bil meliputi kesemuanya. Menghantar program satu per
-  // satu bermakna sekolah membayar dua kali untuk satu pusingan pendaftaran.
-  const programDalamSiri = (siriSasar: number) => {
-    const ada = new Set<string>();
-    allData.forEach((d: any) => {
-      if (d.badge !== selectedBadgeFilter && selectedBadgeFilter !== '') {
-        // Penapis program dihormati bila ditetapkan; jika tidak, semua program
-        // dalam siri itu dikumpulkan.
-        if (selectedBadgeFilter !== '') return;
-      }
-      let tahun: number;
-      try { tahun = new Date(d.date).getFullYear(); } catch { return; }
-      if (tahun !== selectedYear) return;
-      if ((d.siri || 1) !== siriSasar) return;
-      const k = getLockKey(d.badge, selectedYear, siriSasar);
-      if (lockedBadges.includes(k) || approvedBadges.includes(k)) return;
-      ada.add(d.badge);
-    });
-    return Array.from(ada).sort();
-  };
-
-  const perluBayarSiri = (program: string[]) => program.some(nama =>
-    programSettings.some(ps =>
-      ps.badgeName === nama && ps.year === selectedYear && ps.paymentOnlineRequired
-      && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
-        || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))));
-
   const handleFinalSubmit = async () => {
-    if (!selectedBadgeFilter) return;
 
     // Pintu bayaran: pendaftaran TIDAK dihantar terus. Ia kekal draf sehingga
     // bayaran diuruskan; Edge Function yang menghantarnya selepas itu.
@@ -1974,7 +1981,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 className="bg-blue-900 hover:bg-blue-800 text-white px-5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-md"
                             >
                                 {isLocking ? <LoadingSpinner size="sm" color="border-white"/> : <Send size={16} />}
-                                Hantar {selectedBadgeFilter}
+                                Hantar Siri {siriSasarHantar}
+                                {programSiriSasar.length > 1 && ` (${programSiriSasar.length} program)`}
                             </button>
                         )}
 

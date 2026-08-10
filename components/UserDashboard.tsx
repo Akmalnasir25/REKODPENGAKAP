@@ -1737,6 +1737,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     </button>
                 </div>
 
+                {/* Kad terkunci SEMATA-MATA kerana penapis tahun ialah jalan buntu
+                    yang kelihatan seperti kebenaran ditarik. Rekod tahun lampau
+                    memang disokong — cuma tahunnya dipilih di DALAM borang, bukan
+                    melalui penapis ini. Tanpa nota ini, guru menyangka mereka
+                    disekat daripada membuat pendaftaran backdated langsung. */}
+                {isRegistrationOpen && isAnyAllowed && !isCurrentOrFuture && (
+                    <div className="bg-amber-50 text-amber-800 px-4 py-2.5 rounded-lg mb-4 text-xs flex items-start gap-2 border border-amber-200">
+                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                        <span>
+                            Penapis Tahun ditetapkan ke <strong>{selectedYear}</strong>, jadi pendaftaran
+                            baharu dikunci. Untuk merekod peserta tahun lampau, tukar penapis kembali ke{' '}
+                            <strong>{currentYear}</strong>, buka borang pendaftaran, kemudian pilih{' '}
+                            <strong>Tahun Pendaftaran {selectedYear}</strong> di dalam borang itu.
+                        </span>
+                    </div>
+                )}
+
                 {/* Hint for Badge Locking */}
                 {isRegistrationOpen && isAnyAllowed && !selectedBadgeFilter && filteredData.length > 0 && (
                     <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 border border-blue-100">

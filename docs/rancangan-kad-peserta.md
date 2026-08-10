@@ -32,6 +32,28 @@ Muatan semasa, tepat seperti pengimbas jangka:
 
 ---
 
+## 1b. Prinsip penentu: muatan beku selepas dicetak
+
+Kad ialah artifak **fizikal**. Sebaik seribu kad dilaminate dan digantung pada lanyard, muatan QR di dalamnya tidak boleh diubah — mengubahnya bermakna mencetak semula kesemuanya.
+
+Itu menjadikan setiap keputusan medan sebagai keputusan **sekali sahaja**, dan ia mesti dibuat dengan kegunaan masa depan dalam kiraan, bukan hanya kegunaan hari ini.
+
+Medan `v: '1'` dalam muatan ialah jalan keluar: pengimbas masa depan boleh menerima v1 dan v2 serentak. Tetapi kad v1 yang sudah dicetak kekal v1 selama-lamanya — jalan keluar itu melindungi *sistem*, bukan *kad*.
+
+### Kegunaan masa depan yang sudah diketahui
+
+Kad akan digunakan untuk **kehadiran**: pemimpin dan penolong pemimpin mengimbas masuk, kemudian mengimbas semula untuk log waktu keluar.
+
+Ini bermakna dua perkara untuk rancangan ini:
+
+**Semua peranan memerlukan kad**, bukan peserta sahaja. Pemimpin tidak pernah "tarik diri", tetapi mereka akan mengimbas untuk kehadiran.
+
+**Sistem kehadiran sedia ada tidak mencukupi.** `QRVerification` menjana QR peringkat SEKOLAH dan `recordAttendanceVerification` merekod satu baris untuk keseluruhan kumpulan. Kehadiran per orang dengan waktu masuk dan keluar ialah kerja baharu — jadual peristiwa imbasan, dan pengimbas yang tahu sama ada imbasan itu masuk atau keluar.
+
+Kerja itu **tidak perlu siap sebelum kad dicetak**. Yang perlu siap ialah muatan QR yang mencukupi untuknya, kerana muatan itulah yang beku.
+
+---
+
 ## 2. Keputusan yang sudah dibuat
 
 | # | Soalan | Keputusan |
@@ -52,6 +74,10 @@ Ini menggunakan semula pagar yang sudah ada dan bukan mencipta yang baharu: `sch
 Akibatnya yang disengajakan: peserta yang belum dibayar tidak boleh mendapat kad, kerana bayaran ialah syarat pengesahan.
 
 Peserta yang **sudah tarik diri** (`is_withdrawn`) dilangkau — mencetak kad untuk mereka mengundang kekeliruan di pintu masuk.
+
+**Semua peranan mendapat kad** — Peserta, Pemimpin, Penolong Pemimpin dan Penguji. Pemimpin tidak pernah tarik diri, tetapi mereka mengimbas untuk kehadiran, dan lanyard tanpa kad mengalahkan tujuan keseluruhan sistem.
+
+Peranan dipaparkan pada kad supaya pegawai di pintu masuk boleh membezakannya tanpa mengimbas.
 
 ---
 
@@ -116,9 +142,10 @@ Kedua-duanya menghasilkan **PDF yang sama**. Satu penjana, bukan dua yang boleh 
 | # | Jurang | Kenapa ia penting |
 |---|---|---|
 | 7a | **No. KP dalam QR** | Muatan sedia ada membawa `icNumber`. Sesiapa yang mengimbas kad di tanah perkhemahan boleh membacanya. Pengimbas tarik diri hanya memerlukan `participantId`, `schoolCode` dan `badge` — jadi `icNumber` boleh digugurkan dari kad tanpa memecahkan apa-apa. **Gugurkan atau kekalkan?** |
-| 7b | **Peranan mana dapat kad** | Peserta sahaja, atau termasuk Pemimpin, Penolong Pemimpin dan Penguji? Mereka juga memakai lanyard, tetapi tidak pernah "tarik diri" |
+| 7b | ~~Peranan mana dapat kad~~ | **Ditutup.** Semua peranan — kehadiran memerlukannya |
 | 7c | **Kaedah cetakan** | Cetakan pelayar (seperti `handlePrintAll` sekarang) atau jsPDF. Pelayar lebih mudah tetapi warna latar sering digugurkan oleh tetapan lalai pencetak — dan kad tanpa warna mengalahkan tujuan reka bentuk ikut program. jsPDF mengawal sepenuhnya tetapi setiap elemen perlu diletak secara manual |
-| 7d | **Siri dalam muatan QR** | Muatan tidak membawa `siri`. Menambahnya selamat (pengimbas mengabaikan medan tambahan) dan berguna jika pengimbasan masa depan perlu membezakan siri. Tambah sekarang atau biarkan? |
+| 7d | **Siri dalam muatan QR** | Muatan tidak membawa `siri`. Kehadiran masa depan hampir pasti memerlukannya — perkhemahan Siri 2 tidak sepatutnya menerima kad Siri 1. Menambahnya selamat: pengimbas sedia ada mengabaikan medan tambahan. Memandangkan muatan beku selepas dicetak, **cenderung tambah sekarang** |
+| 7e | **`role` dalam muatan QR** | Kehadiran mungkin perlu membezakan pemimpin daripada peserta tanpa memanggil pangkalan data. Medan yang sama beku selepas dicetak — tambah sekarang atau bergantung pada carian? |
 
 ---
 
@@ -127,5 +154,7 @@ Kedua-duanya menghasilkan **PDF yang sama**. Satu penjana, bukan dua yang boleh 
 **Gambar peserta.** Sistem tidak menyimpan gambar, dan mengumpulkannya untuk ribuan peserta ialah projek berasingan yang jauh lebih besar daripada kad.
 
 **Penjejakan cetakan.** Siapa mencetak dan bila tidak direkodkan. Kad boleh dicetak semula bila-bila; tiada nombor siri, tiada pembatalan.
+
+**Sistem kehadiran per orang.** Jadual peristiwa imbasan, waktu masuk dan keluar, dan pengimbas yang mengetahui arah — kerja berasingan. Rancangan ini hanya memastikan muatan QR mencukupi untuknya.
 
 **Kad untuk peserta belum disahkan.** Keputusan 2b.

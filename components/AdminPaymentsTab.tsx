@@ -31,6 +31,7 @@ const LENCANA_STATUS: Record<string, string> = {
   failed: 'bg-red-100 text-red-700 border-red-200',
   rejected: 'bg-red-100 text-red-700 border-red-200',
   cancelled: 'bg-slate-100 text-slate-500 border-slate-200',
+  refunded: 'bg-purple-100 text-purple-800 border-purple-200',
 };
 
 const namaStatus: Record<string, string> = {
@@ -40,6 +41,7 @@ const namaStatus: Record<string, string> = {
   failed: 'Gagal',
   rejected: 'Ditolak',
   cancelled: 'Dibatalkan',
+  refunded: 'Direfund',
 };
 
 export const AdminPaymentsTab: React.FC = () => {
@@ -166,6 +168,7 @@ export const AdminPaymentsTab: React.FC = () => {
           <option value="pending_review">Menunggu semakan</option>
           <option value="pending">Menunggu bayaran</option>
           <option value="failed">Gagal</option>
+          <option value="refunded">Direfund</option>
           <option value="cancelled">Dibatalkan</option>
         </select>
         <select className={kelasPilih} value={fKaedah} onChange={e => setFKaedah(e.target.value)}>

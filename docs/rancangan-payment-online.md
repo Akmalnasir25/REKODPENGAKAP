@@ -1152,3 +1152,24 @@ Dengan satu bayaran per program × siri ia betul. Bil susulan mencipta **dua**, 
 #### Skop yang TIDAK disentuh
 
 Program yang sudah `submitted` atau `approved` kekal dilangkau. Membenarkan bil susulan pada pendaftaran yang sudah disahkan membuka soalan berasingan — sama ada peserta baharu masuk ke pusingan yang sudah ditutup — dan itu bukan soalan yang sama. Ia kekal terbuka.
+
+### 13.14 Bayaran melebihi had: keputusan manusia, bukan penolakan automatik
+
+**Masalah.** Tempat tinggal 10; tiga sekolah membayar serentak untuk 14 orang. Kunci baris menyirikan mereka, jadi dua yang pertama mendapat tempat dan yang ketiga ditanda `no_seat`. Pendaftarannya kekal draf, tidak pernah masuk giliran pengesahan — dan **tiada apa membawanya masuk selepas itu**. Menaikkan had tidak menuntut semula tempat, dan sekolah tidak boleh menekan Hantar semula kerana programnya sudah dibayar. Sekolah itu tersekat: sudah bayar, ada tempat kosong, tidak boleh masuk.
+
+**Keputusan.** Duit sudah diterima, jadi pendaftaran **sentiasa** masuk giliran pengesahan — ditanda melebihi had. Admin yang memutuskan.
+
+| Bila | Apa berlaku |
+|---|---|
+| Jana bil | **Pintu keras.** Penuh = tiada bil. Tidak berubah |
+| Bayaran disahkan | Sentiasa masuk giliran. Ditanda `MELEBIHI HAD (14/10)` jika terlebih |
+| Admin sahkan | Masuk statistik walaupun melebihi |
+| Admin tolak | Status `refunded`, tempat dilepaskan, pendaftaran dibuka semula |
+
+Selepas had tercapai, sekolah seterusnya tidak boleh menjana bil langsung — jadi lebihan terhad kepada perlumbaan serentak sahaja, bukan aliran berterusan.
+
+**Status `refunded` wajib, bukan tambahan.** Tanpa peralihan status sebenar, bayaran yang di-refund secara manual kekal `paid` selama-lamanya: ia terus mengambil tempat yang sepatutnya dilepaskan, dan terus dikira dalam Rumusan Bayaran sebagai kutipan yang sudah dipulangkan. Angka kewangan menyimpang dari wang sebenar tanpa sesiapa perasan.
+
+**Pengiraan tempat berubah.** `siri_seats_taken` kini mengira setiap bayaran `paid`/`pending_review` tanpa mengira `seat_status`. Wang sudah masuk dan orangnya berkemungkinan masuk statistik, jadi tempat itu memang terpakai. `seat_status` menjadi semata-mata **penanda perhatian**, bukan lagi suis yang menahan pendaftaran.
+
+**Kesan yang mesti disedari.** Had menjadi *"berhenti jual di sini"*, bukan *"jangan sesekali lebih"*. Sepuluh boleh menjadi empat belas jika admin menerima kesemuanya. Nota ini dipaparkan pada skrin tetapan supaya ia tidak menjadi kejutan kemudian.

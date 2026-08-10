@@ -704,6 +704,11 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                           terkumpul. Kosong = tiada had. Tempat dikira daripada peranan yang
                           DICAJ dalam jadual di atas, jadi menukar siapa dicaj turut menukar
                           siapa mengambil tempat.
+                          <br />
+                          <strong>Ini "berhenti jual di sini", bukan siling mutlak.</strong> Sekolah
+                          yang membayar serentak boleh melebihi had; bayaran mereka tetap masuk
+                          giliran pengesahan, ditanda melebihi, dan anda yang putuskan sama ada
+                          menerima atau merefund.
                         </p>
                         <input
                           type="number" min="1" step="1"

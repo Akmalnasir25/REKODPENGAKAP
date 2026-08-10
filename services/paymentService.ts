@@ -258,7 +258,8 @@ export const getBayaranUntukSemakan = async (): Promise<BayaranUntukSemakan[]> =
       // Penapisan dibuat di klien kerana syarat "mana-mana program tiada
       // tempat" hidup pada baris ANAK, dan PostgREST tidak boleh menapis
       // induk berdasarkan keadaan anak dalam satu kueri bersarang.
-      .filter(b => b.status === 'pending_review' || b.seatStatus === 'no_seat');
+      .filter(b => b.status === 'pending_review'
+        || (b.seatStatus === 'no_seat' && ['paid', 'pending_review'].includes(b.status)));
   } catch (error) {
     console.error('getBayaranUntukSemakan error:', error);
     return [];
@@ -286,6 +287,37 @@ export const semakBuktiBayaran = async (
       sebab_diperlukan: 'Sila nyatakan sebab penolakan.',
     };
     return { ok: false, message: sebabMesej[data?.sebab] || 'Gagal menyemak bayaran.' };
+  } catch (error: any) {
+    return { ok: false, message: error?.message || 'Ralat sambungan.' };
+  }
+};
+
+/**
+ * Merekod refund yang dibuat di luar sistem.
+ *
+ * Wang dipulangkan melalui bank; ini merekod hakikat itu supaya tempat
+ * dilepaskan dan bil terkeluar dari jumlah kutipan. Tanpa langkah ini,
+ * bayaran yang sudah dipulangkan kekal dikira sebagai wang yang diterima.
+ */
+export const refundBil = async (
+  billId: string, sebab: string,
+): Promise<{ ok: boolean; message: string }> => {
+  try {
+    const { data, error } = await supabase.rpc('admin_refund_bill', {
+      p_bill_id: billId,
+      p_sebab: sebab,
+    });
+    if (error) throw error;
+    if (data?.ok) return { ok: true, message: 'Refund direkodkan. Tempat dilepaskan.' };
+
+    const sebabMesej: Record<string, string> = {
+      tiada_kebenaran: 'Anda tiada kebenaran untuk tindakan ini.',
+      luar_skop: 'Bayaran ini di luar skop anda.',
+      bayaran_tidak_dijumpai: 'Bayaran tidak dijumpai.',
+      bukan_bayaran_diterima: 'Hanya bayaran yang sudah diterima boleh direfund.',
+      sebab_diperlukan: 'Sila nyatakan sebab refund.',
+    };
+    return { ok: false, message: sebabMesej[data?.sebab] || 'Gagal merekod refund.' };
   } catch (error: any) {
     return { ok: false, message: error?.message || 'Ralat sambungan.' };
   }

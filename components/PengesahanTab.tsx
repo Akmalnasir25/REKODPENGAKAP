@@ -3,7 +3,7 @@ import { CheckCircle, RefreshCw, Medal, Users, X, Paperclip } from 'lucide-react
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { approveSchoolBadge, reopenSchoolBadge, getSubmittedSchools, approveDaerahLevel } from '../services/supabaseApi';
 import { badgeStatusKey } from '../utils/dataProcessing';
-import { getBayaranUntukSemakan, semakBuktiBayaran, urlBukti, BayaranUntukSemakan } from '../services/paymentService';
+import { getBayaranUntukSemakan, semakBuktiBayaran, urlBukti, refundBil, BayaranUntukSemakan } from '../services/paymentService';
 import { formatRM } from '../services/programSummary';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { tarikhPendek } from '../utils/tarikh';
@@ -99,6 +99,24 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
     if (!url) { tab?.close(); alert('Gagal membuka bukti bayaran.'); return; }
     if (tab) tab.location.href = url;
     else window.location.href = url;
+  };
+
+  const handleRefund = async (id: string) => {
+    const sebab = prompt('Sebab refund (wang dipulangkan di luar sistem):');
+    if (!sebab || !sebab.trim()) return;
+    if (!confirm(
+      'Rekodkan refund untuk bayaran ini?\n\n'
+      + 'Tempat akan dilepaskan, pendaftaran dibuka semula, dan bil ini '
+      + 'dikeluarkan dari jumlah kutipan.\n\n'
+      + 'Pemulangan wang sebenar perlu dibuat sendiri melalui bank.'
+    )) return;
+    setSemakLoading(id);
+    const res = await refundBil(id, sebab.trim());
+    setSemakLoading(null);
+    if (!res.ok) { alert(res.message); return; }
+    await muatBayaran();
+    await fetchSubmitted();
+    onRefresh();
   };
 
   const handleSemak = async (id: string, terima: boolean) => {
@@ -269,12 +287,27 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                   )}
                   {b.seatStatus === 'no_seat' && (
                     <p className="text-[11px] text-red-700 mt-1">
-                      Duit sudah diterima tetapi tempat siri ini penuh. Naikkan had atau uruskan refund.
+                      <strong>Melebihi had tempat.</strong> Duit sudah diterima dan pendaftaran ini
+                      berada dalam giliran seperti biasa — sahkan untuk menerimanya walaupun melebihi,
+                      atau rekodkan refund untuk melepaskan tempat.
                     </p>
                   )}
                 </div>
+                <div className="flex gap-1.5 shrink-0">
+                  {/* Refund tersedia untuk mana-mana bayaran yang sudah diterima,
+                      bukan hanya bukti manual — bayaran FPX yang melebihi had
+                      juga perlu jalan keluar. */}
+                  {['paid', 'pending_review'].includes(b.status) && (
+                    <button
+                      onClick={() => handleRefund(b.id)}
+                      disabled={semakLoading === b.id}
+                      className="px-2.5 py-1.5 bg-white text-slate-600 border border-slate-300 text-[11px] font-bold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
+                    >
+                      Refund
+                    </button>
+                  )}
                 {b.status === 'pending_review' && (
-                  <div className="flex gap-1.5 shrink-0">
+                  <>
                     <button
                       onClick={() => handleSemak(b.id, true)}
                       disabled={semakLoading === b.id}
@@ -289,8 +322,9 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                     >
                       Tolak
                     </button>
-                  </div>
+                  </>
                 )}
+                </div>
               </div>
             ))}
           </div>

@@ -1159,3 +1159,35 @@ Selepas had tercapai, sekolah seterusnya tidak boleh menjana bil langsung — ja
 **Pengiraan tempat berubah.** `siri_seats_taken` kini mengira setiap bayaran `paid`/`pending_review` tanpa mengira `seat_status`. Wang sudah masuk dan orangnya berkemungkinan masuk statistik, jadi tempat itu memang terpakai. `seat_status` menjadi semata-mata **penanda perhatian**, bukan lagi suis yang menahan pendaftaran.
 
 **Kesan yang mesti disedari.** Had menjadi *"berhenti jual di sini"*, bukan *"jangan sesekali lebih"*. Sepuluh boleh menjadi empat belas jika admin menerima kesemuanya. Nota ini dipaparkan pada skrin tetapan supaya ia tidak menjadi kejutan kemudian.
+
+---
+
+## 14. Togol "Benarkan Hantar Pengesahan"
+
+**Masalah.** Sekolah menyediakan pendaftaran lebih awal, tetapi tidak boleh menghantarnya sehingga admin memaklumkan. Hari ini tiada apa menghalang mereka — hanya amaran dalam hebahan WhatsApp, dan menekan Hantar terlalu awal mengunci senarai serta memulakan proses bayaran. Membukanya semula memerlukan tindakan admin bagi setiap sekolah.
+
+**Keputusan.** Togol per program × tahun pada `program_settings`, lalai **terbuka** supaya tiada program sedia ada berubah kelakuan.
+
+### Di mana ia dikuatkuasakan
+
+| Lapisan | Peranan |
+|---|---|
+| Butang Hantar | Disembunyikan, dengan nota menyatakan sebabnya. Kemudahan sahaja |
+| `create-payment-bill` | Menolak dengan mesej. Pintu sebenar bagi program berbayar |
+| Pencetus pada `school_badge_status` | Menolak peralihan ke `submitted`. Pintu sebenar bagi program percuma |
+
+Ketiga-tiganya diperlukan. Program tanpa bayaran tidak pernah melalui Edge Function, jadi tanpa pencetus ia hanya disekat oleh paparan — dan paparan boleh dipintas.
+
+### Wang mengatasi togol
+
+Pencetus **tidak** menyekat baris yang `payment_status` nya sudah `paid` atau `pending_review`.
+
+Sebabnya: bayaran yang sedang dalam perjalanan boleh selesai selepas admin menutup togol. Menyekatnya pada saat itu meninggalkan sekolah yang sudah membayar di luar giliran, tanpa jalan keluar — corak tersekat yang sama seperti §13.14 dan §13.12. Duit yang sudah diterima sentiasa membawa pendaftarannya masuk.
+
+### Laluan ON CONFLICT
+
+PostgreSQL menembak pencetus BEFORE INSERT bagi baris `on conflict do update` sebelum konflik dikesan, jadi pencetus mesti membaca `payment_status` yang **tersimpan** dan bukan lalai lajur yang dibawa muatan upsert — perangkap yang sama seperti migrasi 039.
+
+### Had yang diketahui
+
+Togol ini peringkat **program × tahun**, bukan per siri. Menutup penghantaran Keris Perak 2026 menutupnya bagi semua sirinya. Dalam amalan Siri 1 lazimnya sudah diluluskan dan tidak terjejas, tetapi jika kawalan per siri diperlukan kemudian, ia berpindah ke `program_siri_settings` bersama `is_closed`.

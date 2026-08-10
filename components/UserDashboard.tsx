@@ -703,7 +703,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     return () => { hidup = false; };
   }, [selectedYear, siriSasarHantar, allData]);
 
+  // Program dalam siri sasaran yang penghantarannya belum dibuka admin (§14).
+  // Sekolah masih boleh mendaftar dan menyunting — hanya Hantar yang ditahan.
+  const programTertutup = programSiriSasar.filter(nama =>
+    programSettings.some(ps =>
+      ps.badgeName === nama && ps.year === selectedYear && ps.submissionOpen === false
+      && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
+        || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))));
+
   const showSubmitButton = isAnyAllowed && programSiriSasar.length > 0
+    && programTertutup.length === 0
     && !isSelectedBadgeLocked && !isSelectedBadgeApproved;
 
   const handleEditClick = (item: SubmissionData) => {
@@ -2022,6 +2031,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             </div>
                           );
                         })}
+
+                        {/* Butang yang hilang tanpa penjelasan kelihatan seperti
+                            pepijat. Nyatakan sebabnya di tempat butang sepatutnya. */}
+                        {isRegistrationOpen && programTertutup.length > 0 && (
+                          <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-200 select-none">
+                            <Clock size={16} />
+                            Penghantaran {programTertutup.join(', ')} belum dibuka — tunggu makluman admin
+                          </div>
+                        )}
 
                         {/* SUBMIT BUTTON */}
                         {isRegistrationOpen && showSubmitButton && (

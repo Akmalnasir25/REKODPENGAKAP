@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt, Layers } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt, Layers, Send } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { GatewaySettingsCard } from './GatewaySettingsCard';
 import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting, getProgramFeeOverrides, saveProgramFeeOverrides, ProgramFeeOverride, getProgramSiriSettings, saveProgramSiriSettings, ProgramSiriSetting } from '../services/supabaseApi';
@@ -59,6 +59,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   // Had peserta ialah sifat PROGRAM (migrasi 041) — satu nombor, dikira
   // semula setiap siri. Bukan satu nombor bagi setiap siri.
   const [formMaxPeserta, setFormMaxPeserta] = useState('');
+  // Lalai TERBUKA — menutup penghantaran ialah tindakan yang disengajakan.
+  const [formSubmissionOpen, setFormSubmissionOpen] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
@@ -94,6 +96,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormSiriEnabled(s?.siriEnabled || false);
     setFormMaxSiri(s?.maxSiri || 5);
     setFormMaxPeserta(s?.maxPeserta != null ? String(s.maxPeserta) : '');
+    setFormSubmissionOpen(s?.submissionOpen ?? true);
     setOverrideType(null);
     setFormSiriLimits(
       allSiriSettings
@@ -173,6 +176,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         siriEnabled: formSiriEnabled,
         maxSiri: formMaxSiri,
         maxPeserta: formMaxPeserta.trim() ? Number(formMaxPeserta) : null,
+        submissionOpen: formSubmissionOpen,
       });
       if (res.status === 'success') {
         // Override memerlukan id tetapan, jadi ia hanya boleh disimpan selepas
@@ -555,6 +559,35 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                 >
                   {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
+              </div>
+
+              {/* PENGHANTARAN */}
+              <div className="border rounded-lg p-3">
+                <label className="flex items-start justify-between gap-3 cursor-pointer">
+                  <span>
+                    <span className="font-bold text-gray-700 flex items-center gap-2">
+                      <Send size={16} className="text-blue-600" /> Benarkan Hantar Pengesahan
+                    </span>
+                    <span className="block text-[11px] text-gray-400 mt-1">
+                      Bila dimatikan, sekolah boleh mendaftar dan menyunting seperti biasa
+                      tetapi tidak boleh menghantar. Gunakan untuk membiarkan mereka bersedia
+                      lebih awal, kemudian buka bila anda maklumkan.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={formSubmissionOpen}
+                    onChange={(e) => setFormSubmissionOpen(e.target.checked)}
+                    className="w-5 h-5 accent-blue-600 shrink-0 mt-0.5"
+                  />
+                </label>
+                {!formSubmissionOpen && (
+                  <p className="text-[10px] text-blue-700 font-semibold bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+                    Ditutup: butang Hantar disembunyikan daripada sekolah. Bayaran yang SUDAH
+                    diterima tetap masuk giliran pengesahan — togol ini tidak menahan wang
+                    yang sudah dibayar.
+                  </p>
+                )}
               </div>
 
               {/* BAYARAN */}

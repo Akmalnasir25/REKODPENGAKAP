@@ -1872,6 +1872,7 @@ export interface ProgramSetting {
   siriEnabled: boolean;
   maxSiri: number;
   maxPeserta: number | null;
+  submissionOpen: boolean;
 }
 
 // Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
@@ -1881,7 +1882,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri, max_peserta,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri, max_peserta, submission_open,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1909,6 +1910,9 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         siriEnabled: !!r.siri_enabled,
         maxSiri: r.max_siri || 5,
         maxPeserta: r.max_peserta ?? null,
+        // Lalai TERBUKA: baris sebelum migrasi 047 tidak sepatutnya
+        // kelihatan seperti penghantaran ditutup.
+        submissionOpen: r.submission_open ?? true,
       };
     });
   } catch {
@@ -1931,6 +1935,7 @@ export interface UpsertProgramSettingInput {
   siriEnabled: boolean;
   maxSiri: number;
   maxPeserta: number | null;
+  submissionOpen: boolean;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
@@ -1961,6 +1966,7 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       siri_enabled: input.siriEnabled,
       max_siri: input.siriEnabled ? Math.min(Math.max(input.maxSiri || 5, 1), 20) : 5,
       max_peserta: input.maxPeserta ?? null,
+      submission_open: input.submissionOpen ?? true,
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
     };

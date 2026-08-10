@@ -240,8 +240,16 @@ serve(async (req) => {
 
       const { data: ps } = await admin
         .from('program_settings')
-        .select('id, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, negeri_id, daerah_id')
+        .select('id, payment_online_required, submission_open, fee_peserta, fee_pemimpin, fee_penolong, negeri_id, daerah_id')
         .eq('id', psId).single();
+
+      // Penghantaran belum dibuka admin (§14). Disemak SEBELUM apa-apa lagi:
+      // program percuma pun tidak boleh dihantar, dan mencipta bil untuk
+      // program yang tidak boleh dihantar hanya mengambil wang tanpa guna.
+      if (ps && ps.submission_open === false) {
+        dilangkau.push({ program: nama, sebab: 'penghantaran belum dibuka oleh admin' });
+        continue;
+      }
 
       if (!ps?.payment_online_required) { terusHantar.push(badgeId); continue; }
 

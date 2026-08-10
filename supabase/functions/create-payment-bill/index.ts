@@ -71,6 +71,12 @@ interface Dilangkau {
   sebab: string;
 }
 
+interface SudahDibayar {
+  program: string;
+  dibayarUntuk: number;   // bilangan orang dalam snapshot bil yang dibayar
+  kini: number;           // bilangan orang sekarang
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ status: 'error', message: 'Method not allowed' }, 405);
@@ -185,14 +191,25 @@ serve(async (req) => {
     // selepas had dinaikkan (§13.11) akan mengecaj semula program yang sudah
     // dijelaskan dalam bil pertama.
     const { data: bayaranSedia } = await admin
-      .from('payments').select('badge_id, status')
+      .from('payments')
+      .select('badge_id, status, snapshot_peserta, snapshot_pemimpin, snapshot_penolong')
       .eq('school_id', schoolId).eq('year', year).eq('siri', siri)
       .in('status', ['paid', 'pending_review']);
-    const sudahBayar = new Set((bayaranSedia || []).map((r: any) => r.badge_id));
+
+    // Bilangan orang yang bayaran sedia ada BENAR-BENAR meliputi. Kehadiran
+    // baris 'paid' sahaja tidak mencukupi untuk diketahui: peserta yang
+    // ditambah selepas bil dijana tidak pernah dibil (§9b), dan tanpa angka
+    // ini kekurangan itu tidak kelihatan oleh sesiapa.
+    const dilindungi = new Map<string, number>();
+    (bayaranSedia || []).forEach((r: any) => {
+      const n = (r.snapshot_peserta ?? 0) + (r.snapshot_pemimpin ?? 0) + (r.snapshot_penolong ?? 0);
+      dilindungi.set(r.badge_id, (dilindungi.get(r.badge_id) ?? 0) + n);
+    });
 
     // ── Nilai setiap program ──────────────────────────────────────────
     const item: Item[] = [];
     const dilangkau: Dilangkau[] = [];
+    const sudahDibayar: SudahDibayar[] = [];
     const terusHantar: string[] = [];   // badge_id yang tidak perlu bayaran
 
     for (const badgeId of badgeIds) {
@@ -205,7 +222,17 @@ serve(async (req) => {
       if (sedia && ['submitted', 'approved'].includes(sedia.status)) {
         continue;   // sudah dalam giliran; bukan dilangkau, cuma tiada kerja
       }
-      if (sudahBayar.has(badgeId)) continue;
+      if (dilindungi.has(badgeId)) {
+        // Dilangkau supaya sekolah tidak dibil dua kali — tetapi DILAPORKAN,
+        // kerana program yang hilang dari bil tanpa penjelasan kelihatan
+        // seperti sistem tersilap kira.
+        sudahDibayar.push({
+          program: nama,
+          dibayarUntuk: dilindungi.get(badgeId) ?? 0,
+          kini: kira.peserta + kira.pemimpin + kira.penolong,
+        });
+        continue;
+      }
 
       const { data: psId } = await admin.rpc('resolve_program_setting', {
         p_school_id: schoolId, p_badge_id: badgeId, p_year: year,
@@ -307,10 +334,16 @@ serve(async (req) => {
     if (itemDibil.length === 0) {
       if (terusHantar.length > 0) {
         return json({
-          status: 'success', skipped: true, dilangkau,
+          status: 'success', skipped: true, dilangkau, sudahDibayar,
           message: dilangkau.length > 0
             ? 'Sebahagian program dihantar tanpa bayaran; selebihnya dilangkau.'
             : 'Tiada yuran dikenakan. Pendaftaran terus dihantar untuk pengesahan.',
+        });
+      }
+      if (sudahDibayar.length > 0) {
+        return json({
+          status: 'success', skipped: true, dilangkau, sudahDibayar,
+          message: 'Semua program dalam siri ini sudah dibayar.',
         });
       }
       return json({
@@ -385,7 +418,7 @@ serve(async (req) => {
         paymentId: bil.id,
         amount, transactionFee: 0, totalAmount: total,
         expiresAt: luput.toISOString(),
-        pecahan, dilangkau,
+        pecahan, dilangkau, sudahDibayar,
         message: 'Bil dijana. Sila buat bayaran dan muat naik bukti.',
       });
     }
@@ -465,7 +498,7 @@ serve(async (req) => {
       billUrl,
       amount, transactionFee: caj, totalAmount: total,
       expiresAt: luput.toISOString(),
-      pecahan, dilangkau,
+      pecahan, dilangkau, sudahDibayar,
     });
   } catch (error: any) {
     console.error('create-payment-bill error:', error?.message);

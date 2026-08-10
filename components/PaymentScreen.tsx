@@ -235,6 +235,28 @@ export const PaymentScreen: React.FC<Props> = ({
         </div>
       )}
 
+      {/* Program yang sudah dijelaskan dalam bil terdahulu. Ia dilangkau
+          supaya sekolah tidak dibil dua kali — tetapi tanpa disebut, program
+          yang hilang dari senarai kelihatan seperti sistem tersilap kira. */}
+      {bil?.sudahDibayar && bil.sudahDibayar.length > 0 && (
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 mb-3">
+          <p className="text-[11px] font-bold text-slate-700 mb-1">Sudah dibayar sebelum ini:</p>
+          <ul className="text-[11px] text-slate-600 space-y-0.5">
+            {bil.sudahDibayar.map((d) => (
+              <li key={d.program}>
+                · <strong>{d.program}</strong>
+                {d.kini > d.dibayarUntuk ? (
+                  <span className="text-amber-700">
+                    {' '}— dibayar untuk {d.dibayarUntuk} orang, kini {d.kini}.
+                    Hubungi admin untuk {d.kini - d.dibayarUntuk} orang tambahan.
+                  </span>
+                ) : ` — ${d.dibayarUntuk} orang`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Program yang tidak masuk ke dalam bil dinamakan berserta sebabnya.
           Sekolah yang mendaftar dua program dan nampak satu sahaja dibil akan
           menganggap sistem tersilap kira. */}

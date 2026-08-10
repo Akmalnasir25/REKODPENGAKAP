@@ -27,6 +27,12 @@ export interface ProgramDilangkau {
   sebab: string;
 }
 
+export interface ProgramSudahDibayar {
+  program: string;
+  dibayarUntuk: number;
+  kini: number;
+}
+
 export interface BilDijana {
   paymentId: string;
   billUrl?: string;
@@ -38,6 +44,8 @@ export interface BilDijana {
   pecahan?: PecahanProgram[];
   /** Program yang tidak masuk ke dalam bil, berserta sebabnya. */
   dilangkau?: ProgramDilangkau[];
+  /** Program yang dilangkau kerana sudah dibayar sebelum ini. */
+  sudahDibayar?: ProgramSudahDibayar[];
   /** true bila tiada yuran langsung — pintu bayaran dilangkau. */
   skipped?: boolean;
   message?: string;

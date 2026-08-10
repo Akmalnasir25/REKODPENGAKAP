@@ -2143,3 +2143,42 @@ export const saveProgramSiriSettings = async (
     return { status: 'error', message: error.message || 'Gagal simpan had siri.' };
   }
 };
+
+// ============================================================
+// Baki tempat yang sekolah boleh lihat (migrasi 044)
+// ============================================================
+// Tanpa ini, sekolah hanya tahu program penuh selepas menaip 40 nama dan
+// menekan Hantar. Amaran mesti datang semasa kerja dibuat, bukan selepas.
+
+export interface BakiTempat {
+  badgeName: string;
+  had: number;
+  terisi: number;
+  baki: number;
+  /** Peserta sekolah ini yang DICAJ dalam siri ini — yang akan minta tempat. */
+  perlu: number;
+  ditutup: boolean;
+  tarikhTutup: string | null;
+}
+
+export const getBakiTempat = async (year: number, siri: number): Promise<BakiTempat[]> => {
+  try {
+    const { data, error } = await supabase.rpc('baki_tempat_siri', {
+      p_year: year,
+      p_siri: siri,
+    });
+    if (error) throw error;
+    return (data || []).map((r: any) => ({
+      badgeName: r.badge_name,
+      had: r.had,
+      terisi: r.terisi,
+      baki: r.baki,
+      perlu: r.perlu,
+      ditutup: !!r.ditutup,
+      tarikhTutup: r.tarikh_tutup,
+    }));
+  } catch (error) {
+    console.error('getBakiTempat error:', error);
+    return [];
+  }
+};

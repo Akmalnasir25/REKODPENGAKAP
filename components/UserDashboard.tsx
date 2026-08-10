@@ -11,7 +11,7 @@ const getSubmissionYear = (value?: string | null) => {
   const year = parsed.getFullYear();
   return Number.isFinite(year) ? year : null;
 };
-import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri } from '../services/supabaseApi';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri, getBakiTempat, BakiTempat } from '../services/supabaseApi';
 import { badgeStatusKey, resolveBadgePermissions } from '../utils/dataProcessing';
 import { PaymentScreen } from './PaymentScreen';
 import { LoadingSpinner } from './ui/LoadingSpinner';
@@ -650,6 +650,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   const [siriBayaran, setSiriBayaran] = useState<number | null>(null);
 
+  // Baki tempat bagi siri sasaran. Hanya program BERHAD dipulangkan, jadi
+  // senarai kosong bermakna tiada had ditetapkan — bukan tiada maklumat.
+  const [bakiTempat, setBakiTempat] = useState<BakiTempat[]>([]);
+
   // Program yang masih menunggu penghantaran dalam siri sasaran.
   //
   // Hantar kini berskop SIRI (§13): satu tekan menghantar semua program dalam
@@ -692,6 +696,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     ? (siriBelumHantar.length === 1 ? siriBelumHantar[0] : null)
     : Number(selectedSiriFilter);
   const programSiriSasar = siriSasarHantar === null ? [] : programDalamSiri(siriSasarHantar);
+  useEffect(() => {
+    if (siriSasarHantar === null) { setBakiTempat([]); return; }
+    let hidup = true;
+    getBakiTempat(selectedYear, siriSasarHantar).then(b => { if (hidup) setBakiTempat(b); });
+    return () => { hidup = false; };
+  }, [selectedYear, siriSasarHantar, allData]);
+
   const showSubmitButton = isAnyAllowed && programSiriSasar.length > 0
     && !isSelectedBadgeLocked && !isSelectedBadgeApproved;
 
@@ -1983,6 +1994,34 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <Award size={16} /> Daftar Rambu ({rambuCandidates.length})
                             </button>
                         )}
+
+                        {/* BAKI TEMPAT — amaran semasa kerja dibuat, bukan selepas.
+                            Hanya program berhad muncul; senarai kosong bermakna
+                            tiada had ditetapkan. */}
+                        {bakiTempat.length > 0 && bakiTempat.map(b => {
+                          const lebih = b.perlu > b.baki;
+                          return (
+                            <div key={b.badgeName}
+                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border flex items-center gap-2 ${
+                                b.ditutup || lebih
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : b.baki <= 10
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                              <span>{b.badgeName} S{siriSasarHantar}</span>
+                              <span className="font-mono">{b.terisi}/{b.had}</span>
+                              {b.ditutup
+                                ? <span>· DITUTUP</span>
+                                : <span>· baki {b.baki}</span>}
+                              {!b.ditutup && b.perlu > 0 && (
+                                <span className={lebih ? '' : 'opacity-70'}>
+                                  · anda {b.perlu}
+                                  {lebih && ` (lebih ${b.perlu - b.baki})`}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
 
                         {/* SUBMIT BUTTON */}
                         {isRegistrationOpen && showSubmitButton && (

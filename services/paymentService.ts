@@ -107,7 +107,7 @@ export const hantarBuktiBayaran = (input: {
  */
 export const getArahanBayaranManual = async (
   badgeName: string, year: number,
-): Promise<{ bankAccountInfo: string | null; adaOnline: boolean }> => {
+): Promise<{ bankAccountInfo: string | null; adaOnline: boolean; adaPindahan: boolean; adaCek: boolean }> => {
   try {
     const { data, error } = await supabase.rpc('get_payment_methods', {
       p_badge_name: badgeName,
@@ -118,10 +118,14 @@ export const getArahanBayaranManual = async (
     return {
       bankAccountInfo: baris?.bank_account_info ?? null,
       adaOnline: !!baris?.online_available,
+      // Lalai BENAR bila tiada baris — skop tanpa gateway mesti terus
+      // menawarkan bayaran manual, seperti sebelum togol ini wujud.
+      adaPindahan: baris?.allow_bank_transfer ?? true,
+      adaCek: baris?.allow_cheque ?? true,
     };
   } catch (error) {
     console.error('getArahanBayaranManual error:', error);
-    return { bankAccountInfo: null, adaOnline: false };
+    return { bankAccountInfo: null, adaOnline: false, adaPindahan: true, adaCek: true };
   }
 };
 

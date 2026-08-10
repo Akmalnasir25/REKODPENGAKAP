@@ -49,9 +49,9 @@ export const PaymentScreen: React.FC<Props> = ({
   const [status, setStatus] = useState<StatusBayaran | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [ralat, setRalat] = useState('');
-  const [arahan, setArahan] = useState<{ bankAccountInfo: string | null; adaOnline: boolean }>({
-    bankAccountInfo: null, adaOnline: false,
-  });
+  const [arahan, setArahan] = useState<{
+    bankAccountInfo: string | null; adaOnline: boolean; adaPindahan: boolean; adaCek: boolean;
+  }>({ bankAccountInfo: null, adaOnline: false, adaPindahan: true, adaCek: true });
 
   const [rujukan, setRujukan] = useState('');
   const [fail, setFail] = useState<File | null>(null);
@@ -296,23 +296,33 @@ export const PaymentScreen: React.FC<Props> = ({
               onClick={() => pilihKaedah('toyyibpay')}
             />
           )}
-          <Pilihan
-            ikon={<Landmark size={18} />}
-            tajuk="Pindahan Bank"
-            nota="Bayar di luar sistem, kemudian muat naik resit."
-            sibuk={sibuk && kaedah === 'bank_transfer'}
-            onClick={() => pilihKaedah('bank_transfer')}
-          />
-          <Pilihan
-            ikon={<FileCheck2 size={18} />}
-            tajuk="Cek"
-            nota="Rekod no. cek dan muat naik gambar cek."
-            sibuk={sibuk && kaedah === 'cheque'}
-            onClick={() => pilihKaedah('cheque')}
-          />
-          {!arahan.adaOnline && (
+          {arahan.adaPindahan && (
+            <Pilihan
+              ikon={<Landmark size={18} />}
+              tajuk="Pindahan Bank"
+              nota="Bayar di luar sistem, kemudian muat naik resit."
+              sibuk={sibuk && kaedah === 'bank_transfer'}
+              onClick={() => pilihKaedah('bank_transfer')}
+            />
+          )}
+          {arahan.adaCek && (
+            <Pilihan
+              ikon={<FileCheck2 size={18} />}
+              tajuk="Cek"
+              nota="Rekod no. cek dan muat naik gambar cek."
+              sibuk={sibuk && kaedah === 'cheque'}
+              onClick={() => pilihKaedah('cheque')}
+            />
+          )}
+          {/* Skrin tanpa satu pun pilihan ialah jalan buntu. Ia mesti
+              menamakan sebabnya, bukan sekadar kosong. */}
+          {!arahan.adaOnline && !arahan.adaPindahan && !arahan.adaCek ? (
+            <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5">
+              Tiada kaedah bayaran dibuka untuk daerah anda buat masa ini. Sila hubungi admin.
+            </p>
+          ) : !arahan.adaOnline && (
             <p className="text-[11px] text-slate-400 pt-1">
-              Bayaran online tidak tersedia untuk daerah anda. Gunakan pindahan bank atau cek.
+              Bayaran online tidak tersedia untuk daerah anda. Gunakan kaedah di atas.
             </p>
           )}
         </div>

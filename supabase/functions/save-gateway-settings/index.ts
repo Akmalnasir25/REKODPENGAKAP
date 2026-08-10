@@ -35,6 +35,9 @@ interface Body {
   categoryCode: string;
   userSecretKey?: string;      // kosong = kekalkan kunci sedia ada
   bankAccountInfo?: string;
+  allowFpx?: boolean;
+  allowBankTransfer?: boolean;
+  allowCheque?: boolean;
   transactionFeeFlat?: number;
   isSandbox: boolean;
 }
@@ -246,6 +249,11 @@ serve(async (req) => {
       secret_vault_id: vaultId,
       masked_key: kunciBaharu ? `••••${kunciBaharu.slice(-4)}` : undefined,
       bank_account_info: body.bankAccountInfo?.trim() || null,
+      // Lalai BENAR: tetapan yang disimpan tanpa menyebut togol tidak
+      // sepatutnya mematikan kaedah bayaran secara senyap.
+      allow_fpx: body.allowFpx ?? true,
+      allow_bank_transfer: body.allowBankTransfer ?? true,
+      allow_cheque: body.allowCheque ?? true,
       transaction_fee_flat: body.transactionFeeFlat ?? 1.0,
       is_sandbox: body.isSandbox,
       is_active: true,          // hanya sampai sini jika ujian sambungan lulus

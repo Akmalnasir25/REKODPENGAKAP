@@ -30,6 +30,11 @@ export const GatewaySettingsCard: React.FC<Props> = ({ scope, code, label }) => 
   const [bankInfo, setBankInfo] = useState('');
   const [caj, setCaj] = useState('1.00');
   const [sandbox, setSandbox] = useState(true);
+  // Togol paparan kaedah bayaran. Lalai BENAR — tetapan lama tanpa lajur ini
+  // tidak sepatutnya mematikan bayaran manual apabila disimpan semula.
+  const [bolehFpx, setBolehFpx] = useState(true);
+  const [bolehPindahan, setBolehPindahan] = useState(true);
+  const [bolehCek, setBolehCek] = useState(true);
 
   const muat = async () => {
     setMemuat(true);
@@ -40,6 +45,9 @@ export const GatewaySettingsCard: React.FC<Props> = ({ scope, code, label }) => 
       setBankInfo(s.bankAccountInfo || '');
       setCaj(String(s.transactionFeeFlat ?? 1));
       setSandbox(s.isSandbox);
+      setBolehFpx(s.allowFpx ?? true);
+      setBolehPindahan(s.allowBankTransfer ?? true);
+      setBolehCek(s.allowCheque ?? true);
     }
     setSecretKey('');   // tidak pernah diisi semula
     setMemuat(false);
@@ -59,6 +67,9 @@ export const GatewaySettingsCard: React.FC<Props> = ({ scope, code, label }) => 
       bankAccountInfo: bankInfo.trim() || undefined,
       transactionFeeFlat: caj.trim() ? Number(caj) : 1,
       isSandbox: sandbox,
+      allowFpx: bolehFpx,
+      allowBankTransfer: bolehPindahan,
+      allowCheque: bolehCek,
     });
     setMesej({ jenis: res.status === 'success' ? 'ok' : 'ralat', teks: res.message || '' });
     if (res.status === 'success') await muat();
@@ -147,6 +158,40 @@ export const GatewaySettingsCard: React.FC<Props> = ({ scope, code, label }) => 
             Disimpan dalam Supabase Vault, bukan dalam jadual biasa. Tidak pernah dipulangkan ke pelayar
             selepas disimpan.
           </p>
+        </div>
+
+        {/* KAEDAH BAYARAN YANG DIPAPARKAN KEPADA SEKOLAH */}
+        <div className="border border-gray-200 rounded-lg p-3">
+          <p className="text-[11px] font-bold text-gray-600 uppercase mb-0.5">Kaedah Bayaran Dibuka</p>
+          <p className="text-[10px] text-gray-400 mb-2">
+            Hanya kaedah yang dihidupkan muncul pada skrin bayaran sekolah.
+          </p>
+          {([
+            ['FPX / Online', bolehFpx, setBolehFpx,
+             'Memerlukan kredensial sah di atas. Togol ini tidak boleh menghidupkannya tanpa akaun yang berfungsi.'],
+            ['Pindahan Bank', bolehPindahan, setBolehPindahan,
+             'Sekolah membayar ke akaun di bawah, kemudian memuat naik resit.'],
+            ['Cek', bolehCek, setBolehCek,
+             'Sekolah merekod no. cek dan memuat naik gambarnya.'],
+          ] as [string, boolean, (v: boolean) => void, string][]).map(([label, nilai, tetap, nota]) => (
+            <label key={label} className="flex items-start justify-between gap-3 py-1.5 cursor-pointer">
+              <span>
+                <span className="block text-sm font-semibold text-gray-700">{label}</span>
+                <span className="block text-[10px] text-gray-400">{nota}</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={nilai}
+                onChange={(e) => tetap(e.target.checked)}
+                className="w-5 h-5 accent-emerald-600 shrink-0 mt-0.5"
+              />
+            </label>
+          ))}
+          {!bolehFpx && !bolehPindahan && !bolehCek && (
+            <p className="text-[10px] text-red-600 font-semibold bg-red-50 border border-red-200 rounded p-2 mt-1">
+              Semua kaedah ditutup. Sekolah dalam skop ini tidak akan dapat membayar langsung.
+            </p>
+          )}
         </div>
 
         <div>

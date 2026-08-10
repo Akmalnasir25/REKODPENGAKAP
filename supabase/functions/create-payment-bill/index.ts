@@ -303,16 +303,29 @@ serve(async (req) => {
 
       // Akaun gateway ikut skop program.
       let gq = admin.from('payment_gateway_settings')
-        .select('id, category_code, secret_vault_id, is_sandbox, is_active')
+        .select('id, category_code, secret_vault_id, is_sandbox, is_active, allow_fpx, allow_bank_transfer, allow_cheque')
         .eq('provider', 'toyyibpay');
       gq = (badge.scope || 'daerah') === 'negeri'
         ? gq.eq('negeri_id', ps.negeri_id).is('daerah_id', null)
         : gq.eq('daerah_id', ps.daerah_id).is('negeri_id', null);
       const { data: gw } = await gq.maybeSingle();
-      const bolehOnline = !!(gw?.is_active && gw.category_code && gw.secret_vault_id);
+      const bolehOnline = !!(gw?.is_active && gw.allow_fpx !== false
+        && gw.category_code && gw.secret_vault_id);
 
       if (body.method === 'toyyibpay' && !bolehOnline) {
         dilangkau.push({ program: nama, sebab: 'bayaran online tidak tersedia untuk skop ini' });
+        continue;
+      }
+
+      // Togol kaedah dikuatkuasakan di SERVER, bukan hanya disembunyikan pada
+      // skrin. Pilihan yang tidak dipaparkan masih boleh dipanggil terus.
+      // Skop tanpa baris gateway kekal membenarkan bayaran manual.
+      if (body.method === 'bank_transfer' && gw && gw.allow_bank_transfer === false) {
+        dilangkau.push({ program: nama, sebab: 'pindahan bank tidak dibuka untuk skop ini' });
+        continue;
+      }
+      if (body.method === 'cheque' && gw && gw.allow_cheque === false) {
+        dilangkau.push({ program: nama, sebab: 'bayaran cek tidak dibuka untuk skop ini' });
         continue;
       }
 

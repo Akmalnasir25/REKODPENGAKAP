@@ -20,6 +20,9 @@ export interface GatewaySettings {
   isSandbox: boolean;
   isActive: boolean;
   verifiedAt: string | null;
+  allowFpx: boolean;
+  allowBankTransfer: boolean;
+  allowCheque: boolean;
 }
 
 /**
@@ -56,6 +59,11 @@ export const getGatewaySettings = async (
       isSandbox: !!data.is_sandbox,
       isActive: !!data.is_active,
       verifiedAt: data.verified_at,
+      // Lalai BENAR: baris yang dicipta sebelum migrasi 046 tidak sepatutnya
+      // kelihatan seperti mempunyai kaedah bayaran yang dimatikan.
+      allowFpx: data.allow_fpx ?? true,
+      allowBankTransfer: data.allow_bank_transfer ?? true,
+      allowCheque: data.allow_cheque ?? true,
     };
   } catch (error) {
     console.error('getGatewaySettings error:', error);
@@ -71,6 +79,9 @@ export interface SaveGatewayInput {
   /** Kosongkan untuk mengekalkan kunci sedia ada. */
   userSecretKey?: string;
   bankAccountInfo?: string;
+  allowFpx?: boolean;
+  allowBankTransfer?: boolean;
+  allowCheque?: boolean;
   transactionFeeFlat?: number;
   isSandbox: boolean;
 }

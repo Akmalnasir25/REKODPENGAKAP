@@ -168,13 +168,23 @@ export const PaymentScreen: React.FC<Props> = ({
         {status.paymentStatus === 'paid' && (
           <button
             onClick={async () => {
+              // Setiap cabang mesti berakhir dengan sesuatu yang kelihatan.
+              // Versi terdahulu membiarkan ralat penjanaan PDF menjadi janji
+              // yang ditolak tanpa dilihat sesiapa — butang kelihatan rosak.
               const id = paymentIdSediaAda || bil?.paymentId;
-              if (!id) return;
+              if (!id) { setRalat('Bayaran ini belum mempunyai rujukan. Muat semula halaman.'); return; }
+              setRalat('');
               setMenjanaResit(true);
-              const data = await getDataResit(id);
-              setMenjanaResit(false);
-              if (data) muatTurunResit(data);
-              else setRalat('Gagal menjana resit. Cuba lagi.');
+              try {
+                const data = await getDataResit(id);
+                if (!data) { setRalat('Data resit tidak dijumpai untuk bayaran ini.'); return; }
+                muatTurunResit(data);
+              } catch (e: any) {
+                console.error('resit gagal:', e);
+                setRalat(`Gagal menjana resit: ${e?.message || 'ralat tidak diketahui'}`);
+              } finally {
+                setMenjanaResit(false);
+              }
             }}
             disabled={menjanaResit}
             className="w-full mt-4 py-2.5 rounded-lg font-bold text-emerald-700 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 transition flex items-center justify-center gap-2"

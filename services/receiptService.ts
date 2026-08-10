@@ -119,7 +119,9 @@ export const janaResitPDF = (data: DataResit): jsPDF => {
   doc.setDrawColor(220).line(L, y, R, y);
   y += 5;
 
-  data.items.forEach((it) => {
+  // Senarai kosong tidak sepatutnya berlaku, tetapi resit yang GAGAL DIJANA
+  // memberitahu sekolah lebih sedikit daripada resit tanpa pecahan.
+  (data.items || []).forEach((it) => {
     // Peranan tanpa seorang pun tidak disenaraikan — "0 pemimpin" hanya
     // menambah bunyi pada dokumen yang perlu dibaca pantas.
     const bil = [

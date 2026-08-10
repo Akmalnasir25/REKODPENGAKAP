@@ -2271,6 +2271,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       {showPayment && (
         <PaymentScreen
           badgeName={selectedBadgeFilter}
+          programs={siriBayaran !== null ? programDalamSiri(siriBayaran) : programSiriSasar}
           year={selectedYear}
           siri={siriBayaran ?? activeSiri}
           negeriCode={currentSchoolSettings?.negeriCode}

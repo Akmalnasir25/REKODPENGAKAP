@@ -12,7 +12,16 @@ import { muatTurunResit } from '../services/receiptService';
 import { formatRM } from '../services/programSummary';
 
 interface Props {
+  /** Penapis program semasa. Kosong bermakna "Semua program". */
   badgeName: string;
+  /**
+   * Program yang benar-benar akan dibil dalam siri ini.
+   *
+   * badgeName sahaja tidak mencukupi: cara semula jadi menghantar satu siri
+   * ialah memilih "Semua program", yang menjadikannya kosong. Tanpa senarai
+   * ini skrin tidak boleh menyelesaikan akaun gateway, dan pilihan FPX hilang.
+   */
+  programs?: string[];
   year: number;
   siri: number;
   negeriCode?: string;
@@ -33,7 +42,7 @@ interface Props {
  * tiada penghantaran".
  */
 export const PaymentScreen: React.FC<Props> = ({
-  badgeName, year, siri, negeriCode, daerahCode, onSelesai, onTutup, paymentIdSediaAda,
+  badgeName, programs, year, siri, negeriCode, daerahCode, onSelesai, onTutup, paymentIdSediaAda,
 }) => {
   const [kaedah, setKaedah] = useState<KaedahBayaran | null>(null);
   const [bil, setBil] = useState<BilDijana | null>(null);
@@ -64,10 +73,15 @@ export const PaymentScreen: React.FC<Props> = ({
   // Satu bil meliputi beberapa program. Nama program hanya diperlukan untuk
   // menyelesaikan akaun bayaran skop sekolah — mana-mana program dalam siri
   // ini menyelesaikan kepada akaun yang sama.
-  const namaProgram = asal?.programs?.[0] || badgeName;
-  const senaraiProgram = asal?.programs?.length
-    ? asal.programs
-    : (bil?.pecahan?.map(p => p.program) ?? (badgeName ? [badgeName] : []));
+  // Keutamaan: bil sebenar → maklumat bil yang disambung semula → senarai
+  // yang dihantar oleh papan pemuka → penapis program.
+  const senaraiProgram = bil?.pecahan?.length
+    ? bil.pecahan.map(p => p.program)
+    : (asal?.programs?.length ? asal.programs
+      : (programs?.length ? programs : (badgeName ? [badgeName] : [])));
+  // Akaun gateway diselesaikan mengikut skop program; mana-mana program dalam
+  // siri ini menyelesaikan kepada akaun yang sama.
+  const namaProgram = senaraiProgram[0] || '';
 
   useEffect(() => {
     if (!namaProgram) return;   // menunggu maklumat bayaran dimuatkan

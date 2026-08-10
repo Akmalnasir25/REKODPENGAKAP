@@ -620,20 +620,31 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // ditapis; tanpa tapisan siri ia merujuk Siri 1, sama seperti program tanpa siri.
   const activeSiri = selectedSiriFilter === '' ? 1 : Number(selectedSiriFilter);
   const siriBelumHantar = useMemo(() => {
-    if (!selectedBadgeFilter) return [] as number[];
-    const ada = new Set<number>();
+    // Penapis program dihormati bila ditetapkan; bila kosong, SEMUA program
+    // dikira. Memulangkan senarai kosong untuk "Semua program" bermakna
+    // penghantaran berskop siri — keseluruhan tujuan §13 — tidak pernah lulus
+    // semakannya sendiri.
+    const perSiri = new Map<number, Set<string>>();
     allData.forEach((d: any) => {
-      if (d.badge !== selectedBadgeFilter) return;
+      if (selectedBadgeFilter && d.badge !== selectedBadgeFilter) return;
       let tahun: number;
       try { tahun = new Date(d.date).getFullYear(); } catch { return; }
       if (tahun !== selectedYear) return;
-      ada.add(d.siri || 1);
+      const siri = d.siri || 1;
+      const set = perSiri.get(siri) || new Set<string>();
+      set.add(d.badge);
+      perSiri.set(siri, set);
     });
-    return Array.from(ada)
-      .filter(s => {
-        const k = getLockKey(selectedBadgeFilter, selectedYear, s);
+
+    // Siri dikira "belum dihantar" jika SEKURANG-KURANGNYA satu programnya
+    // masih terbuka. Menuntut kesemuanya terbuka akan menyembunyikan butang
+    // sebaik satu program dihantar lebih awal.
+    return Array.from(perSiri.entries())
+      .filter(([siri, program]) => Array.from(program).some(nama => {
+        const k = getLockKey(nama, selectedYear, siri);
         return !lockedBadges.includes(k) && !approvedBadges.includes(k);
-      })
+      }))
+      .map(([siri]) => siri)
       .sort((a, b) => a - b);
   }, [allData, selectedBadgeFilter, selectedYear, lockedBadges, approvedBadges]);
 

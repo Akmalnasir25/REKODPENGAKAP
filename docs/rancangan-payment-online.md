@@ -15,80 +15,66 @@
 
 ---
 
-## 0. Status Semasa · 9 Ogos 2026
+## 0. Status Semasa · 10 Ogos 2026
 
-**Terakhir dikerjakan:** kedua-dua aliran bayaran **berjaya hujung ke hujung** dalam sandbox. ToyyibPay/FPX: sekolah membayar, webhook sampai, hash disahkan, tempat dituntut. Manual: sekolah memuat naik bukti, admin membukanya, mengesahkan bayaran, kemudian mengesahkan pendaftaran — dan ia masuk ke statistik.
+**Terakhir dikerjakan:** bayaran peringkat siri (§13) siap dan **diuji berjaya** — satu bil `5zls3z9x` mengutip RM220 merangkumi Keris Emas (2 peserta) dan Keris Perak (1 peserta) dalam satu bayaran FPX.
 
-**Enam pepijat yang hanya muncul semasa ujian sebenar:**
+### Bentuk sistem sekarang
 
-| Pepijat | Kenapa ujian berasingan terlepas |
+Satu **bil** per (sekolah × tahun × siri) merangkumi semua program dalam siri itu. `payment_bills` memiliki wang dan gateway; `payments` kekal sebagai baris program, jadi pengiraan tempat, pencetus kelulusan dan `school_badge_status` tidak pernah perlu berubah.
+
+Pengesahan **pendaftaran** kekal per program. Pengesahan **wang** peringkat bil.
+
+### Pelajaran yang berulang tiga kali hari ini
+
+Tiga pepijat berbeza, satu bentuk: **melangkau sesuatu tanpa menyediakan jalan keluar.**
+
+| Keadaan | Sekolah tersekat kerana |
 |---|---|
-| `CategoryName` huruf besar | Dokumentasi ToyyibPay menunjukkan huruf kecil; API memulangkan huruf besar |
-| `billExpiryDate` dalam UTC | `createBill` memulangkan `BillCode` seperti biasa — bil dicipta sempurna, cuma sudah mati. Hanya kelihatan bila seseorang membuka pautan |
-| Caj gateway RM1 | `billChargeToCustomer=0` menyebabkan pembayar membayar RM81 untuk bil RM80; padanan tepat menolak setiap bayaran sah |
-| Rahsia reconciliation berkurungan | Placeholder ditulis `<nilai>`; kurungan tersalin ke rahsia Edge Function. Setiap larian cron ditolak 401 — dan `cron.job_run_details` melaporkan `succeeded`, kerana pg_net tidak menunggu respons |
-| R2 tidak pernah wujud | `r2-presigned-upload` tidak pernah di-deploy dan tiada kredensial R2. Preflight 404 dilaporkan pelayar sebagai ralat CORS, jadi ia kelihatan seperti masalah header. Modul kursus tidak menyedarinya kerana ia mempunyai fallback senyap |
-| Pencetus bayaran vs `ON CONFLICT` | PostgreSQL menembak BEFORE INSERT bagi baris upsert sebelum konflik dikesan, jadi pencetus membaca lalai lajur `'not_required'` dan bukan `'paid'` yang tersimpan. Ralatnya ditelan kerana `approveSchoolBadge` tidak memeriksa `error` |
+| Bayaran melebihi had | Ditanda `no_seat`, kekal draf, tiada apa membawanya masuk (§13.14) |
+| Peserta ditambah selepas bayaran | Program dilangkau kerana "sudah dibayar", baki tidak pernah dibil (§13.12) |
+| Pendaftaran dibayar lalu dibuka semula | Dilangkau kerana sudah dibayar, tiada apa menghantarnya semula |
 
-Kesemuanya jenis yang sama: setiap bahagian menjawab dengan betul secara berasingan, tetapi rantaian tidak berkelakuan baik untuk manusia sebenar. Tiga yang terakhir berkongsi satu ciri yang lebih merbahaya — **kegagalan senyap**. Cron melaporkan berjaya, pelayar menyalahkan CORS, butang tidak berbuat apa-apa tanpa mesej. Setiap kali, pangkalan data atau gateway sudah memberitahu sebabnya; tiada siapa yang membaca jawapannya.
+Dan empat kegagalan **senyap** dengan punca yang sama — nilai pulangan yang membawa penjelasan, dibuang tanpa dibaca: rahsia reconciliation (401 selama berjam-jam), butang Sahkan (`error` upsert diabaikan), butang resit (ralat PDF di luar `try`), dan bil dilangkau (`hasil.message` dibuang).
 
-### Sudah siap & hidup di produksi
+### Sudah siap & hidup
 
 | | |
 |---|---|
-| Migrasi 027–039 | Dipasang, disahkan terhadap data sebenar |
-| Kunci/pengesahan ikut siri | Sekolah boleh hantar Siri 2 selepas Siri 1 |
-| Kategori sekolah SR/SM | Ditetapkan semasa daftar, boleh diedit |
-| Kadar yuran per siri × jenis | Grid dalam modal tetapan program |
-| Penapis jenis sekolah | AdminDashboard, AdminHistory, DaerahProgramAnalysis |
-| Edge Functions | `save-gateway-settings`, `create-payment-bill`, `toyyibpay-callback`, `check-payment-status`, `submit-payment-proof`, `reconcile-payments` — kesemuanya di-deploy |
-| Akaun gateway | Kinta Utara · **sandbox · disahkan** · kredensial dalam Vault · maklumat akaun bank diisi |
-| Aliran ToyyibPay | **Diuji berjaya** — FPX, SBI BANK A |
-| Aliran manual | **Diuji berjaya** — bukti dimuat naik, dibuka admin, disahkan, masuk statistik |
-| Reconciliation | pg_cron setiap 5 minit · **diuji sebagai pihak yang mengesahkan** — bil dipulangkan ke `pending`, lapisan 3 mengesahkannya sendiri dari `getBillTransactions` |
-| Ketiga-tiga lapisan | Webhook, semakan semasa kembali, dan reconciliation — kesemuanya disaksikan berfungsi |
-| Storan bukti | Baldi persendirian `payment-proofs`; skop diwarisi dari RLS `payments` |
-| Resit PDF | Nombor diterbitkan dari ID bayaran; bilangan dari snapshot bil |
+| Migrasi 027–046 | Dipasang |
+| Bil peringkat siri | **Diuji** — dua program, satu bayaran, RM220 |
+| Ketiga-tiga lapisan cuba-semula | **Diuji** — webhook, semakan kembali, reconciliation |
+| Bayaran manual + bukti | Dibina; baldi persendirian, bukti pada bil |
+| Had tempat | UI + pengiraan snapshot + jalur baki pada papan pemuka sekolah |
+| Lebihan had | Masuk giliran, ditanda, admin putuskan; status `refunded` |
+| Togol kaedah bayaran | FPX / pindahan bank / cek, ikut skop, dikuatkuasakan di server |
+| Rumusan Bayaran | Tab admin dengan penapis, ringkasan, eksport CSV |
+| Resit PDF | Diperincikan mengikut program |
 
 `toyyibpay-callback` dan `reconcile-payments` di-deploy dengan `--no-verify-jwt`. Jangan deploy semula tanpanya.
 
-### Langkah seterusnya, ikut urutan
+### Belum diuji
 
-**Belum diuji:**
-1. **SBI BANK B** (gagal) — sekolah boleh jana bil baharu
+1. **Bayaran manual** — bukti, baldi storan, barisan semakan admin. Laluan ini belum dilalui sekali pun sejak migrasi 042 memindahkan lampiran ke bil
+2. **Resit PDF** — pernah gagal senyap; pelaporan ralat ditambah tetapi hasilnya belum dilihat
+3. **Had tempat dicapai** — laluan lebihan, penanda, dan butang Refund
+4. **Bil separa** — program dilangkau kerana penuh, kemudian dibil selepas had dinaikkan
+5. **Bil susulan** — peserta ditambah selepas bayaran
+6. **SBI Bank B** — bayaran gagal; satu-satunya cabang gateway yang tidak pernah dilalui
 
-> **Nota tentang SBI Bank C.** Bank ujian itu tidak menahan bayaran selama 30 minit seperti dijangka — callback sampai dalam masa tiga minit, jadi webhook memenangi perlumbaan dan reconciliation tidak sempat menyentuhnya. Lapisan 3 akhirnya dibuktikan dengan cara yang lebih langsung: bil yang sudah dibayar dipulangkan ke `pending` dalam pangkalan data kita sementara ToyyibPay masih mengingatinya sebagai berjaya. Itu tepat keadaan "webhook hilang dalam perjalanan", dan pusingan cron berikutnya mengesahkannya sendiri.
->
-> Ia selamat diulang bila-bila kerana tempat dikira secara **terbitan**, bukan kaunter — `siri_seats_taken` mengira peserta sebenar setiap kali dan mengecualikan bayaran yang sedang diproses, jadi menjalankan semula `finalize_payment` tidak menggandakan apa-apa.
->
-> Peraturan jangan-batalkan-transaksi-tergantung juga sudah diperhatikan berfungsi secara berasingan: bil `eh7tc8mi` dilaporkan `tergantung: 1` pusingan demi pusingan dan tidak pernah dibatalkan, walaupun sudah melepasi masa luputnya.
+### Masih terbuka
 
-**Belum diputuskan:**
-3. Jurang §9b — peserta ditambah selepas pengesahan tanpa dibil
+**Peserta ditambah selepas pengesahan.** §13.12 menutup kes "belum dihantar"; program yang sudah `approved` masih dilangkau. Sama ada peserta baharu boleh masuk ke pusingan yang sudah ditutup ialah soalan dasar, bukan teknikal.
 
-**Sebelum produksi:**
-4. `categoryCode` ScoutNadi pada akaun ToyyibPay **produksi**
-5. Tukar togol gateway dari Sandbox ke Produksi
+**Had tempat tidak berfungsi untuk program percuma.** Tempat dikira dari baris bayaran, jadi program tanpa pintu bayaran tidak pernah mencapai hadnya. Memerlukan pengiraan kedua berasaskan pendaftaran jika ia relevan.
 
-### Pengaktifan
+### Sebelum produksi
 
-`payment_online_required` kini `true` untuk **Keris Perak 2026 · Kinta Utara** sahaja — program perintis. Semua program lain masih `false`, jadi tiada sekolah lain nampak sebarang perubahan berkaitan bayaran.
-
-### Cara mengesan reconciliation mati
-
-**Bukan** melalui `cron.job_run_details`. pg_net bersifat fire-and-forget, jadi larian dilaporkan `succeeded` selagi SQL berjaya dihantar — walaupun Edge Function menolaknya 401. Penunjuk sebenar:
-
-```sql
-select to_char(created_at at time zone 'Asia/Kuala_Lumpur','HH24:MI:SS'), details
-from audit_logs where action = 'reconciliation_dijalankan'
-order by created_at desc limit 5;
-```
-
-Tiada baris baharu dalam 10 minit lepas bermakna ia sedang mati senyap.
+Cipta `categoryCode` ScoutNadi pada akaun ToyyibPay **produksi**, kemudian tukar togol dari Sandbox. Habiskan atau batalkan bil ujian yang tergantung dahulu — bil sandbox tidak boleh disemak lagi selepas togol ditukar.
 
 ### Perintis
 
-Keris Perak 2026 · Kinta Utara · skop daerah · yuran peserta RM80 · siri aktif (maks 3).
+Keris Perak & Keris Emas 2026 · Kinta Utara · skop daerah · sandbox.
 
 ---
 

@@ -613,8 +613,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   };
 
   const isCurrentOrFuture = selectedYear >= currentYear;
-  // canAddGeneral checks if at least one category is allowed for NEW registrations
-  const canAddGeneral = isRegistrationOpen && isAnyAllowed && isCurrentOrFuture;
+  // Pendaftaran TIDAK bergantung pada penapis tahun. Penapis itu mengawal apa
+  // yang DIPAPARKAN; borang pendaftaran memilih tahunnya sendiri, termasuk
+  // tahun lampau. Menggandingkan keduanya mencipta jalan buntu berbentuk
+  // bulatan: guru menukar penapis ke 2025 untuk merekod tahun lampau — tindakan
+  // yang paling semula jadi — dan kad pendaftaran terkunci, sedangkan itulah
+  // tepat perkara yang mereka cuba lakukan.
+  const canAddGeneral = isRegistrationOpen && isAnyAllowed;
   
   // Tindakan peringkat program (hantar/status) beroperasi pada siri yang sedang
   // ditapis; tanpa tapisan siri ia merujuk Siri 1, sama seperti program tanpa siri.
@@ -1682,7 +1687,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                        <p className="text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-1"><Calendar size={12}/> Tahun</p>
+                        <p className="text-slate-500 text-xs font-bold uppercase mb-1 flex items-center gap-1"><Calendar size={12}/> Tahun <span className="normal-case font-normal text-slate-400">(paparan)</span></p>
                         <select className="w-full p-1.5 border rounded font-bold text-slate-800 text-sm bg-slate-50" value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}>
                             {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
@@ -1731,28 +1736,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             {canAddGeneral ? <Plus size={20} /> : <Lock size={20}/>}
                         </div>
                         <div className="text-left">
-                            <p className="text-xs font-bold uppercase opacity-80">Tindakan</p>
                             <p className="text-sm font-bold">{canAddGeneral ? 'Daftar Peserta / Pegawai Baru' : 'Pendaftaran Dikunci'}</p>
+                            {/* Penapis di atas ialah paparan sahaja. Menyebutnya di sini
+                                menghalang tanggapan bahawa tahun perlu dipilih dahulu. */}
+                            <p className="text-xs opacity-80">
+                              {canAddGeneral
+                                ? 'Program, tahun & siri dipilih di dalam borang'
+                                : 'Admin belum membuka pendaftaran untuk sekolah anda'}
+                            </p>
                         </div>
                     </button>
                 </div>
 
-                {/* Kad terkunci SEMATA-MATA kerana penapis tahun ialah jalan buntu
-                    yang kelihatan seperti kebenaran ditarik. Rekod tahun lampau
-                    memang disokong — cuma tahunnya dipilih di DALAM borang, bukan
-                    melalui penapis ini. Tanpa nota ini, guru menyangka mereka
-                    disekat daripada membuat pendaftaran backdated langsung. */}
-                {isRegistrationOpen && isAnyAllowed && !isCurrentOrFuture && (
-                    <div className="bg-amber-50 text-amber-800 px-4 py-2.5 rounded-lg mb-4 text-xs flex items-start gap-2 border border-amber-200">
-                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                        <span>
-                            Penapis Tahun ditetapkan ke <strong>{selectedYear}</strong>, jadi pendaftaran
-                            baharu dikunci. Untuk merekod peserta tahun lampau, tukar penapis kembali ke{' '}
-                            <strong>{currentYear}</strong>, buka borang pendaftaran, kemudian pilih{' '}
-                            <strong>Tahun Pendaftaran {selectedYear}</strong> di dalam borang itu.
-                        </span>
-                    </div>
-                )}
 
                 {/* Hint for Badge Locking */}
                 {isRegistrationOpen && isAnyAllowed && !selectedBadgeFilter && filteredData.length > 0 && (

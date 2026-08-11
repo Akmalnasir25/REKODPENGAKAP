@@ -21,7 +21,7 @@ interface AdminBadgesProps {
 }
 
 type BarisOverride = { siri: number | null; schoolType: SchoolType | null; peserta: string; pemimpin: string; penolong: string };
-type BarisHadSiri = { siri: number; tarikhTutup: string; ditutup: boolean };
+type BarisHadSiri = { siri: number; had: string; tarikhTutup: string; ditutup: boolean };
 
 export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl, onRefresh, scopeContext }) => {
   const [newBadge, setNewBadge] = useState('');
@@ -56,9 +56,6 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formShirtEnabled, setFormShirtEnabled] = useState(false);
   const [formSiriEnabled, setFormSiriEnabled] = useState(false);
   const [formMaxSiri, setFormMaxSiri] = useState(5);
-  // Had peserta ialah sifat PROGRAM (migrasi 041) — satu nombor, dikira
-  // semula setiap siri. Bukan satu nombor bagi setiap siri.
-  const [formMaxPeserta, setFormMaxPeserta] = useState('');
   // Lalai TERBUKA — menutup penghantaran ialah tindakan yang disengajakan.
   const [formSubmissionOpen, setFormSubmissionOpen] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -95,7 +92,6 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormShirtEnabled(s?.shirtEnabled || false);
     setFormSiriEnabled(s?.siriEnabled || false);
     setFormMaxSiri(s?.maxSiri || 5);
-    setFormMaxPeserta(s?.maxPeserta != null ? String(s.maxPeserta) : '');
     setFormSubmissionOpen(s?.submissionOpen ?? true);
     setOverrideType(null);
     setFormSiriLimits(
@@ -103,6 +99,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         .filter(h => s && h.programSettingId === s.id)
         .map(h => ({
           siri: h.siri,
+          had: h.maxPeserta != null ? String(h.maxPeserta) : '',
           // <input type="date"> memerlukan YYYY-MM-DD, bukan ISO penuh.
           tarikhTutup: h.paymentDeadline ? h.paymentDeadline.slice(0, 10) : '',
           ditutup: h.isClosed,
@@ -145,14 +142,14 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   };
 
   const bacaHad = (siri: number) =>
-    formSiriLimits.find(h => h.siri === siri) ?? { siri, tarikhTutup: '', ditutup: false };
+    formSiriLimits.find(h => h.siri === siri) ?? { siri, had: '', tarikhTutup: '', ditutup: false };
 
-  const tulisHad = (siri: number, medan: 'tarikhTutup' | 'ditutup', nilai: string | boolean) => {
+  const tulisHad = (siri: number, medan: 'had' | 'tarikhTutup' | 'ditutup', nilai: string | boolean) => {
     const sedia = formSiriLimits.find(h => h.siri === siri);
     if (sedia) {
       setFormSiriLimits(formSiriLimits.map(h => (h === sedia ? { ...h, [medan]: nilai } : h)));
     } else {
-      setFormSiriLimits([...formSiriLimits, { siri, tarikhTutup: '', ditutup: false, [medan]: nilai } as BarisHadSiri]);
+      setFormSiriLimits([...formSiriLimits, { siri, had: '', tarikhTutup: '', ditutup: false, [medan]: nilai } as BarisHadSiri]);
     }
   };
 
@@ -175,7 +172,6 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         shirtEnabled: formShirtEnabled,
         siriEnabled: formSiriEnabled,
         maxSiri: formMaxSiri,
-        maxPeserta: formMaxPeserta.trim() ? Number(formMaxPeserta) : null,
         submissionOpen: formSubmissionOpen,
       });
       if (res.status === 'success') {
@@ -196,6 +192,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
           // 25 Ogos" — jika tidak sekolah kehilangan sehari penuh tanpa sedar.
           await saveProgramSiriSettings(settingId, formSiriLimits.map(h => ({
             siri: h.siri,
+            maxPeserta: h.had.trim() ? Number(h.had) : null,
             paymentDeadline: h.tarikhTutup ? `${h.tarikhTutup}T23:59:59+08:00` : null,
             isClosed: h.ditutup,
           })));
@@ -730,33 +727,18 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                     {/* HAD TEMPAT & TARIKH TUTUP IKUT SIRI */}
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                         <span className="text-[11px] font-bold text-purple-700 uppercase">
-                          Had Tempat
+                          Had Tempat &amp; Tarikh Tutup
                         </span>
                         <p className="text-[10px] text-gray-400 mt-0.5 mb-2">
-                          Satu had bagi program ini, dikira semula setiap siri — bukan jumlah
-                          terkumpul. Kosong = tiada had. Tempat dikira daripada peranan yang
-                          DICAJ dalam jadual di atas, jadi menukar siapa dicaj turut menukar
-                          siapa mengambil tempat.
+                          Setiap siri berdiri sendiri — Siri 1 penuh tidak menyekat Siri 2.
+                          Had kosong = tiada had. Tempat dikira daripada peranan yang DICAJ
+                          dalam jadual di atas, jadi menukar siapa dicaj turut menukar siapa
+                          mengambil tempat.
                           <br />
-                          <strong>Ini "berhenti jual di sini", bukan siling mutlak.</strong> Sekolah
-                          yang membayar serentak boleh melebihi had; bayaran mereka tetap masuk
-                          giliran pengesahan, ditanda melebihi, dan anda yang putuskan sama ada
-                          menerima atau merefund.
-                        </p>
-                        <input
-                          type="number" min="1" step="1"
-                          value={formMaxPeserta}
-                          onChange={(e) => setFormMaxPeserta(e.target.value)}
-                          placeholder="Tiada had"
-                          className="w-full p-2 border border-purple-200 rounded-lg text-sm mb-3 focus:ring-2 focus:ring-purple-400 outline-none"
-                        />
-
-                        <span className="text-[11px] font-bold text-purple-700 uppercase">
-                          Tarikh Tutup Bayaran
-                        </span>
-                        <p className="text-[10px] text-gray-400 mt-0.5 mb-2">
-                          Kekal per siri — Siri 2 lazimnya ditutup pada tarikh berbeza daripada
-                          Siri 1. Kosong = ikut tarikh akhir program.
+                          <strong>Had ialah "berhenti jual di sini", bukan siling mutlak.</strong>{' '}
+                          Sekolah yang membayar serentak boleh melebihinya; bayaran mereka tetap
+                          masuk giliran pengesahan, ditanda melebihi, dan anda yang putuskan sama
+                          ada menerima atau merefund.
                         </p>
 
                         <table className="w-full text-[11px]">
@@ -765,6 +747,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                               <th className="text-left font-bold uppercase text-[9px] pb-1">
                                 {formSiriEnabled ? 'Siri' : 'Program'}
                               </th>
+                              <th className="font-bold uppercase text-[9px] pb-1">Had Tempat</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup Bayaran</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup</th>
                             </tr>
@@ -776,6 +759,15 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                                 <tr key={siri}>
                                   <td className="pr-2 py-0.5 font-bold text-purple-800 whitespace-nowrap">
                                     {formSiriEnabled ? `Siri ${siri}` : 'Keseluruhan'}
+                                  </td>
+                                  <td className="px-0.5 py-0.5">
+                                    <input
+                                      type="number" min="1" step="1"
+                                      value={h.had}
+                                      onChange={(e) => tulisHad(siri, 'had', e.target.value)}
+                                      placeholder="Tiada had"
+                                      className="w-full p-1.5 border border-purple-200 rounded text-center bg-white focus:ring-2 focus:ring-purple-400 outline-none"
+                                    />
                                   </td>
                                   <td className="px-0.5 py-0.5">
                                     <input

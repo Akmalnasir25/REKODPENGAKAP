@@ -1878,7 +1878,6 @@ export interface ProgramSetting {
   shirtEnabled: boolean;
   siriEnabled: boolean;
   maxSiri: number;
-  maxPeserta: number | null;
   submissionOpen: boolean;
 }
 
@@ -1889,7 +1888,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri, max_peserta, submission_open,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri, submission_open,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1916,7 +1915,6 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         shirtEnabled: !!r.shirt_enabled,
         siriEnabled: !!r.siri_enabled,
         maxSiri: r.max_siri || 5,
-        maxPeserta: r.max_peserta ?? null,
         // Lalai TERBUKA: baris sebelum migrasi 047 tidak sepatutnya
         // kelihatan seperti penghantaran ditutup.
         submissionOpen: r.submission_open ?? true,
@@ -1941,7 +1939,6 @@ export interface UpsertProgramSettingInput {
   shirtEnabled: boolean;
   siriEnabled: boolean;
   maxSiri: number;
-  maxPeserta: number | null;
   submissionOpen: boolean;
 }
 
@@ -1972,7 +1969,6 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       shirt_enabled: input.shirtEnabled,
       siri_enabled: input.siriEnabled,
       max_siri: input.siriEnabled ? Math.min(Math.max(input.maxSiri || 5, 1), 20) : 5,
-      max_peserta: input.maxPeserta ?? null,
       submission_open: input.submissionOpen ?? true,
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
@@ -2099,23 +2095,25 @@ export const getFloatedStudents = async (
 export interface ProgramSiriSetting {
   programSettingId: string;
   siri: number;
+  maxPeserta: number | null;      // null = tiada had bagi siri ini
   paymentDeadline: string | null; // null = ikut tarikh akhir program
   isClosed: boolean;
 }
 
-// Had peserta TIDAK di sini — ia sifat program (migrasi 041), kerana satu
-// program mempunyai satu had yang dikira semula setiap siri. Yang kekal per
-// siri ialah tarikh tutup dan penutupan manual.
+// Had peserta kembali ke sini (migrasi 048). Setiap siri ialah pusingan
+// berasingan dengan tapak dan tarikhnya sendiri, jadi hadnya juga
+// berasingan — Siri 1 penuh tidak menyekat Siri 2.
 
 export const getProgramSiriSettings = async (): Promise<ProgramSiriSetting[]> => {
   try {
     const { data, error } = await supabase
       .from('program_siri_settings')
-      .select('program_setting_id, siri, payment_deadline, is_closed');
+      .select('program_setting_id, siri, max_peserta, payment_deadline, is_closed');
     if (error) throw error;
     return (data || []).map((r: any) => ({
       programSettingId: r.program_setting_id,
       siri: r.siri,
+      maxPeserta: r.max_peserta ?? null,
       paymentDeadline: r.payment_deadline,
       isClosed: !!r.is_closed,
     }));
@@ -2127,7 +2125,7 @@ export const getProgramSiriSettings = async (): Promise<ProgramSiriSetting[]> =>
 
 export const saveProgramSiriSettings = async (
   programSettingId: string,
-  rows: Array<{ siri: number; paymentDeadline: string | null; isClosed: boolean }>,
+  rows: Array<{ siri: number; maxPeserta: number | null; paymentDeadline: string | null; isClosed: boolean }>,
 ): Promise<ApiResponse> => {
   try {
     const { error: delErr } = await supabase
@@ -2139,7 +2137,7 @@ export const saveProgramSiriSettings = async (
     // Baris tanpa tarikh tutup dan tidak ditutup bermakna sama seperti tiada
     // baris langsung. Menyimpannya hanya menambah baris yang perlu difahami
     // kemudian.
-    const bermakna = rows.filter(r => r.paymentDeadline !== null || r.isClosed);
+    const bermakna = rows.filter(r => r.maxPeserta !== null || r.paymentDeadline !== null || r.isClosed);
     if (bermakna.length === 0) return { status: 'success', message: 'Had siri dikemas kini.' };
 
     const { error } = await supabase.from('program_siri_settings').insert(

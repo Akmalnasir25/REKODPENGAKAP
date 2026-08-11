@@ -45,15 +45,31 @@ comment on column public.program_siri_settings.max_peserta is
 -- SAMA pada setiap sirinya, supaya kelakuan tidak berubah semasa migrasi.
 -- Baris siri dicipta jika belum wujud.
 
-insert into public.program_siri_settings (program_setting_id, siri, max_peserta)
-select ps.id, g.siri::smallint, ps.max_peserta
-from public.program_settings ps
-cross join generate_series(1, greatest(coalesce(ps.max_siri, 1), 1)) as g(siri)
-where ps.max_peserta is not null
-on conflict (program_setting_id, siri) do update
-  set max_peserta = coalesce(public.program_siri_settings.max_peserta, excluded.max_peserta);
+-- Dibungkus dalam DO kerana lajur sumber mungkin sudah tiada: migrasi ini
+-- perlu selamat dijalankan semula selepas gagal separuh jalan. Rujukan
+-- statik kepada ps.max_peserta akan gagal semasa hurai, sebelum sebarang
+-- semakan sempat berjalan — jadi ia mesti melalui EXECUTE.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'program_settings'
+      and column_name  = 'max_peserta'
+  ) then
+    execute $sql$
+      insert into public.program_siri_settings (program_setting_id, siri, max_peserta)
+      select ps.id, g.siri::smallint, ps.max_peserta
+      from public.program_settings ps
+      cross join generate_series(1, greatest(coalesce(ps.max_siri, 1), 1)) as g(siri)
+      where ps.max_peserta is not null
+      on conflict (program_setting_id, siri) do update
+        set max_peserta = coalesce(public.program_siri_settings.max_peserta, excluded.max_peserta)
+    $sql$;
 
-alter table public.program_settings drop column if exists max_peserta;
+    execute 'alter table public.program_settings drop column max_peserta';
+  end if;
+end $$;
 
 
 -- ============================================================

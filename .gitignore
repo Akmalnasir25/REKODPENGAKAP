@@ -44,3 +44,8 @@ PINDAH-*.sql
 supabase/.temp/
 Screenshot *.png
 ujian-toyyibpay.txt
+
+# Cache deploy Firebase — artifak tempatan, bukan sumber.
+# Ia berubah pada setiap deploy dan berkonflik setiap kali dua sesi
+# menyebarkan aplikasi.
+.firebase/

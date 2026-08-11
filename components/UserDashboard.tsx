@@ -591,10 +591,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const approvedBadges = currentSchoolSettings?.approvedBadges || [];
   const canModifyRecord = (item: SubmissionData) => {
       if (!isRegistrationOpen) return false;
-      
+
+      // Tahun rekod BUKAN sebab untuk mengunci. Pendaftaran backdated memang
+      // disokong — borang memilih tahunnya sendiri — jadi menolak tahun lampau
+      // di sini menjadikannya pintu sehala: rekod 2025 boleh dicipta tetapi
+      // tidak pernah boleh dibetulkan, walaupun belum dihantar. Silap taip satu
+      // nama pun kekal selama-lamanya.
+      //
+      // Yang menentukan ialah status penghantaran di bawah: selagi belum
+      // dihantar untuk pengesahan, rekod masih boleh diedit. Gandingan yang
+      // sama sudah dibuang dari canAddGeneral; ini salinan keduanya.
       const itemYear = new Date(item.date).getFullYear();
-      if (itemYear < currentYear) return false;
-      
+
       // Ikut siri rekod itu sendiri — Siri 1 boleh terkunci sementara Siri 2 masih terbuka.
       const lockKey = getLockKey(item.badge, itemYear, item.siri || 1);
       if (lockedBadges.includes(lockKey)) return false;

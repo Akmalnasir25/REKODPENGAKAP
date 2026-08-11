@@ -386,10 +386,27 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   };
 
   const handleToggleRegistration = async () => {
+    // Dinamakan satu per satu — lihat nota dalam AdminDaerahPanel. Panggilan
+    // tanpa nama program menukar SETIAP program dalam sistem, termasuk negeri
+    // lain, dan RLS tidak menghalangnya.
+    const dalamSkop = attendanceBadges;
+    if (dalamSkop.length === 0) {
+      alert('Tiada program berskop negeri untuk ditukar.');
+      return;
+    }
+
+    const newStatus = !isRegistrationOpen;
+    if (!confirm(
+      `${newStatus ? 'Buka' : 'Tutup'} pendaftaran untuk ${dalamSkop.length} program negeri anda?\n\n`
+      + dalamSkop.map((b: any) => `  • ${b.name}`).join('\n')
+    )) return;
+
     setTogglingStatus(true);
     try {
-        const newStatus = !isRegistrationOpen;
-        await toggleRegistration(scriptUrl, newStatus);
+        const hasil = await Promise.all(
+          dalamSkop.map((b: any) => toggleRegistration(scriptUrl, newStatus, b.name)));
+        const gagal = hasil.filter(r => r.status !== 'success').length;
+        if (gagal > 0) alert(`${gagal} daripada ${dalamSkop.length} program gagal ditukar.`);
         refreshData();
     } catch (e) {
         alert("Gagal menukar status pendaftaran.");

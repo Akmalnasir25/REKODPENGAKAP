@@ -237,10 +237,31 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
   };
 
   const handleToggleRegistration = async () => {
+    // Togol ini MESTI dinamakan program satu per satu.
+    //
+    // toggleRegistration tanpa nama program menjalankan
+    //   update badges set is_open = ... where name <> ''
+    // iaitu SETIAP program dalam sistem — semua daerah, semua negeri. Admin
+    // Kinta Utara yang menekannya akan menutup pendaftaran untuk Selangor.
+    // RLS tidak menghalangnya: badges_update hanya menyemak is_admin_or_above.
+    const dalamSkop = attendanceBadges;
+    if (dalamSkop.length === 0) {
+      alert('Tiada program dalam skop daerah anda untuk ditukar.');
+      return;
+    }
+
+    const newStatus = !isRegistrationOpen;
+    if (!confirm(
+      `${newStatus ? 'Buka' : 'Tutup'} pendaftaran untuk ${dalamSkop.length} program daerah anda?\n\n`
+      + dalamSkop.map((b: any) => `  • ${b.name}`).join('\n')
+    )) return;
+
     setTogglingStatus(true);
     try {
-        const newStatus = !isRegistrationOpen;
-        await toggleRegistration(scriptUrl, newStatus);
+        const hasil = await Promise.all(
+          dalamSkop.map((b: any) => toggleRegistration(scriptUrl, newStatus, b.name)));
+        const gagal = hasil.filter(r => r.status !== 'success').length;
+        if (gagal > 0) alert(`${gagal} daripada ${dalamSkop.length} program gagal ditukar.`);
         refreshData();
     } catch (e) {
         alert("Gagal menukar status pendaftaran.");

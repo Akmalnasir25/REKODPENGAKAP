@@ -924,6 +924,13 @@ export const toggleRegistration = async (_url: string, statusOrBadge: boolean | 
       const { error } = await supabase.from('badges').update({ is_open: isOpen }).eq('name', badgeName.trim());
       if (error) throw error;
     } else {
+      // Cabang ini menyentuh SETIAP program dalam sistem — semua daerah, semua
+      // negeri. RLS tidak menghadkannya: badges_update hanya menyemak
+      // is_admin_or_above, tanpa semakan skop.
+      //
+      // Panel daerah dan negeri TIDAK lagi memanggilnya; kedua-duanya
+      // menamakan program mereka satu per satu. Ia kekal untuk panel
+      // developer, di mana skop kebangsaan memang yang dimaksudkan.
       const { error } = await supabase.from('badges').update({ is_open: isOpen }).neq('name', '');
       if (error) throw error;
     }

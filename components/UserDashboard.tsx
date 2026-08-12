@@ -1011,11 +1011,28 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const candidatesToSubmit = importCandidates.filter(c => selectedImportCandidates.includes(String(c.participantId)));
       if (candidatesToSubmit.length === 0) { alert("Tiada peserta yang sah dipilih."); setIsSubmittingImport(false); return; }
 
-      // No. KP (IC) TIDAK wajib semasa import naik — hanya No Kad Keahlian wajib.
-      const missingNewId = candidatesToSubmit.find(c => !String(importNewIds[String(c.participantId)] || '').trim());
-      if (missingNewId) { alert(`Sila isi No Kad Keahlian untuk ${missingNewId.student}.`); setIsSubmittingImport(false); return; }
+      // No Kad Keahlian baharu wajib untuk PESERTA sahaja.
+      //
+      // Peserta menerima kad keahlian baharu setiap tahun, jadi menaikkan
+      // mereka ke program seterusnya memang memerlukan nombor baharu.
+      // Pemimpin, Penolong Pemimpin dan Penguji tidak — mereka membawa
+      // keahlian sedia ada, dan menuntut nombor baharu bermakna sekolah
+      // terpaksa mereka-reka sesuatu untuk melepasi borang.
+      const perluIdBaharu = importRole === 'PESERTA';
 
-      const newIds = candidatesToSubmit.map(c => String(importNewIds[String(c.participantId)] || '').trim().toUpperCase());
+      // No. KP (IC) TIDAK wajib semasa import naik.
+      if (perluIdBaharu) {
+        const missingNewId = candidatesToSubmit.find(c => !String(importNewIds[String(c.participantId)] || '').trim());
+        if (missingNewId) { alert(`Sila isi No Kad Keahlian untuk ${missingNewId.student}.`); setIsSubmittingImport(false); return; }
+      }
+
+      // Semakan pendua dan semakan wujud hanya ke atas nilai yang BENAR-BENAR
+      // diisi. Tanpa penapis ini, dua medan kosong akan bertembung sesama
+      // sendiri dan dilaporkan sebagai "ID keahlian baru duplicate" — mesej
+      // yang tiada kaitan dengan masalah sebenar.
+      const newIds = candidatesToSubmit
+        .map(c => String(importNewIds[String(c.participantId)] || '').trim().toUpperCase())
+        .filter(id => id.length > 0);
       const duplicateNewId = newIds.find((id, idx) => newIds.indexOf(id) !== idx);
       if (duplicateNewId) { alert(`ID keahlian baru duplicate dalam import: ${duplicateNewId}`); setIsSubmittingImport(false); return; }
 
@@ -2193,7 +2210,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <th className="px-4 py-2">Nama</th>
                                     <th className="px-4 py-2 text-center">No. KP</th>
                                     <th className="px-4 py-2 text-center">ID Lama</th>
-                                    <th className="px-4 py-2 text-center min-w-[180px]">ID Keahlian Baru</th>
+                                    <th className="px-4 py-2 text-center min-w-[180px]">
+                                        ID Keahlian Baru
+                                        {importRole !== 'PESERTA' && (
+                                          <span className="block font-normal normal-case text-[10px] text-gray-400">
+                                            tidak wajib untuk {importRole.toLowerCase()}
+                                          </span>
+                                        )}
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -2206,7 +2230,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         <td className="px-4 py-2 font-bold text-gray-800 uppercase">{c.student}</td>
                                         <td className="px-4 py-2 text-center font-mono">{c.icNumber || <span className="text-gray-400 italic text-xs">tiada (tidak wajib)</span>}</td>
                                         <td className="px-4 py-2 text-center font-mono text-gray-500">{c.id || '-'}</td>
-                                        <td className="px-4 py-2"><input disabled={!selected} value={importNewIds[key] || ''} onChange={(e) => setImportNewIds(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }))} placeholder="No Kad Keahlian (wajib)" className="w-full p-2 border rounded text-xs font-mono disabled:bg-gray-100" /></td>
+                                        <td className="px-4 py-2"><input disabled={!selected} value={importNewIds[key] || ''} onChange={(e) => setImportNewIds(prev => ({ ...prev, [key]: e.target.value.toUpperCase() }))} placeholder={importRole === 'PESERTA' ? "No Kad Keahlian (wajib)" : "No Kad Keahlian (pilihan)"} className="w-full p-2 border rounded text-xs font-mono disabled:bg-gray-100" /></td>
                                     </tr>
                                 )})}
                                 {importCandidates.length === 0 && (

@@ -2144,6 +2144,7 @@ export const saveProgramSiriSettings = async (
       bermakna.map(r => ({
         program_setting_id: programSettingId,
         siri: r.siri,
+        max_peserta: r.maxPeserta,
         payment_deadline: r.paymentDeadline,
         is_closed: r.isClosed,
       })),

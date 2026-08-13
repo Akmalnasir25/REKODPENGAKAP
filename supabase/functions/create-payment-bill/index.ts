@@ -266,6 +266,27 @@ serve(async (req) => {
         continue;
       }
 
+      // Syarat pegawai (migrasi 052). Disemak SEBELUM bil dicipta: mencipta
+      // bil untuk pendaftaran yang pencetus akan tolak hanya mengambil wang
+      // dan meninggalkan sekolah tersekat.
+      //
+      // Program yang gagal DILANGKAU, bukan menyekat keseluruhan siri —
+      // pendaftaran yang sudah lengkap tidak ditahan kerana kesilapan pada
+      // program lain.
+      const { data: syarat } = await admin.rpc('semak_syarat_pegawai', {
+        p_school_id: schoolId, p_badge_id: badgeId, p_year: year, p_siri: siri,
+      });
+      if (syarat && syarat.ok === false) {
+        const kurang: string[] = [];
+        if ((syarat.kurang_pemimpin ?? 0) > 0) kurang.push(`${syarat.kurang_pemimpin} Pemimpin`);
+        if ((syarat.kurang_penguji ?? 0) > 0) kurang.push(`${syarat.kurang_penguji} Penguji`);
+        dilangkau.push({
+          program: nama,
+          sebab: `kurang ${kurang.join(' dan ')} — Penolong Pemimpin dan Pembantu tidak dikira sebagai Pemimpin`,
+        });
+        continue;
+      }
+
       // Siri percuma: tiada bil, hantar terus. Satu siri boleh mengandungi
       // program berbayar dan program percuma serentak — gelung ini sudah
       // mengasingkannya per badge.

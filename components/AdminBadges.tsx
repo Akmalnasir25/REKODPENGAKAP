@@ -73,6 +73,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formMaxSiri, setFormMaxSiri] = useState(5);
   // Lalai TERBUKA — menutup penghantaran ialah tindakan yang disengajakan.
   const [formSubmissionOpen, setFormSubmissionOpen] = useState(true);
+  const [formMinPemimpin, setFormMinPemimpin] = useState('0');
+  const [formMinPenguji, setFormMinPenguji] = useState('0');
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
@@ -109,6 +111,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormSiriEnabled(s?.siriEnabled || false);
     setFormMaxSiri(s?.maxSiri || 5);
     setFormSubmissionOpen(s?.submissionOpen ?? true);
+    setFormMinPemimpin(String(s?.minPemimpin ?? 0));
+    setFormMinPenguji(String(s?.minPenguji ?? 0));
     setOverrideType(null);
 
     // Kiraan datang selepas modal terbuka; sehingga itu petak menunjukkan "–".
@@ -245,6 +249,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         siriEnabled: formSiriEnabled,
         maxSiri: formMaxSiri,
         submissionOpen: formSubmissionOpen,
+        minPemimpin: Math.max(0, Number(formMinPemimpin) || 0),
+        minPenguji: Math.max(0, Number(formMinPenguji) || 0),
       });
       if (res.status === 'success') {
         // Override memerlukan id tetapan, jadi ia hanya boleh disimpan selepas
@@ -660,6 +666,43 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                     yang sudah dibayar.
                   </p>
                 )}
+
+                {/* SYARAT PEGAWAI — migrasi 052 */}
+                <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+                  <span className="block font-bold text-sm text-gray-700">Syarat Pegawai Sebelum Hantar</span>
+                  <p className="text-[11px] text-gray-400 mt-0.5 mb-2">
+                    Bilangan minimum yang mesti didaftarkan bersama peserta sebelum sekolah
+                    boleh menghantar. <strong>0 = tidak diwajibkan.</strong> Syarat hanya
+                    dikenakan pada program yang ada peserta dalam siri itu.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">Min. Pemimpin</span>
+                      <input
+                        type="number" min="0" step="1"
+                        value={formMinPemimpin}
+                        onChange={(e) => setFormMinPemimpin(e.target.value)}
+                        className="w-full p-1.5 border border-gray-200 rounded text-center bg-white focus:ring-2 focus:ring-blue-400 outline-none"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">Min. Penguji</span>
+                      <input
+                        type="number" min="0" step="1"
+                        value={formMinPenguji}
+                        onChange={(e) => setFormMinPenguji(e.target.value)}
+                        className="w-full p-1.5 border border-gray-200 rounded text-center bg-white focus:ring-2 focus:ring-blue-400 outline-none"
+                      />
+                    </label>
+                  </div>
+                  {(Number(formMinPemimpin) > 0 || Number(formMinPenguji) > 0) && (
+                    <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">
+                      Hanya peranan <strong>Pemimpin</strong> dikira. Penolong Pemimpin dan
+                      Pembantu <strong>tidak</strong> memenuhi syarat ini — sekolah yang hanya
+                      mendaftarkan penolong akan tersekat sehingga mereka menukar peranan itu.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* BAYARAN */}

@@ -733,6 +733,42 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Siri diambil sebagai hujah, bukan diteka daripada penapis: penapis UI
   // dan siri peserta sebenar boleh berbeza, dan itulah pepijat yang
   // membenarkan bil RM0 sebelum ini.
+  // Syarat pegawai (migrasi 052). Dikira di klien daripada peserta sebenar,
+  // menggunakan peraturan yang SAMA seperti semak_syarat_pegawai:
+  //   - hanya program yang ADA peserta dalam siri itu tertakluk
+  //   - hanya peranan PEMIMPIN dikira; penolong dan pembantu tidak
+  //
+  // Ini kemudahan sahaja. Pintu sebenar ialah pencetus pangkalan data —
+  // program percuma tidak pernah melalui Edge Function.
+  const syaratPegawaiKurang = (senarai: string[], siri: number) => {
+    const kurang: string[] = [];
+    senarai.forEach(nama => {
+      const ps = programSettings.find(p =>
+        p.badgeName === nama && p.year === selectedYear
+        && ((p.scope === 'negeri' && p.negeriCode === currentSchoolSettings?.negeriCode)
+          || (p.scope === 'daerah' && p.daerahCode === currentSchoolSettings?.daerahCode)));
+      if (!ps) return;
+      const minL = ps.minPemimpin || 0;
+      const minU = ps.minPenguji || 0;
+      if (minL === 0 && minU === 0) return;
+
+      const dalam = myData.filter(d =>
+        d.badge === nama && (d.siri || 1) === siri
+        && new Date(d.date).getFullYear() === selectedYear
+        && !d.isWithdrawn);
+      const peranan = (d: any) => (d.role || 'PESERTA').toUpperCase();
+      if (!dalam.some(d => ['PESERTA', 'PENERIMA RAMBU'].includes(peranan(d)))) return;
+
+      const adaL = dalam.filter(d => peranan(d) === 'PEMIMPIN').length;
+      const adaU = dalam.filter(d => peranan(d) === 'PENGUJI').length;
+      const perlu: string[] = [];
+      if (adaL < minL) perlu.push(`${minL - adaL} Pemimpin`);
+      if (adaU < minU) perlu.push(`${minU - adaU} Penguji`);
+      if (perlu.length > 0) kurang.push(`  • ${nama}: kurang ${perlu.join(' dan ')}`);
+    });
+    return kurang;
+  };
+
   const perluBayarSiri = (program: string[], siri: number) => program.some(nama =>
     programSettings.some(ps =>
       ps.badgeName === nama && ps.year === selectedYear
@@ -985,6 +1021,21 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       // terbuka sebaik mana-mana satu daripadanya memerlukan bayaran.
       const program = programDalamSiri(sasar);
       const senarai = program.length > 0 ? program : [selectedBadgeFilter];
+
+      // Disemak SEBELUM pintu bayaran: mencipta bil untuk pendaftaran yang
+      // pangkalan data akan tolak hanya mengambil wang tanpa guna.
+      const kurangPegawai = syaratPegawaiKurang(senarai, sasar);
+      if (kurangPegawai.length > 0) {
+        alert([
+          `SYARAT PEGAWAI BELUM DIPENUHI (Siri ${sasar})`,
+          '',
+          ...kurangPegawai,
+          '',
+          'Sila daftarkan pegawai yang kurang sebelum menghantar.',
+          'Nota: Penolong Pemimpin dan Pembantu tidak dikira sebagai Pemimpin.',
+        ].join('\n'));
+        return;
+      }
 
       if (perluBayarSiri(senarai, sasar)) {
         setSiriBayaran(sasar);

@@ -1922,6 +1922,9 @@ export interface ProgramSetting {
   siriEnabled: boolean;
   maxSiri: number;
   submissionOpen: boolean;
+  /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
+  minPemimpin: number;
+  minPenguji: number;
 }
 
 // Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
@@ -1931,7 +1934,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open, min_pemimpin, min_penguji,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1962,6 +1965,8 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         // Lalai TERBUKA: baris sebelum migrasi 047 tidak sepatutnya
         // kelihatan seperti penghantaran ditutup.
         submissionOpen: r.submission_open ?? true,
+        minPemimpin: Number(r.min_pemimpin ?? 0),
+        minPenguji: Number(r.min_penguji ?? 0),
       };
     });
   } catch {
@@ -1985,6 +1990,9 @@ export interface UpsertProgramSettingInput {
   siriEnabled: boolean;
   maxSiri: number;
   submissionOpen: boolean;
+  /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
+  minPemimpin: number;
+  minPenguji: number;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
@@ -2016,6 +2024,8 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       siri_enabled: input.siriEnabled,
       max_siri: input.siriEnabled ? Math.min(Math.max(input.maxSiri || 5, 1), 20) : 5,
       submission_open: input.submissionOpen ?? true,
+      min_pemimpin: Math.max(0, Number(input.minPemimpin ?? 0)),
+      min_penguji: Math.max(0, Number(input.minPenguji ?? 0)),
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
     };

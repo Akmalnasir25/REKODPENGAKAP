@@ -1774,11 +1774,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 </div>
 
 
-                {/* Hint for Badge Locking */}
-                {isRegistrationOpen && isAnyAllowed && !selectedBadgeFilter && filteredData.length > 0 && (
-                    <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 border border-blue-100">
-                        <AlertTriangle size={14} className="shrink-0"/> 
-                        Pilih <strong>Program</strong> di atas untuk membolehkan butang "Hantar Pendaftaran".
+                {/* Hantar berskop SIRI (§13), bukan program. Petunjuk lama di sini
+                    menyuruh guru memilih Program — dan ia muncul TEPAT bila mereka
+                    memilih "Semua Program", iaitu pilihan yang betul. Mengikutnya
+                    bermakna menghantar program satu per satu, satu bil setiap satu:
+                    kes bayar berkali-kali yang penghantaran berskop siri wujud untuk
+                    elakkan.
+
+                    Yang sebenarnya kabur ialah SIRI. siriSasarHantar hanya null bila
+                    penapis siri kosong dan lebih daripada satu siri masih menunggu,
+                    jadi itulah satu-satunya keadaan yang perlu diberitahu. */}
+                {isRegistrationOpen && isAnyAllowed && siriSasarHantar === null && siriBelumHantar.length > 1 && (
+                    <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-start gap-2 border border-blue-100">
+                        <AlertTriangle size={14} className="shrink-0 mt-0.5"/>
+                        <span>
+                            Pilih <strong>Siri</strong> di atas untuk menghantar — anda ada pendaftaran
+                            belum dihantar dalam Siri {siriBelumHantar.join(', ')}.
+                            Biarkan <strong>Program</strong> pada "Semua Program": satu penghantaran
+                            meliputi semua program dalam siri itu, dengan satu bil.
+                        </span>
                     </div>
                 )}
 
@@ -1797,14 +1811,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <Users size={24} className="text-purple-600" />
                             </div>
                         </div>
-                    </div>
-                )}
-
-                {/* Hint for Badge Locking - revised */}
-                {isRegistrationOpen && isAnyAllowed && !selectedBadgeFilter && filteredData.length > 0 && (
-                    <div className="bg-blue-50 text-blue-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 border border-blue-100">
-                        <AlertTriangle size={14} className="shrink-0"/> 
-                        Pilih <strong>Program</strong> di atas untuk membolehkan butang "Hantar Pendaftaran".
                     </div>
                 )}
 

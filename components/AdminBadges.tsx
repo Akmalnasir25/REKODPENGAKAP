@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, RefreshCw, Medal, ToggleLeft, ToggleRight, Calendar, Pencil, Check, X, Wallet, Shirt, Layers, Send } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { GatewaySettingsCard } from './GatewaySettingsCard';
-import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting, getProgramFeeOverrides, saveProgramFeeOverrides, ProgramFeeOverride, getProgramSiriSettings, saveProgramSiriSettings, ProgramSiriSetting } from '../services/supabaseApi';
+import { addBadgeType, deleteBadgeType, toggleRegistration, updateBadgeDeadline, updateBadgeName, updateBadgeRequiresDaerahApproval, getProgramSettings, upsertProgramSetting, ProgramSetting, getProgramFeeOverrides, saveProgramFeeOverrides, ProgramFeeOverride, getProgramSiriSettings, saveProgramSiriSettings, ProgramSiriSetting, getTerisiSiri } from '../services/supabaseApi';
 import { Badge , SchoolType } from '../types';
 
 interface AdminBadgesProps {
@@ -53,6 +53,10 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   // tetapi tiada UI, jadi had sentiasa null dan tiada program pernah penuh.
   const [formSiriLimits, setFormSiriLimits] = useState<BarisHadSiri[]>([]);
   const [allSiriSettings, setAllSiriSettings] = useState<ProgramSiriSetting[]>([]);
+  // Tempat yang sudah terjual, ikut siri. Tanpa ini admin menetapkan had
+  // secara buta — sekolah nampak "120/300 · baki 180", yang menetapkan 300
+  // tidak nampak apa-apa.
+  const [terisiSiri, setTerisiSiri] = useState<Record<number, number>>({});
   const [formShirtEnabled, setFormShirtEnabled] = useState(false);
   const [formSiriEnabled, setFormSiriEnabled] = useState(false);
   const [formMaxSiri, setFormMaxSiri] = useState(5);
@@ -94,6 +98,16 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormMaxSiri(s?.maxSiri || 5);
     setFormSubmissionOpen(s?.submissionOpen ?? true);
     setOverrideType(null);
+
+    // Kiraan datang selepas modal terbuka; sehingga itu petak menunjukkan "–".
+    // Tetapan yang belum pernah disimpan tiada id, jadi tiada apa untuk dikira.
+    setTerisiSiri({});
+    if (s?.id) {
+      const bilSiri = s.siriEnabled ? (s.maxSiri || 5) : 1;
+      getTerisiSiri(s.id, Array.from({ length: bilSiri }, (_, i) => i + 1))
+        .then(setTerisiSiri)
+        .catch(() => setTerisiSiri({}));
+    }
     setFormSiriLimits(
       allSiriSettings
         .filter(h => s && h.programSettingId === s.id)
@@ -143,6 +157,32 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
 
   const bacaHad = (siri: number) =>
     formSiriLimits.find(h => h.siri === siri) ?? { siri, had: '', tarikhTutup: '', ditutup: false };
+
+  // Terisi dibaca dari DB; baki dikira terhadap nilai yang SEDANG ditaip,
+  // supaya menukar had dari 300 ke 150 terus menunjukkan kesannya sebelum
+  // disimpan. Warna mengikut ambang yang sama seperti jalur sekolah.
+  const petakTerisi = (siri: number, hadTeks: string) => {
+    const terisi = terisiSiri[siri];
+    if (terisi === undefined) return <span className="text-gray-300">–</span>;
+
+    const had = hadTeks.trim() ? Number(hadTeks) : null;
+    if (had === null || Number.isNaN(had)) {
+      return <span className="font-mono text-gray-500" title="Tiada had ditetapkan">{terisi}</span>;
+    }
+
+    const baki = Math.max(had - terisi, 0);
+    const warna = terisi > had ? 'text-red-700'
+      : baki === 0 ? 'text-red-600'
+      : baki <= 10 ? 'text-amber-600'
+      : 'text-slate-600';
+    return (
+      <span className={`font-mono font-bold ${warna}`}
+        title={terisi > had ? `Melebihi had sebanyak ${terisi - had}` : 'Terisi · baki'}>
+        {terisi} · baki {baki}
+        {terisi > had && ` (lebih ${terisi - had})`}
+      </span>
+    );
+  };
 
   const tulisHad = (siri: number, medan: 'had' | 'tarikhTutup' | 'ditutup', nilai: string | boolean) => {
     const sedia = formSiriLimits.find(h => h.siri === siri);
@@ -748,6 +788,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                                 {formSiriEnabled ? 'Siri' : 'Program'}
                               </th>
                               <th className="font-bold uppercase text-[9px] pb-1">Had Tempat</th>
+                              <th className="font-bold uppercase text-[9px] pb-1">Terisi</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup Bayaran</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup</th>
                             </tr>
@@ -768,6 +809,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                                       placeholder="Tiada had"
                                       className="w-full p-1.5 border border-purple-200 rounded text-center bg-white focus:ring-2 focus:ring-purple-400 outline-none"
                                     />
+                                  </td>
+                                  <td className="px-1 py-0.5 text-center whitespace-nowrap">
+                                    {petakTerisi(siri, h.had)}
                                   </td>
                                   <td className="px-0.5 py-0.5">
                                     <input

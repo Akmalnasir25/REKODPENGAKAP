@@ -2156,6 +2156,33 @@ export const saveProgramSiriSettings = async (
   }
 };
 
+// Tempat yang SUDAH terjual bagi satu program × siri.
+//
+// baki_tempat_siri tidak boleh dipakai di sini: ia bermula dengan mencari
+// school_id daripada auth.uid() dan memulangkan kosong bila tiada — iaitu tepat
+// keadaan admin. Ia dibina untuk memberi amaran kepada guru semasa mendaftar,
+// bukan untuk pemantauan.
+//
+// siri_seats_taken pula tidak menyentuh auth.uid() langsung, dan geran kepada
+// `authenticated` sudah wujud sejak migrasi 045 — jadi ini tidak memerlukan
+// migrasi baharu.
+export const getTerisiSiri = async (
+  programSettingId: string,
+  siriSenarai: number[],
+): Promise<Record<number, number>> => {
+  const hasil: Record<number, number> = {};
+  await Promise.all(siriSenarai.map(async siri => {
+    const { data, error } = await supabase.rpc('siri_seats_taken', {
+      p_program_setting_id: programSettingId,
+      p_siri: siri,
+    });
+    // Satu siri yang gagal tidak boleh mengosongkan keseluruhan jadual —
+    // siri lain masih memberi maklumat yang berguna.
+    if (!error && typeof data === 'number') hasil[siri] = data;
+  }));
+  return hasil;
+};
+
 // ============================================================
 // Baki tempat yang sekolah boleh lihat (migrasi 044)
 // ============================================================

@@ -1,9 +1,9 @@
 
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search, MapPin } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode, updateSchoolType } from '../services/supabaseApi';
+import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode, updateSchoolType, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
 import { School, Badge, Daerah, SchoolType } from '../types';
 import { parseBadgeStatusKey } from '../utils/dataProcessing';
@@ -29,6 +29,18 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   const [toggling, setToggling] = useState<{name: string, type: string} | null>(null);
   const [batchToggling, setBatchToggling] = useState<string | null>(null);
   const [badgePermissionLoading, setBadgePermissionLoading] = useState<string | null>(null);
+
+  // Tetapan program diperlukan untuk satu sebab sahaja: mengetahui peranan mana
+  // yang DICAJ. Peranan yang dicaj mengambil tempat (Keputusan #10), jadi ia
+  // tidak boleh dibuka selepas pengesahan — tempat akan digunakan tanpa bil.
+  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
+  useEffect(() => { getProgramSettings(new Date().getFullYear()).then(setProgramSettings).catch(() => {}); }, []);
+
+  // Konservatif dengan sengaja: kalau MANA-MANA tetapan bagi program ini
+  // mengecaj pemimpin atau penolong, peranan itu dikira dicaj. Arah kegagalan
+  // yang betul ialah membiarkan butang terkunci, bukan membuka peranan berbayar.
+  const pegawaiDicaj = (badgeName: string) => programSettings.some(ps =>
+    ps.badgeName === badgeName && (ps.feePemimpin != null || ps.feePenolong != null));
   const [unlockingBadge, setUnlockingBadge] = useState<string | null>(null); 
   const [approvingBadge, setApprovingBadge] = useState<string | null>(null); 
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
@@ -278,15 +290,18 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
       }
   };
 
-  const handleBadgeEditPermission = async (badgeName: string, type: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean) => {
-    const label = type === 'students' ? 'PESERTA' : type === 'assistants' ? 'PENOLONG PEMIMPIN' : type === 'examiners' ? 'PENGUJI' : 'SEMUA KATEGORI';
+  const handleBadgeEditPermission = async (badgeName: string, type: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean, fasa: 'sebelum' | 'selepas' = 'sebelum') => {
+    const label = type === 'students' ? 'PESERTA' : type === 'assistants' ? 'PEMIMPIN & PENOLONG PEMIMPIN' : type === 'examiners' ? 'PENGUJI' : 'SEMUA KATEGORI';
     const actionText = allow ? 'MEMBENARKAN EDIT' : 'MENUTUP EDIT';
-    if (!confirm(`KAWALAN EDIT PROGRAM:\n\nAdakah anda pasti mahu ${actionText} ${label} untuk program '${badgeName}' bagi SEMUA sekolah?\n\nProgram lain tidak akan terkesan.`)) return;
-    
-    const loadingKey = `${badgeName}-${type}`;
+    const fasaText = fasa === 'selepas'
+      ? '\n\nIni terpakai SELEPAS pendaftaran dihantar atau disahkan. Sekolah akan boleh tambah, edit dan buang peranan ini walaupun pendaftaran sudah masuk statistik.'
+      : '';
+    if (!confirm(`KAWALAN EDIT PROGRAM:\n\nAdakah anda pasti mahu ${actionText} ${label} untuk program '${badgeName}' bagi SEMUA sekolah?${fasaText}\n\nProgram lain tidak akan terkesan.`)) return;
+
+    const loadingKey = `${badgeName}-${type}-${fasa}`;
     setBadgePermissionLoading(loadingKey);
     try {
-      const res = await toggleBadgeEditPermissionBatch(scriptUrl, badgeName, type, allow);
+      const res = await toggleBadgeEditPermissionBatch(scriptUrl, badgeName, type, allow, undefined, undefined, fasa);
       if (res.status === 'success') {
         alert(res.message || `Berjaya dikemaskini.`);
         onRefresh();
@@ -491,7 +506,12 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
             <Settings2 size={18} className="text-amber-600"/>
             <span className="text-sm font-bold text-amber-800 uppercase">Kawalan Edit Pukal Mengikut Program</span>
           </div>
-          <p className="text-xs text-amber-600 mb-3">Benarkan/tutup edit Peserta, Penolong Pemimpin dan Penguji untuk SEMUA sekolah mengikut program. Contoh: tutup Peserta untuk Keris Perak sahaja, program lain masih boleh edit.</p>
+          <p className="text-xs text-amber-600 mb-3">
+            Baris atas terpakai <strong>sebelum</strong> pendaftaran dihantar. Baris "Selepas Hantar / Sah"
+            terpakai selepas — sekolah boleh tambah, edit dan buang pegawai walaupun pendaftaran sudah
+            masuk statistik. Peserta tiada pada baris kedua: ia kekal terkunci selepas dihantar.
+            Peranan yang <strong>dicaj</strong> juga tidak boleh dibuka, kerana ia mengambil tempat.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {badges.map(badge => {
               // Kunci kebenaran kini mengandungi siri (migrasi 027), dan satu
@@ -511,18 +531,38 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
               const allStudentsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.students !== false));
               const allAssistantsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.assistants !== false));
               const allExaminersEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.examiners !== false));
-              const PermissionButton = ({ type, active, icon: Icon }: { type: 'students' | 'assistants' | 'examiners', active: boolean, icon: any }) => {
-                const loadingKey = `${badge.name}-${type}`;
-                const label = type === 'students' ? 'Peserta' : type === 'assistants' ? 'Penolong' : 'Penguji';
+              // Fasa kedua: kebenaran yang terpakai SELEPAS dihantar/disahkan.
+              // Lalai di sini ialah TUTUP (`=== true`), bertentangan dengan baris
+              // pertama yang lalainya buka (`!== false`). Pendaftaran yang sudah
+              // disahkan tidak sepatutnya terbuka semata-mata kerana tiada
+              // sesiapa pernah menetapkan apa-apa.
+              const permsSelepas = (s: School) =>
+                Object.entries(s.badgeEditPermissionsSelepas || {})
+                  .filter(([k]) => {
+                    const parsed = parseBadgeStatusKey(k);
+                    return parsed.badge === badge.name && parsed.year === yearNow;
+                  })
+                  .map(([, v]) => v as any);
+              const adaBaris = schools.some(s => permsSelepas(s).length > 0);
+              const allAssistantsSelepas = adaBaris && schools.every(s => permsSelepas(s).every(p => p?.assistants === true));
+              const allExaminersSelepas = adaBaris && schools.every(s => permsSelepas(s).every(p => p?.examiners === true));
+              const dicaj = pegawaiDicaj(badge.name);
+
+              const PermissionButton = ({ type, active, icon: Icon, fasa = 'sebelum' as 'sebelum' | 'selepas', lumpuh = false, sebabLumpuh = '' }: { type: 'students' | 'assistants' | 'examiners', active: boolean, icon: any, fasa?: 'sebelum' | 'selepas', lumpuh?: boolean, sebabLumpuh?: string }) => {
+                const loadingKey = `${badge.name}-${type}-${fasa}`;
+                const label = type === 'students' ? 'Peserta' : type === 'assistants' ? 'Pemimpin' : 'Penguji';
+                const warna = lumpuh
+                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                  : active ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300';
                 return (
                   <button
-                    onClick={() => handleBadgeEditPermission(badge.name, type, !active)}
-                    disabled={badgePermissionLoading === loadingKey}
-                    className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition ${active ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300'}`}
-                    title={`${active ? 'Klik untuk tutup edit' : 'Klik untuk benarkan edit'} ${label} bagi ${badge.name}`}
+                    onClick={() => { if (!lumpuh) handleBadgeEditPermission(badge.name, type, !active, fasa); }}
+                    disabled={lumpuh || badgePermissionLoading === loadingKey}
+                    className={`flex items-center justify-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold transition ${warna}`}
+                    title={lumpuh ? sebabLumpuh : `${active ? 'Klik untuk tutup edit' : 'Klik untuk benarkan edit'} ${label} bagi ${badge.name}`}
                   >
                     {badgePermissionLoading === loadingKey ? <LoadingSpinner size="sm" /> : <Icon size={12} />}
-                    {label}: {active ? 'ON' : 'OFF'}
+                    {label}: {lumpuh ? 'DICAJ' : active ? 'ON' : 'OFF'}
                   </button>
                 );
               };
@@ -536,6 +576,19 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                     <PermissionButton type="students" active={allStudentsEdit} icon={Users} />
                     <PermissionButton type="assistants" active={allAssistantsEdit} icon={Shield} />
                     <PermissionButton type="examiners" active={allExaminersEdit} icon={GraduationCap} />
+                  </div>
+
+                  {/* Baris kedua: selepas hantar/sah. Peserta sengaja tiada. */}
+                  <p className="text-[9px] font-bold text-slate-400 uppercase mt-2 mb-1">Selepas Hantar / Sah</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <PermissionButton
+                      type="assistants" active={allAssistantsSelepas} icon={Shield} fasa="selepas"
+                      lumpuh={dicaj}
+                      sebabLumpuh={`Pemimpin dan Penolong DICAJ bagi ${badge.name}. Peranan berbayar mengambil tempat, jadi ia tidak boleh dibuka selepas pengesahan — tempat akan digunakan tanpa bil.`}
+                    />
+                    <PermissionButton
+                      type="examiners" active={allExaminersSelepas} icon={GraduationCap} fasa="selepas"
+                    />
                   </div>
                 </div>
               );

@@ -894,6 +894,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
                   if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
                   if (r === 'PEMIMPIN') return 2;
                   if (r.includes('PENOLONG')) return 3;
+                  if (r === 'PEMBANTU') return 4;
                   if (r === 'PENGUJI') return 4;
                   return 5;
                 };
@@ -906,7 +907,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
 
               // Stats for filtered data
               const statPeserta = filteredSubmissions.filter(d => !d.role || d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU').length;
-              const statPenolong = filteredSubmissions.filter(d => (d.role || '').toUpperCase().includes('PENOLONG') || d.role === 'PEMIMPIN').length;
+              const statPenolong = filteredSubmissions.filter(d => (d.role || '').toUpperCase().includes('PENOLONG') || d.role === 'PEMIMPIN' || d.role === 'PEMBANTU').length;
               const statPenguji = filteredSubmissions.filter(d => (d.role || '').toUpperCase() === 'PENGUJI').length;
               const statSchools = new Set(filteredSubmissions.map(d => d.schoolCode || d.school).filter(Boolean)).size;
 

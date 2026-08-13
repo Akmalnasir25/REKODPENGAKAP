@@ -112,6 +112,13 @@ export interface School {
     assistants?: boolean;
     examiners?: boolean;
   }>;
+  /** Kebenaran yang terpakai SELEPAS pendaftaran dihantar atau disahkan.
+   *  Tiada `students`: PESERTA kekal terkunci selepas penghantaran dalam
+   *  semua keadaan. Rujuk docs/rancangan-edit-pegawai-selepas-sah.md */
+  badgeEditPermissionsSelepas?: Record<string, {
+    assistants?: boolean;
+    examiners?: boolean;
+  }>;
 }
 
 export interface Negeri {

@@ -78,8 +78,9 @@ export const generateParticipantReport = (
     if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
     if (r === 'PEMIMPIN') return 2;
     if (r.includes('PENOLONG')) return 3;
-    if (r === 'PENGUJI') return 4;
-    return 5;
+    if (r === 'PEMBANTU') return 4;
+    if (r === 'PENGUJI') return 5;
+    return 6;
   };
 
   const grouped: Record<string, SubmissionData[]> = {};
@@ -249,7 +250,10 @@ export const generateSummaryReport = (
     const gender = (d.gender || '').toUpperCase();
     if (role === 'PENGUJI') s.penguji++;
     else if (role === 'PEMIMPIN') s.pemimpin++;
-    else if (role.includes('PENOLONG')) s.penolong++;
+    // PEMBANTU dikumpul bersama penolong dalam laporan ringkas ini; jadual
+    // PDF mempunyai lajur tetap. Yang PENTING ialah ia tidak jatuh ke dalam
+    // `else` di bawah, iaitu baldi PESERTA.
+    else if (role.includes('PENOLONG') || role === 'PEMBANTU') s.penolong++;
     else {
       s.peserta++;
       if (gender.startsWith('L') || gender.startsWith('M')) s.lelaki++;
@@ -266,6 +270,8 @@ export const generateSummaryReport = (
       categoryCount['Pemimpin'] = (categoryCount['Pemimpin'] || 0) + 1;
     } else if (role.includes('PENOLONG')) {
       categoryCount['Penolong Pemimpin'] = (categoryCount['Penolong Pemimpin'] || 0) + 1;
+    } else if (role === 'PEMBANTU') {
+      categoryCount['Pembantu'] = (categoryCount['Pembantu'] || 0) + 1;
     } else if (role === 'PENGUJI') {
       categoryCount['Penguji'] = (categoryCount['Penguji'] || 0) + 1;
     } else if (d.category) {
@@ -461,8 +467,9 @@ const appendParticipantTable = (
     if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
     if (r === 'PEMIMPIN') return 2;
     if (r.includes('PENOLONG')) return 3;
-    if (r === 'PENGUJI') return 4;
-    return 5;
+    if (r === 'PEMBANTU') return 4;
+    if (r === 'PENGUJI') return 5;
+    return 6;
   };
 
   const grouped: Record<string, SubmissionData[]> = {};

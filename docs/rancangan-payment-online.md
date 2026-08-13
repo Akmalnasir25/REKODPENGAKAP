@@ -1191,3 +1191,103 @@ PostgreSQL menembak pencetus BEFORE INSERT bagi baris `on conflict do update` se
 ### Had yang diketahui
 
 Togol ini peringkat **program × tahun**, bukan per siri. Menutup penghantaran Keris Perak 2026 menutupnya bagi semua sirinya. Dalam amalan Siri 1 lazimnya sudah diluluskan dan tidak terjejas, tetapi jika kawalan per siri diperlukan kemudian, ia berpindah ke `program_siri_settings` bersama `is_closed`.
+
+---
+
+## 15. Kewajipan Bayaran Per Siri (rancangan · belum implementasi)
+
+Had yang diramalkan di hujung §14 sudah tiba, dan pada togol yang lebih penting daripada `submission_open`.
+
+### Masalah
+
+`payment_online_required` hidup pada `program_settings`, satu baris per **program × skop × tahun**. Hidupkannya untuk Keris Emas 2026 dan setiap siri 2026 program itu mewajibkan bayaran. Tiada cara menyatakan "Siri 2 berbayar, Siri 3 percuma".
+
+Ini bukan teori. Siri yang tidak sepatutnya dicaj kini menyekat guru daripada menghantar pengesahan langsung: pencetus `enforce_payment_before_approval` menolak peralihan ke `submitted` selagi `payment_status <> 'paid'`, dan tiada bil akan pernah wujud untuk siri percuma yang membolehkannya menjadi `paid`. Itu keadaan tersekat — corak yang sama seperti §13.12 dan §13.14, dan yang ketiga kalinya ia berpunca daripada kunci tetapan yang lebih kasar daripada kunci realiti.
+
+Kadar yuran **tidak** berkongsi masalah ini. `program_fee_overrides.siri` sudah wujud sejak migrasi 031, jadi *berapa* sudah per siri. Hanya *sama ada* yang tidak.
+
+### Kekangan tidak boleh dilanggar
+
+Keris Emas 2026 Siri 2 dan Keris Perak 2026 Siri 2 sedang berjalan dengan bayaran hidup pada harga yang telah diumumkan. Apa-apa perubahan mesti:
+
+- tidak mematikan bayaran bagi mana-mana siri yang kini mewajibkannya
+- tidak menyentuh sebarang jumlah
+- tidak menjejaskan bil, bayaran atau tuntutan tempat yang sedia ada
+
+Ini memaksa satu bentuk penyelesaian: **lajur baharu yang lalainya NULL, bermaksud warisi**. Migrasi yang tidak menulis satu pun nilai bukan-NULL tidak boleh mengubah tingkah laku sedia ada. Backfill yang menyalin nilai induk ke setiap siri ditolak atas sebab ini — ia menghasilkan tingkah laku yang sama pada hari pertama tetapi menyimpan salinan yang akan menyimpang daripada induknya secara senyap.
+
+### Keputusan
+
+**K15.1 — Lajur nullable pada `program_siri_settings`, bukan jadual baharu.**
+`payment_online_required boolean` (NULL = warisi daripada `program_settings`). Jadual itu sudah dikunci pada tepat `(program_setting_id, siri)`, sudah memegang `max_peserta`, `payment_deadline` dan `is_closed`, dan sudah mempunyai UI per siri sejak migrasi 048.
+
+**K15.2 — Satu penyelesai, empat pemanggil.**
+
+```
+public.siri_payment_required(p_program_setting_id uuid, p_siri smallint) returns boolean
+  → coalesce(pss.payment_online_required, ps.payment_online_required, false)
+```
+
+Empat tempat kini membaca `payment_online_required` terus, dan kesemuanya mempunyai siri dalam skop:
+
+| Pemanggil | Lokasi | Siri diperoleh daripada |
+|---|---|---|
+| Pencetus kelulusan | `enforce_payment_before_approval` (migrasi 039) | `new.siri` |
+| Edge Function | `create-payment-bill/index.ts:254` | parameter `siri` |
+| Pintu papan pemuka | `UserDashboard.tsx:696` (`perluBayarSiri`) | `activeSiri` |
+| Paparan bayaran | `UserDashboard.tsx:903` (`tetapanBayaranAktif`) | `activeSiri` |
+
+Kesemuanya mesti bertukar bersama. Meninggalkan pencetus bermakna paparan membenarkan penghantaran yang pangkalan data kemudian menolak; meninggalkan pencetus sahaja yang ditukar bermakna sebaliknya.
+
+**K15.3 — Siri percuma menggunakan laluan `terusHantar` yang sedia ada.**
+`create-payment-bill` sudah menolak setiap program tanpa `payment_online_required` ke dalam `terusHantar` dan menghantarnya tanpa bil. Siri percuma masuk ke laluan yang sama. Ini bermakna satu siri boleh mengandungi Keris Emas (berbayar, masuk ke dalam bil) dan Keris Gangsa (percuma, dihantar terus) dalam satu tekanan butang — gelung per badge sudah menanganinya tanpa perubahan struktur.
+
+**K15.4 — Wang yang sudah diterima tidak pernah diterbalikkan.**
+Menandakan satu siri percuma **tidak** membatalkan bil, tidak membayar balik, dan tidak menukar mana-mana `payment_status` sedia ada. Baris yang sudah `paid` kekal `paid` dan tempatnya kekal dituntut. Prinsip yang sama seperti §14 "wang mengatasi togol", dipakai pada arah bertentangan.
+
+**K15.5 — UI admin memberi amaran sebelum mengecualikan siri yang sudah ada bil.**
+Kalau `payment_bills` mengandungi mana-mana baris bagi program × siri itu, kotak semak memaparkan amaran bahawa sekolah sudah membayar bagi siri ini dan mereka tidak akan dibayar balik secara automatik. Ia tidak menyekat — admin mungkin betul-betul bermaksud demikian — tetapi ia tidak dibenarkan berlaku secara senyap.
+
+### Perangkap dalam laluan simpan
+
+`saveProgramSiriSettings` (`services/supabaseApi.ts:2125`) **memadam kemudian menyisip semula**, dan menapis dahulu:
+
+```ts
+const bermakna = rows.filter(r => r.maxPeserta !== null || r.paymentDeadline !== null || r.isClosed);
+```
+
+Siri yang satu-satunya tetapannya ialah "percuma" tidak memenuhi mana-mana syarat itu. Ia akan diterima oleh borang, ditapis keluar di sini, dan tidak pernah ditulis — kemudian dibaca semula sebagai NULL, iaitu "warisi", iaitu berbayar. Guru kekal tersekat dan admin melihat kotak semak yang tidak kekal.
+
+Ini **tepat** kegagalan yang dibetulkan oleh commit `cddd0c8` ("had per siri diterima, ditapis, kemudian digugurkan sebelum ditulis"). Penapis mesti dikemas kini dalam commit yang sama seperti lajur, dan uji kering mesti mengesahkan baca-balik selepas simpan, bukan sekadar bahawa simpan mengembalikan kejayaan.
+
+### Kesan pada had tempat
+
+Tempat dituntut ketika bayaran disahkan (`claim_siri_seats`). Siri tanpa bayaran tidak pernah menuntut tempat, jadi `max_peserta` bagi siri itu tidak berkuat kuasa. Komen pada migrasi 028 sudah menyatakannya: *"Had hanya berkuat kuasa bagi program yang ada yuran."*
+
+Ini diterima, bukan dibaiki di sini. Mengira tempat daripada draf bagi siri percuma bermakna dua kaedah perakaunan tempat yang berbeza hidup serentak, dan §13 baru sahaja menghapuskan pendua yang seumpamanya (migrasi 043). Kalau siri percuma memerlukan had, ia jadi kerja berasingan dengan rancangannya sendiri. UI admin memaparkan nota apabila kedua-dua "percuma" dan `max_peserta` ditetapkan pada siri yang sama, supaya had yang tidak berfungsi tidak kelihatan berfungsi.
+
+### Keputusan lanjut
+
+**K15.6 — `submission_open` berpindah ke per siri dalam migrasi yang sama.**
+Bentuk masalahnya sama persis, jadualnya sama, penyelesainya seiras. Kedua-duanya lalai NULL, jadi menggabungkannya tidak menambah risiko kepada program yang sedang hidup — ia hanya menambah satu lajur pada `alter table` yang sama dan satu penyelesai kedua. Had yang diramalkan di hujung §14 ditutup di sini.
+
+**K15.7 — Kotak semak dua keadaan, berpolariti positif: bertanda = perlu bayaran.**
+Label berbunyi "Perlu bayaran", bukan "Tidak perlu bayaran". Kotak yang bertanda bermakna siri itu dicaj.
+
+Ini menuntut satu perincian yang bukan pilihan: **kotak itu memaparkan nilai berkesan, bukan nilai tersimpan.** Siri yang tiada barisnya, atau yang barisnya NULL, dipaparkan bertanda apabila program mewajibkan bayaran — kerana itulah yang benar-benar berlaku kepada sekolah. Admin tidak pernah melihat kotak kosong yang sebenarnya mencaj.
+
+Simpanan kekal **nullable**. NULL adalah keadaan awal — belum pernah disentuh, warisi induk — dan itulah yang memastikan migrasi ini tidak boleh mengubah Keris Emas / Perak Siri 2. Sebaik admin menyimpan halaman itu, siri berkenaan memperoleh nilai eksplisit `true` atau `false` dan berhenti mewarisi. Ini boleh dilihat: mematikan togol aras program selepas itu tidak lagi merambat ke siri yang sudah disimpan secara eksplisit. Ia diterima kerana penetapan eksplisit oleh admin sepatutnya mengalahkan lalai induk — tetapi ia mesti didokumenkan dalam komen lajur, bukan ditemui kemudian.
+
+**K15.8 — Bahagian bayaran disembunyikan sepenuhnya bagi siri percuma.**
+Tiada jumlah, tiada pemilih kaedah, tiada nota. Guru menekan Hantar dan pengesahan masuk terus melalui laluan `terusHantar` (K15.3).
+
+### Kesan K15.7 pada penapis simpan
+
+Dengan nilai eksplisit, penapis `bermakna` dalam `saveProgramSiriSettings` mesti menerima `false` sebagai bermakna:
+
+```ts
+r.maxPeserta !== null || r.paymentDeadline !== null || r.isClosed
+  || r.paymentRequired !== null || r.submissionOpen !== null
+```
+
+Menulis `!r.paymentRequired` atau bergantung pada kebenaran nilai akan menggugurkan tepat baris yang menyatakan "siri ini percuma" — kegagalan `cddd0c8` sekali lagi, kali ini dijemput oleh polariti kotak semak. Uji kering mesti membaca semula selepas menyimpan dan menegaskan `payment_online_required = false` benar-benar wujud dalam baris, bukan sekadar bahawa simpanan mengembalikan kejayaan.

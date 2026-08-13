@@ -39,6 +39,7 @@ const normalizeRole = (raw: any): string => {
     if (r === 'KELANA') return 'PESERTA';
     if (r === 'PEN. PEMIMPIN' || r === 'PEN PEMIMPIN' || r === 'PEN.PEMIMPIN' || r === 'PENOLONG') return 'PENOLONG PEMIMPIN';
     
+    if (r === 'PEMBANTU') return 'PEMBANTU';
     if (r.includes('PENGUJI')) return 'PENGUJI';
     if (r.includes('PEMIMPIN') && !r.includes('PENOLONG')) return 'PEMIMPIN';
     
@@ -301,7 +302,7 @@ export const AdminMigration: React.FC<AdminMigrationProps> = ({ scriptUrl, onRef
               };
 
               if (cat === 'PENGUJI') examiners.push(p);
-              else if (cat === 'PENOLONG PEMIMPIN' || cat === 'PEMIMPIN') {
+              else if (cat === 'PENOLONG PEMIMPIN' || cat === 'PEMIMPIN' || cat === 'PEMBANTU') {
                   assistants.push(p);
                   if (cat === 'PEMIMPIN') leaderDetails = { name: r.name, phone: r.phone, race: r.race };
               } else {

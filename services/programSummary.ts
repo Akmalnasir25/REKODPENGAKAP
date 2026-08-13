@@ -24,12 +24,15 @@ export interface ProgramBreakdown {
   countPeserta: number;
   countPemimpin: number;
   countPenolong: number;
+  countPembantu: number;
   feePeserta: number | null;
   feePemimpin: number | null;
   feePenolong: number | null;
+  feePembantu: number | null;
   subtotalPeserta: number;
   subtotalPemimpin: number;
   subtotalPenolong: number;
+  subtotalPembantu: number;
   total: number;
   paymentEnabled: boolean;
   shirtEnabled: boolean;
@@ -81,7 +84,7 @@ export const resolveFees = (
   overrides: ProgramFeeOverride[],
   siri: number,
   schoolType: SchoolType,
-): { feePeserta: number | null; feePemimpin: number | null; feePenolong: number | null } => {
+): { feePeserta: number | null; feePemimpin: number | null; feePenolong: number | null; feePembantu: number | null } => {
   const calon = overrides
     .filter(o => o.programSettingId === setting.id
       && (o.siri === null || o.siri === siri)
@@ -93,6 +96,7 @@ export const resolveFees = (
     feePeserta:  setting.feePeserta  === null ? null : (pilih?.feePeserta  ?? setting.feePeserta),
     feePemimpin: setting.feePemimpin === null ? null : (pilih?.feePemimpin ?? setting.feePemimpin),
     feePenolong: setting.feePenolong === null ? null : (pilih?.feePenolong ?? setting.feePenolong),
+    feePembantu: setting.feePembantu === null ? null : (pilih?.feePembantu ?? setting.feePembantu),
   };
 };
 
@@ -106,6 +110,9 @@ const roleOf = (r?: string) => (r || 'PESERTA').toUpperCase();
 const isPeserta = (r: string) => r === 'PESERTA' || r === 'PENERIMA RAMBU';
 const isPemimpin = (r: string) => r === 'PEMIMPIN';
 const isPenolong = (r: string) => r.includes('PENOLONG');
+// PEMBANTU mempunyai kadarnya sendiri sejak migrasi 051, jadi ia dikira dan
+// dijumlahkan berasingan daripada penolong.
+const isPembantu = (r: string) => r === 'PEMBANTU';
 
 /**
  * Bina rumusan per sekolah untuk tahun tertentu.
@@ -154,11 +161,12 @@ export const buildProgramSummary = (
       prog = {
         badge,
         siri,
-        countPeserta: 0, countPemimpin: 0, countPenolong: 0,
+        countPeserta: 0, countPemimpin: 0, countPenolong: 0, countPembantu: 0,
         feePeserta: setting.paymentEnabled ? yuran.feePeserta : null,
         feePemimpin: setting.paymentEnabled ? yuran.feePemimpin : null,
         feePenolong: setting.paymentEnabled ? yuran.feePenolong : null,
-        subtotalPeserta: 0, subtotalPemimpin: 0, subtotalPenolong: 0,
+        feePembantu: setting.paymentEnabled ? yuran.feePembantu : null,
+        subtotalPeserta: 0, subtotalPemimpin: 0, subtotalPenolong: 0, subtotalPembantu: 0,
         total: 0,
         paymentEnabled: setting.paymentEnabled,
         shirtEnabled: setting.shirtEnabled,
@@ -172,9 +180,10 @@ export const buildProgramSummary = (
     if (isPeserta(role)) prog.countPeserta += 1;
     else if (isPemimpin(role)) prog.countPemimpin += 1;
     else if (isPenolong(role)) prog.countPenolong += 1;
+    else if (isPembantu(role)) prog.countPembantu += 1;
 
     // Saiz baju (peserta, pemimpin, penolong sahaja — bukan penguji)
-    if (setting.shirtEnabled && (isPeserta(role) || isPemimpin(role) || isPenolong(role))) {
+    if (setting.shirtEnabled && (isPeserta(role) || isPemimpin(role) || isPenolong(role) || isPembantu(role))) {
       const type = (rec.shirtType || '').trim() || '(Jenis belum diisi)';
       const size = (rec.shirtSize || '').trim() || '(Saiz belum diisi)';
       const addTo = (target: Record<string, Record<string, number>>) => {
@@ -194,7 +203,8 @@ export const buildProgramSummary = (
       p.subtotalPeserta = (p.feePeserta || 0) * p.countPeserta;
       p.subtotalPemimpin = (p.feePemimpin || 0) * p.countPemimpin;
       p.subtotalPenolong = (p.feePenolong || 0) * p.countPenolong;
-      p.total = p.subtotalPeserta + p.subtotalPemimpin + p.subtotalPenolong;
+      p.subtotalPembantu = (p.feePembantu || 0) * p.countPembantu;
+      p.total = p.subtotalPeserta + p.subtotalPemimpin + p.subtotalPenolong + p.subtotalPembantu;
     });
     school.grandTotal = school.programs.reduce((sum, p) => sum + p.total, 0);
     school.programs.sort((a, b) => a.badge.localeCompare(b.badge) || a.siri - b.siri);

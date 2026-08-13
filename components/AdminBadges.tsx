@@ -20,8 +20,18 @@ interface AdminBadgesProps {
   };
 }
 
-type BarisOverride = { siri: number | null; schoolType: SchoolType | null; peserta: string; pemimpin: string; penolong: string };
-type BarisHadSiri = { siri: number; had: string; tarikhTutup: string; ditutup: boolean };
+type PerananYuran = 'peserta' | 'pemimpin' | 'penolong' | 'pembantu';
+const PERANAN_YURAN: PerananYuran[] = ['peserta', 'pemimpin', 'penolong', 'pembantu'];
+type BarisOverride = { siri: number | null; schoolType: SchoolType | null; peserta: string; pemimpin: string; penolong: string; pembantu: string };
+// perluBayar / bukaHantar: null bermakna warisi tetapan program (§15). Kotak
+// semak memaparkan nilai BERKESAN, jadi null dipapar seperti nilai induknya —
+// admin tidak pernah melihat kotak kosong yang sebenarnya mencaj.
+type BarisHadSiri = {
+  siri: number; had: string; tarikhTutup: string; ditutup: boolean;
+  perluBayar: boolean | null; bukaHantar: boolean | null;
+};
+
+const HAD_KOSONG = { had: '', tarikhTutup: '', ditutup: false, perluBayar: null, bukaHantar: null };
 
 export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl, onRefresh, scopeContext }) => {
   const [newBadge, setNewBadge] = useState('');
@@ -43,6 +53,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formFeePeserta, setFormFeePeserta] = useState('');
   const [formFeePemimpin, setFormFeePemimpin] = useState('');
   const [formFeePenolong, setFormFeePenolong] = useState('');
+  const [formFeePembantu, setFormFeePembantu] = useState('');
   // Override yuran: kadar berbeza ikut siri dan/atau jenis sekolah (migrasi 031).
   // Yuran asas di atas menentukan SIAPA dicaj; baris di sini hanya BERAPA.
   const [formOverrides, setFormOverrides] = useState<BarisOverride[]>([]);
@@ -93,6 +104,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormFeePeserta(s?.feePeserta != null ? String(s.feePeserta) : '');
     setFormFeePemimpin(s?.feePemimpin != null ? String(s.feePemimpin) : '');
     setFormFeePenolong(s?.feePenolong != null ? String(s.feePenolong) : '');
+    setFormFeePembantu(s?.feePembantu != null ? String(s.feePembantu) : '');
     setFormShirtEnabled(s?.shirtEnabled || false);
     setFormSiriEnabled(s?.siriEnabled || false);
     setFormMaxSiri(s?.maxSiri || 5);
@@ -117,6 +129,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
           // <input type="date"> memerlukan YYYY-MM-DD, bukan ISO penuh.
           tarikhTutup: h.paymentDeadline ? h.paymentDeadline.slice(0, 10) : '',
           ditutup: h.isClosed,
+          perluBayar: h.paymentRequired,
+          bukaHantar: h.submissionOpen,
         })),
     );
     setFormOverrides(
@@ -128,6 +142,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
           peserta: o.feePeserta != null ? String(o.feePeserta) : '',
           pemimpin: o.feePemimpin != null ? String(o.feePemimpin) : '',
           penolong: o.feePenolong != null ? String(o.feePenolong) : '',
+          pembantu: o.feePembantu != null ? String(o.feePembantu) : '',
         })),
     );
   };
@@ -140,23 +155,35 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const cariBaris = (siri: number | null) =>
     formOverrides.find(r => r.siri === siri && r.schoolType === overrideType);
 
-  const bacaSel = (siri: number | null, peranan: 'peserta' | 'pemimpin' | 'penolong') =>
+  const asasBagi = (p: PerananYuran) => p === 'peserta' ? formFeePeserta
+    : p === 'pemimpin' ? formFeePemimpin : p === 'penolong' ? formFeePenolong : formFeePembantu;
+  const setAsasBagi = (p: PerananYuran) => p === 'peserta' ? setFormFeePeserta
+    : p === 'pemimpin' ? setFormFeePemimpin : p === 'penolong' ? setFormFeePenolong : setFormFeePembantu;
+
+  const bacaSel = (siri: number | null, peranan: PerananYuran) =>
     cariBaris(siri)?.[peranan] ?? '';
 
-  const tulisSel = (siri: number | null, peranan: 'peserta' | 'pemimpin' | 'penolong', nilai: string) => {
+  const tulisSel = (siri: number | null, peranan: PerananYuran, nilai: string) => {
     const sedia = cariBaris(siri);
     if (sedia) {
       setFormOverrides(formOverrides.map(r => (r === sedia ? { ...r, [peranan]: nilai } : r)));
     } else {
       setFormOverrides([
         ...formOverrides,
-        { siri, schoolType: overrideType, peserta: '', pemimpin: '', penolong: '', [peranan]: nilai } as BarisOverride,
+        { siri, schoolType: overrideType, peserta: '', pemimpin: '', penolong: '', pembantu: '', [peranan]: nilai } as BarisOverride,
       ]);
     }
   };
 
-  const bacaHad = (siri: number) =>
-    formSiriLimits.find(h => h.siri === siri) ?? { siri, had: '', tarikhTutup: '', ditutup: false };
+  const bacaHad = (siri: number): BarisHadSiri =>
+    formSiriLimits.find(h => h.siri === siri) ?? { siri, ...HAD_KOSONG };
+
+  // Nilai berkesan: baris siri mengatasi program; program mengatasi lalai.
+  // Cerminan tepat siri_payment_required() / siri_submission_open() dalam
+  // migrasi 049 — kalau kedua-duanya menyimpang, paparan akan membenarkan
+  // apa yang pangkalan data kemudian menolak.
+  const bayarBerkesan = (siri: number) => bacaHad(siri).perluBayar ?? formOnlineRequired;
+  const hantarBerkesan = (siri: number) => bacaHad(siri).bukaHantar ?? formSubmissionOpen;
 
   // Terisi dibaca dari DB; baki dikira terhadap nilai yang SEDANG ditaip,
   // supaya menukar had dari 300 ke 150 terus menunjukkan kesannya sebelum
@@ -184,12 +211,16 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     );
   };
 
-  const tulisHad = (siri: number, medan: 'had' | 'tarikhTutup' | 'ditutup', nilai: string | boolean) => {
+  const tulisHad = (
+    siri: number,
+    medan: 'had' | 'tarikhTutup' | 'ditutup' | 'perluBayar' | 'bukaHantar',
+    nilai: string | boolean,
+  ) => {
     const sedia = formSiriLimits.find(h => h.siri === siri);
     if (sedia) {
       setFormSiriLimits(formSiriLimits.map(h => (h === sedia ? { ...h, [medan]: nilai } : h)));
     } else {
-      setFormSiriLimits([...formSiriLimits, { siri, had: '', tarikhTutup: '', ditutup: false, [medan]: nilai } as BarisHadSiri]);
+      setFormSiriLimits([...formSiriLimits, { siri, ...HAD_KOSONG, [medan]: nilai } as BarisHadSiri]);
     }
   };
 
@@ -209,6 +240,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         feePeserta: formFeePeserta.trim() ? Number(formFeePeserta) : null,
         feePemimpin: formFeePemimpin.trim() ? Number(formFeePemimpin) : null,
         feePenolong: formFeePenolong.trim() ? Number(formFeePenolong) : null,
+        feePembantu: formFeePembantu.trim() ? Number(formFeePembantu) : null,
         shirtEnabled: formShirtEnabled,
         siriEnabled: formSiriEnabled,
         maxSiri: formMaxSiri,
@@ -225,6 +257,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
             feePeserta:  r.peserta.trim()  ? Number(r.peserta)  : null,
             feePemimpin: r.pemimpin.trim() ? Number(r.pemimpin) : null,
             feePenolong: r.penolong.trim() ? Number(r.penolong) : null,
+            feePembantu: r.pembantu.trim() ? Number(r.pembantu) : null,
           })));
 
           // Tarikh disimpan sebagai penghujung hari waktu Malaysia. Tarikh
@@ -235,6 +268,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
             maxPeserta: h.had.trim() ? Number(h.had) : null,
             paymentDeadline: h.tarikhTutup ? `${h.tarikhTutup}T23:59:59+08:00` : null,
             isClosed: h.ditutup,
+            paymentRequired: h.perluBayar,
+            submissionOpen: h.bukaHantar,
           })));
         }
         await loadSettings();
@@ -698,6 +733,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                             <th className="font-bold uppercase text-[9px] pb-1">Peserta</th>
                             <th className="font-bold uppercase text-[9px] pb-1">Pemimpin</th>
                             <th className="font-bold uppercase text-[9px] pb-1">Penolong</th>
+                            <th className="font-bold uppercase text-[9px] pb-1">Pembantu</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -707,11 +743,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                               yang menjelaskan hubungan keduanya. */}
                           <tr className="border-b border-teal-100">
                             <td className="pr-2 py-0.5 font-bold text-emerald-800 whitespace-nowrap">Asas</td>
-                            {(['peserta', 'pemimpin', 'penolong'] as const).map(peranan => {
-                              const nilai = peranan === 'peserta' ? formFeePeserta
-                                : peranan === 'pemimpin' ? formFeePemimpin : formFeePenolong;
-                              const tetap = peranan === 'peserta' ? setFormFeePeserta
-                                : peranan === 'pemimpin' ? setFormFeePemimpin : setFormFeePenolong;
+                            {PERANAN_YURAN.map(peranan => {
+                              const nilai = asasBagi(peranan);
+                              const tetap = setAsasBagi(peranan);
                               // Asas tidak bergantung pada jenis sekolah, jadi ia
                               // hanya boleh diedit pada tab "Semua".
                               const kunci = overrideType !== null;
@@ -740,9 +774,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                               <td className="pr-2 py-0.5 font-bold text-teal-800 whitespace-nowrap">
                                 {siri === null ? 'Kadar khas' : `Siri ${siri}`}
                               </td>
-                              {(['peserta', 'pemimpin', 'penolong'] as const).map(peranan => {
-                                const asas = peranan === 'peserta' ? formFeePeserta
-                                  : peranan === 'pemimpin' ? formFeePemimpin : formFeePenolong;
+                              {PERANAN_YURAN.map(peranan => {
+                                const asas = asasBagi(peranan);
                                 const mati = !asas.trim();
                                 return (
                                   <td key={peranan} className="px-0.5 py-0.5">
@@ -767,7 +800,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                     {/* HAD TEMPAT & TARIKH TUTUP IKUT SIRI */}
                     <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                         <span className="text-[11px] font-bold text-purple-700 uppercase">
-                          Had Tempat &amp; Tarikh Tutup
+                          Kawalan Per Siri
                         </span>
                         <p className="text-[10px] text-gray-400 mt-0.5 mb-2">
                           Setiap siri berdiri sendiri — Siri 1 penuh tidak menyekat Siri 2.
@@ -779,6 +812,11 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                           Sekolah yang membayar serentak boleh melebihinya; bayaran mereka tetap
                           masuk giliran pengesahan, ditanda melebihi, dan anda yang putuskan sama
                           ada menerima atau merefund.
+                          <br />
+                          <strong>Perlu Bayar</strong> dan <strong>Buka Hantar</strong> bermula
+                          mengikut tetapan program di atas. Menukarnya di sini mengikat siri itu
+                          sahaja, dan siri itu berhenti mengikut tetapan program selepas ini.
+                          Nyahtanda Perlu Bayar bermakna sekolah menghantar terus tanpa bil.
                         </p>
 
                         <table className="w-full text-[11px]">
@@ -790,6 +828,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                               <th className="font-bold uppercase text-[9px] pb-1">Had Tempat</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Terisi</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup Bayaran</th>
+                              <th className="font-bold uppercase text-[9px] pb-1">Perlu Bayar</th>
+                              <th className="font-bold uppercase text-[9px] pb-1">Buka Hantar</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup</th>
                             </tr>
                           </thead>
@@ -825,6 +865,24 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                                   <td className="px-0.5 py-0.5 text-center">
                                     <input
                                       type="checkbox"
+                                      checked={bayarBerkesan(siri)}
+                                      onChange={(e) => tulisHad(siri, 'perluBayar', e.target.checked)}
+                                      title="Nyahtanda supaya siri ini dihantar terus tanpa bayaran"
+                                      className="w-4 h-4 accent-purple-600"
+                                    />
+                                  </td>
+                                  <td className="px-0.5 py-0.5 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={hantarBerkesan(siri)}
+                                      onChange={(e) => tulisHad(siri, 'bukaHantar', e.target.checked)}
+                                      title="Nyahtanda untuk menahan penghantaran siri ini sehingga anda mengumumkannya"
+                                      className="w-4 h-4 accent-purple-600"
+                                    />
+                                  </td>
+                                  <td className="px-0.5 py-0.5 text-center">
+                                    <input
+                                      type="checkbox"
                                       checked={h.ditutup}
                                       onChange={(e) => tulisHad(siri, 'ditutup', e.target.checked)}
                                       title="Tutup siri ini secara manual walaupun belum penuh"
@@ -836,6 +894,34 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                             })}
                           </tbody>
                         </table>
+
+                        {/* Siri yang dikecualikan daripada bayaran, tetapi tempatnya
+                            sudah terisi — bermakna sekolah SUDAH membayar. Tidak
+                            disekat: admin mungkin betul-betul bermaksud demikian.
+                            Tetapi ia tidak dibenarkan berlaku senyap (§15 K15.5). */}
+                        {Array.from({ length: formSiriEnabled ? formMaxSiri : 1 }, (_, i) => i + 1)
+                          .filter(siri => !bayarBerkesan(siri) && (terisiSiri[siri] || 0) > 0)
+                          .map(siri => (
+                            <p key={`amaran-bayar-${siri}`} className="text-[10px] text-red-700 bg-red-50 border border-red-200 rounded p-1.5 mt-1.5">
+                              <strong>Siri {siri}:</strong> {terisiSiri[siri]} tempat sudah dibayar.
+                              Mengecualikan siri ini daripada bayaran <strong>tidak</strong> membatalkan
+                              bil dan <strong>tidak</strong> membayar balik sesiapa. Bayaran yang sudah
+                              diterima kekal sah; refund perlu dibuat manual.
+                            </p>
+                          ))}
+
+                        {/* Had tempat dituntut ketika bayaran disahkan. Siri tanpa
+                            bayaran tidak pernah menuntut, jadi hadnya tidak
+                            berkuat kuasa — jangan biarkan ia kelihatan berfungsi. */}
+                        {Array.from({ length: formSiriEnabled ? formMaxSiri : 1 }, (_, i) => i + 1)
+                          .filter(siri => !bayarBerkesan(siri) && bacaHad(siri).had.trim() !== '')
+                          .map(siri => (
+                            <p key={`amaran-had-${siri}`} className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-1.5 mt-1.5">
+                              <strong>Siri {siri}:</strong> had tempat tidak berkuat kuasa bagi siri
+                              tanpa bayaran. Tempat dituntut ketika bayaran disahkan, jadi siri
+                              percuma tidak pernah menuntut satu pun.
+                            </p>
+                          ))}
                     </div>
                   </div>
                 )}

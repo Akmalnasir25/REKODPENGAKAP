@@ -243,7 +243,7 @@ async function renderProgramStats(supabase: any, chatId: string, msgId: number, 
   const all = peeps || [];
   const peserta = all.filter((p: any) => p.role === 'PESERTA' || p.role === 'PENERIMA RAMBU').length;
   const pemimpin = all.filter((p: any) => p.role === 'PEMIMPIN').length;
-  const penolong = all.filter((p: any) => p.role === 'PENOLONG PEMIMPIN').length;
+  const penolong = all.filter((p: any) => p.role === 'PENOLONG PEMIMPIN' || p.role === 'PEMBANTU').length;
   const penguji = all.filter((p: any) => p.role === 'PENGUJI').length;
   const lelaki = all.filter((p: any) => (p.gender || '').toUpperCase().startsWith('L')).length;
   const perempuan = all.filter((p: any) => (p.gender || '').toUpperCase().startsWith('P')).length;

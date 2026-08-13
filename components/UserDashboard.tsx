@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { SubmissionData, UserSession, School, Participant, Badge, UserProfile } from '../types';
 import { Plus, LogOut, FileText, User, Calendar, Trash2, Search, AlertOctagon, GraduationCap, Shield, Lock, Save, Edit2, Printer, Filter, Send, CheckCircle, AlertTriangle, History, X, Medal, Award, Archive, Clock, ArrowDownToLine, ChevronRight, Users, Menu, Home, School as SchoolIcon, ChevronLeft, Key, ArrowRight, LayoutList, Crown, MapPin, Wallet, Layers } from 'lucide-react';
 import { APP_VERSION, LOGO_URL } from '../constants';
@@ -11,8 +11,8 @@ const getSubmissionYear = (value?: string | null) => {
   const year = parsed.getFullYear();
   return Number.isFinite(year) ? year : null;
 };
-import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri, getBakiTempat, BakiTempat } from '../services/supabaseApi';
-import { badgeStatusKey, resolveBadgePermissions } from '../utils/dataProcessing';
+import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri, getBakiTempat, BakiTempat, getProgramSiriSettings, ProgramSiriSetting } from '../services/supabaseApi';
+import { badgeStatusKey, resolveBadgePermissions, computeRoleStats } from '../utils/dataProcessing';
 import { PaymentScreen } from './PaymentScreen';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
@@ -108,7 +108,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [importTargetBadge, setImportTargetBadge] = useState('');
   const [importSourceYear, setImportSourceYear] = useState(selectedYear - 1); // Default to previous year
   // Peranan yg hendak diimport naik. User boleh ulang import utk peranan berbeza (peserta/pemimpin/penolong/penguji).
-  const [importRole, setImportRole] = useState<'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI'>('PESERTA');
+  const [importRole, setImportRole] = useState<'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PEMBANTU' | 'PENGUJI'>('PESERTA');
   const [selectedImportCandidates, setSelectedImportCandidates] = useState<string[]>([]);
   const [importNewIds, setImportNewIds] = useState<Record<string, string>>({});
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
@@ -116,6 +116,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
   const [importTargetSiri, setImportTargetSiri] = useState(1);
   useEffect(() => { getProgramSettings(selectedYear).then(setProgramSettings); }, [selectedYear]);
+
+  // §15: kewajipan bayaran ialah per program x siri. Tanpa baris ini pintu
+  // bayaran menuntut bayaran bagi siri yang dikecualikan admin, dan guru
+  // tersekat tanpa bil yang boleh dibayar.
+  const [siriSettings, setSiriSettings] = useState<ProgramSiriSetting[]>([]);
+  useEffect(() => { getProgramSiriSettings().then(setSiriSettings); }, []);
+
+  // Cerminan siri_payment_required() dalam migrasi 049. Siri mengatasi
+  // program; program mengatasi lalai palsu.
+  const bayaranDiwajibkan = useCallback((ps: ProgramSetting, siri: number) => {
+    const baris = siriSettings.find(s => s.programSettingId === ps.id && s.siri === siri);
+    return baris?.paymentRequired ?? ps.paymentOnlineRequired;
+  }, [siriSettings]);
 
   // Kembali dari gateway: billReturnUrl membawa ?bayaran=<paymentId>. Buka
   // semula skrin bayaran supaya statusnya disemak sebelum sekolah tertanya.
@@ -269,19 +282,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   }, [allData, user, selectedYear, currentSchoolSettings]);
 
   // Compute stats breakdown
-  const myStats = useMemo(() => {
-      let students = 0;
-      let leaders = 0;
-      let examiners = 0;
-
-      myData.forEach(d => {
-          const role = (d.role || 'PESERTA').toUpperCase();
-          if (role === 'PENGUJI') examiners++;
-          else if (role.includes('PENOLONG') || role === 'PEMIMPIN') leaders++;
-          else students++;
-      });
-      return { students, leaders, examiners, total: myData.length };
-  }, [myData]);
+  // computeRoleStats, bukan kiraan tempatan.
+  //
+  // Versi lama di sini menghasilkan tiga medan sahaja dan mencampurkan
+  // PENOLONG PEMIMPIN ke dalam `leaders`, jadi Penolong tidak pernah boleh
+  // dipaparkan berasingan. Lebih buruk, `else` terakhirnya ialah baldi
+  // PESERTA — mana-mana peranan yang tidak disenaraikan secara eksplisit,
+  // termasuk PEMBANTU, dikira sebagai peserta.
+  //
+  // Satu sumber kebenaran mengelakkan jubin memaparkan medan yang tidak
+  // wujud, dan mengelakkan peranan seterusnya jatuh senyap ke dalam kiraan
+  // peserta.
+  const myStats = useMemo(() => computeRoleStats(myData), [myData]);
 
   // Available badges for filter dropdown based on myData
   const availableBadges = useMemo(() => {
@@ -325,19 +337,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   }, [myData, searchQuery, selectedBadgeFilter, selectedSiriFilter]);
 
   // Compute filtered stats (based on badge filter + search)
-  const filteredStats = useMemo(() => {
-      let students = 0;
-      let leaders = 0;
-      let examiners = 0;
-
-      filteredData.forEach(d => {
-          const role = (d.role || 'PESERTA').toUpperCase();
-          if (role === 'PENGUJI') examiners++;
-          else if (role.includes('PENOLONG') || role === 'PEMIMPIN') leaders++;
-          else students++;
-      });
-      return { students, leaders, examiners, total: filteredData.length };
-  }, [filteredData]);
+  const filteredStats = useMemo(() => computeRoleStats(filteredData), [filteredData]);
 
   // --- PRINT DATA PREPARATION (SORTED) ---
   const printData = useMemo(() => {
@@ -589,6 +589,41 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
   // Determine if specific record modification is allowed based on granular permissions
   const approvedBadges = currentSchoolSettings?.approvedBadges || [];
+  // Kebenaran fasa kedua: apa yang masih boleh disentuh SELEPAS pendaftaran
+  // dihantar atau disahkan. Rujuk docs/rancangan-edit-pegawai-selepas-sah.md
+  //
+  // Dua syarat mesti dipenuhi serentak, dan kedua-duanya lalai TUTUP:
+  //   1. admin membuka peranan itu untuk program ini, dan
+  //   2. peranan itu tidak dicaj bagi program ini.
+  //
+  // Syarat kedua bukan kemudahan. Sesiapa yang dicaj mengambil tempat
+  // (Keputusan #10) dan tempat hanya dituntut melalui aliran bayaran, yang
+  // sudah tamat pada ketika ini. Membuka peranan berbayar di sini bermakna
+  // tempat digunakan tanpa bil dan tanpa jalan untuk mengutipnya.
+  const bolehEditPegawaiSelepas = (badge: string, year: number, siri: number, role?: string) => {
+    const r = (role || 'PESERTA').toUpperCase();
+    const adalahPenguji  = r === 'PENGUJI';
+    const adalahPemimpin = r === 'PEMIMPIN' || r.includes('PENOLONG') || r === 'PEMBANTU';
+    if (!adalahPenguji && !adalahPemimpin) return false;   // PESERTA & PENERIMA RAMBU tidak pernah dibuka
+
+    const perms = resolveBadgePermissions(
+      currentSchoolSettings?.badgeEditPermissionsSelepas, badge, year, siri,
+    );
+    if (adalahPenguji) return perms?.examiners === true;   // penguji tidak pernah dicaj
+
+    // Tetapan hanya dimuatkan bagi tahun yang dipaparkan. Kalau kita tiada data
+    // bagi tahun rekod ini, kita tidak boleh membuktikan peranan itu percuma —
+    // jadi ia kekal tertutup. Arah kegagalan yang betul.
+    if (!programSettings.some(ps => ps.year === year)) return false;
+
+    const dicaj = programSettings.some(ps =>
+      ps.badgeName === badge && ps.year === year
+      && (ps.feePemimpin != null || ps.feePenolong != null));
+    if (dicaj) return false;
+
+    return perms?.assistants === true;
+  };
+
   const canModifyRecord = (item: SubmissionData) => {
       if (!isRegistrationOpen) return false;
 
@@ -605,10 +640,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       // Ikut siri rekod itu sendiri — Siri 1 boleh terkunci sementara Siri 2 masih terbuka.
       const lockKey = getLockKey(item.badge, itemYear, item.siri || 1);
-      if (lockedBadges.includes(lockKey)) return false;
-      
-      // If badge+year is approved, user cannot modify
-      if (approvedBadges.includes(lockKey)) return false;
+      const sudahHantar = lockedBadges.includes(lockKey) || approvedBadges.includes(lockKey);
+
+      // Selepas dihantar atau disahkan, satu-satunya jalan masuk ialah kebenaran
+      // fasa kedua, dan hanya untuk pegawai yang TIDAK dicaj. Peserta tidak
+      // pernah dibuka di sini.
+      if (sudahHantar) {
+        return bolehEditPegawaiSelepas(item.badge, itemYear, item.siri || 1, item.role);
+      }
 
       // Sandaran ke Siri 1: togol admin peringkat program, bukan per siri.
       const perBadgePermissions = resolveBadgePermissions(
@@ -616,7 +655,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       );
       const role = (item.role || 'PESERTA').toUpperCase();
       if (role === 'PENGUJI') return perBadgePermissions?.examiners ?? allowExaminers;
-      if (role.includes('PENOLONG') || role === 'PEMIMPIN') return perBadgePermissions?.assistants ?? allowAssistants;
+      if (role.includes('PENOLONG') || role === 'PEMIMPIN' || role === 'PEMBANTU') return perBadgePermissions?.assistants ?? allowAssistants;
       return perBadgePermissions?.students ?? allowStudents;
   };
 
@@ -691,9 +730,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     return Array.from(ada).sort();
   };
 
-  const perluBayarSiri = (program: string[]) => program.some(nama =>
+  // Siri diambil sebagai hujah, bukan diteka daripada penapis: penapis UI
+  // dan siri peserta sebenar boleh berbeza, dan itulah pepijat yang
+  // membenarkan bil RM0 sebelum ini.
+  const perluBayarSiri = (program: string[], siri: number) => program.some(nama =>
     programSettings.some(ps =>
-      ps.badgeName === nama && ps.year === selectedYear && ps.paymentOnlineRequired
+      ps.badgeName === nama && ps.year === selectedYear
+      && bayaranDiwajibkan(ps, siri)
       && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
         || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))));
 
@@ -898,12 +941,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     } catch (e) { alert('Ralat server.'); } finally { setSavingEdit(false); }
   };
 
-  // Program yang mewajibkan bayaran untuk sekolah ini pada tahun semasa.
+  // Program yang mewajibkan bayaran untuk sekolah ini pada tahun DAN siri
+  // semasa. Siri yang dikecualikan admin memulangkan undefined, dan seluruh
+  // bahagian bayaran hilang daripada skrin (§15 K15.8).
   const tetapanBayaranAktif = useMemo(() => programSettings.find(ps =>
-    ps.badgeName === selectedBadgeFilter && ps.year === selectedYear && ps.paymentOnlineRequired
+    ps.badgeName === selectedBadgeFilter && ps.year === selectedYear
+    && bayaranDiwajibkan(ps, activeSiri)
     && ((ps.scope === 'negeri' && ps.negeriCode === currentSchoolSettings?.negeriCode)
       || (ps.scope === 'daerah' && ps.daerahCode === currentSchoolSettings?.daerahCode))),
-    [programSettings, selectedBadgeFilter, selectedYear, currentSchoolSettings]);
+    [programSettings, selectedBadgeFilter, selectedYear, currentSchoolSettings, activeSiri, bayaranDiwajibkan]);
 
   // Siri yang masih menunggu penghantaran, diterbitkan daripada PESERTA SEBENAR.
   //
@@ -940,7 +986,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const program = programDalamSiri(sasar);
       const senarai = program.length > 0 ? program : [selectedBadgeFilter];
 
-      if (perluBayarSiri(senarai)) {
+      if (perluBayarSiri(senarai, sasar)) {
         setSiriBayaran(sasar);
         setPaymentResume(undefined);
         setShowPayment(true);
@@ -1732,22 +1778,25 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         )}
                     </div>
 
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 col-span-1 md:col-span-2 grid grid-cols-3 divide-x divide-gray-100">
-                        <div className="flex flex-col items-center justify-center">
-                            <p className="text-blue-500 text-[10px] font-bold uppercase mb-0.5">Peserta</p>
-                            <p className="text-xl font-black text-blue-900">{selectedBadgeFilter ? filteredStats.students : myStats.students}</p>
-                            {selectedBadgeFilter && <p className="text-[9px] text-gray-400 mt-0.5">({myStats.students} keseluruhan)</p>}
-                        </div>
-                        <div className="flex flex-col items-center justify-center">
-                            <p className="text-indigo-500 text-[10px] font-bold uppercase mb-0.5">Pemimpin</p>
-                            <p className="text-xl font-black text-indigo-900">{selectedBadgeFilter ? filteredStats.leaders : myStats.leaders}</p>
-                            {selectedBadgeFilter && <p className="text-[9px] text-gray-400 mt-0.5">({myStats.leaders} keseluruhan)</p>}
-                        </div>
-                        <div className="flex flex-col items-center justify-center">
-                            <p className="text-green-500 text-[10px] font-bold uppercase mb-0.5">Penguji</p>
-                            <p className="text-xl font-black text-green-900">{selectedBadgeFilter ? filteredStats.examiners : myStats.examiners}</p>
-                            {selectedBadgeFilter && <p className="text-[9px] text-gray-400 mt-0.5">({myStats.examiners} keseluruhan)</p>}
-                        </div>
+                    {/* Lima peranan, lima jubin. Penolong Pemimpin dahulunya
+                        dikira oleh computeRoleStats tetapi tidak pernah
+                        dipaparkan — jurang itu ditutup semasa Pembantu
+                        ditambah, supaya papan pemuka tidak memaparkan empat
+                        daripada lima peranan. */}
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 col-span-1 md:col-span-2 grid grid-cols-3 md:grid-cols-5 gap-y-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+                        {([
+                            { label: 'Peserta',  medan: 'students'  as const, warna: 'text-blue-500',   nilai: 'text-blue-900' },
+                            { label: 'Pemimpin', medan: 'leaders'   as const, warna: 'text-indigo-500', nilai: 'text-indigo-900' },
+                            { label: 'Penolong', medan: 'assistants' as const, warna: 'text-sky-500',   nilai: 'text-sky-900' },
+                            { label: 'Pembantu', medan: 'pembantu'  as const, warna: 'text-teal-500',   nilai: 'text-teal-900' },
+                            { label: 'Penguji',  medan: 'examiners' as const, warna: 'text-green-500',  nilai: 'text-green-900' },
+                        ]).map(j => (
+                            <div key={j.medan} className="flex flex-col items-center justify-center pt-2 md:pt-0">
+                                <p className={`${j.warna} text-[10px] font-bold uppercase mb-0.5`}>{j.label}</p>
+                                <p className={`text-xl font-black ${j.nilai}`}>{selectedBadgeFilter ? filteredStats[j.medan] : myStats[j.medan]}</p>
+                                {selectedBadgeFilter && <p className="text-[9px] text-gray-400 mt-0.5">({myStats[j.medan]} keseluruhan)</p>}
+                            </div>
+                        ))}
                     </div>
                 </div>
 
@@ -1889,6 +1938,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     <th className="px-4 py-3">Unit</th>
                                     <th className="px-4 py-3">Makanan</th>
                                     <th className="px-4 py-3">Kesihatan</th>
+                                    <th className="px-4 py-3">Telefon / Emel</th>
                                     <th className="px-4 py-3 text-right">Tindakan</th>
                                 </tr>
                             </thead>
@@ -1919,6 +1969,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                               <option value="PESERTA">Peserta</option>
                                               <option value="PEMIMPIN">Pemimpin</option>
                                               <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                                              <option value="PEMBANTU">Pembantu</option>
                                               <option value="PENGUJI">Penguji</option>
                                               <option value="PENERIMA RAMBU">Penerima Rambu</option>
                                             </select>
@@ -1964,6 +2015,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                             {editFormData.masalahKesihatan === 'Lain-lain' && (
                                               <input className="w-full p-1 border rounded text-xs mt-1" placeholder="Nyatakan..." value={editFormData.masalahKesihatanLain} onChange={e => setEditFormData(p => ({...p, masalahKesihatanLain: e.target.value}))} />
                                             )}
+                                          </td>
+                                          {/* Telefon dan Catatan/Emel sudah lama dimuatkan ke dalam
+                                              editFormData dan disimpan semula oleh updateParticipantFields —
+                                              cuma tiada medan untuk menyentuhnya, jadi ia dihantar balik
+                                              tidak berubah dan kelihatan seperti tidak wujud. */}
+                                          <td className="px-4 py-2">
+                                            <input className="w-full p-1 border rounded text-xs font-mono" placeholder="No. telefon"
+                                              value={editFormData.phoneNumber} onChange={e => setEditFormData(p => ({...p, phoneNumber: e.target.value}))} />
+                                            <input className="w-full p-1 border rounded text-xs mt-1" placeholder="Catatan / emel"
+                                              value={editFormData.remarks} onChange={e => setEditFormData(p => ({...p, remarks: e.target.value}))} />
                                           </td>
                                           <td className="px-4 py-2 text-right">
                                             <div className="flex items-center justify-end gap-1">
@@ -2011,6 +2072,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.unit || '-'}</td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.makanan || '-'}</td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.masalahKesihatan === 'Lain-lain' ? `Lain-lain: ${item.masalahKesihatanLain || ''}` : (item.masalahKesihatan || '-')}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-600">
+                                            <div className="font-mono">{item.studentPhone || '-'}</div>
+                                            {item.remarks && <div className="text-[10px] text-slate-400 mt-0.5 break-all">{item.remarks}</div>}
+                                        </td>
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-1">
                                               {canModifyRecord(item) && !isMigrated && (
@@ -2030,7 +2095,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         </td>
                                     </tr>
                                 )})}
-                                {filteredData.length === 0 && <tr><td colSpan={11} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
+                                {filteredData.length === 0 && <tr><td colSpan={12} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -2168,6 +2233,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             <option value="PESERTA">Peserta</option>
                             <option value="PEMIMPIN">Pemimpin</option>
                             <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                            <option value="PEMBANTU">Pembantu</option>
                             <option value="PENGUJI">Penguji</option>
                         </select>
                     </div>

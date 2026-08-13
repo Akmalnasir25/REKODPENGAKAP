@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { RefreshCw, Wallet, Download, Search } from 'lucide-react';
-import { getRumusanBayaran, BarisRumusanBayaran } from '../services/paymentService';
+import { RefreshCw, Wallet, Download, Search, Paperclip } from 'lucide-react';
+import { getRumusanBayaran, BarisRumusanBayaran, urlBukti } from '../services/paymentService';
 import { formatRM } from '../services/programSummary';
 import { tarikhPendek } from '../utils/tarikh';
 import { LoadingSpinner } from './ui/LoadingSpinner';
@@ -53,6 +53,31 @@ export const AdminPaymentsTab: React.FC = () => {
   const [fSiri, setFSiri] = useState('');
   const [fStatus, setFStatus] = useState('paid');
   const [fKaedah, setFKaedah] = useState('');
+  const [membukaBukti, setMembukaBukti] = useState<string | null>(null);
+
+  // URL bertandatangan tamat dalam 5 minit, jadi ia dijana pada waktu klik
+  // dan bukan semasa jadual dimuatkan.
+  //
+  // Tab dibuka SEBELUM await. Penyekat pop-up menolak window.open yang
+  // berlaku selepas operasi tak segerak kerana ia tidak lagi dikira sebagai
+  // kesan langsung klik pengguna — bukti akan gagal dibuka tanpa sebarang
+  // mesej, yang kelihatan seperti fail hilang.
+  const bukaBukti = async (filePath: string) => {
+    const tab = window.open('', '_blank');
+    setMembukaBukti(filePath);
+    try {
+      const url = await urlBukti(filePath);
+      if (!url) {
+        tab?.close();
+        alert('Gagal membuka bukti. Fail mungkin sudah dipadam dari storan.');
+        return;
+      }
+      if (tab) tab.location.href = url;
+      else window.open(url, '_blank');
+    } finally {
+      setMembukaBukti(null);
+    }
+  };
   const [fJenis, setFJenis] = useState('');
   const [carian, setCarian] = useState('');
 
@@ -93,7 +118,7 @@ export const AdminPaymentsTab: React.FC = () => {
     const jumlahDibayar = ditapis.reduce((n, r) => n + r.totalAmount, 0);
     const caj = ditapis.reduce((n, r) => n + r.transactionFee, 0);
     const sekolah = new Set(ditapis.map(r => r.schoolName)).size;
-    const orang = ditapis.reduce((n, r) => n + r.bilPeserta + r.bilPemimpin + r.bilPenolong, 0);
+    const orang = ditapis.reduce((n, r) => n + r.bilPeserta + r.bilPemimpin + r.bilPenolong + r.bilPembantu, 0);
     const ikutKaedah = ditapis.reduce((acc: Record<string, { bil: number; jumlah: number }>, r) => {
       const k = r.method;
       acc[k] = acc[k] || { bil: 0, jumlah: 0 };
@@ -106,7 +131,7 @@ export const AdminPaymentsTab: React.FC = () => {
 
   const muatTurunCSV = () => {
     const tajuk = ['Sekolah', 'Kod', 'Jenis', 'Daerah', 'Program', 'Siri', 'Peserta', 'Pemimpin',
-      'Penolong', 'Yuran (RM)', 'Caj (RM)', 'Jumlah (RM)', 'Kaedah', 'Status', 'Rujukan', 'Kod Bil', 'Tarikh Bayar'];
+      'Penolong', 'Pembantu', 'Yuran (RM)', 'Caj (RM)', 'Jumlah (RM)', 'Kaedah', 'Status', 'Rujukan', 'Kod Bil', 'Tarikh Bayar'];
     // Satu baris CSV per BIL, dengan program disenaraikan dalam satu sel.
     // Satu baris per program akan menggandakan jumlah bila dijumlahkan
     // dalam Excel — kesilapan yang mudah dibuat dan sukar dikesan.
@@ -114,7 +139,7 @@ export const AdminPaymentsTab: React.FC = () => {
     const isi = ditapis.map(r => [
       r.schoolName, r.schoolCode, r.schoolType, r.daerahName,
       r.programs.map(p => p.name).join(' + '), r.siri,
-      r.bilPeserta, r.bilPemimpin, r.bilPenolong,
+      r.bilPeserta, r.bilPemimpin, r.bilPenolong, r.bilPembantu,
       r.amount.toFixed(2), r.transactionFee.toFixed(2), r.totalAmount.toFixed(2),
       namaKaedah(r.method), namaStatus[r.status] || r.status,
       r.referenceNumber, r.billCode, r.paidAt ? tarikhPendek(r.paidAt) : '',
@@ -224,7 +249,7 @@ export const AdminPaymentsTab: React.FC = () => {
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                {['Sekolah', 'Program', 'Siri', 'Orang', 'Yuran', 'Caj', 'Jumlah', 'Kaedah', 'Status', 'Tarikh', 'Rujukan'].map(h => (
+                {['Sekolah', 'Program', 'Siri', 'Bil. Orang', 'Yuran', 'Caj', 'Jumlah', 'Kaedah', 'Status', 'Tarikh', 'Rujukan', 'Bukti'].map(h => (
                   <th key={h} className="text-left font-bold uppercase text-[9px] px-2.5 py-2 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -251,8 +276,13 @@ export const AdminPaymentsTab: React.FC = () => {
                     ))}
                   </td>
                   <td className="px-2.5 py-2 text-center">{r.siri}</td>
-                  <td className="px-2.5 py-2 text-center whitespace-nowrap" title="Peserta / Pemimpin / Penolong">
-                    {r.bilPeserta}{(r.bilPemimpin || r.bilPenolong) ? ` · ${r.bilPemimpin} · ${r.bilPenolong}` : ''}
+                  {/* Satu angka: berapa ORANG yang dicaj dalam bil ini.
+                      Versi lama memaparkan "13 · 1 · 0" tanpa label, yang dibaca
+                      sebagai satu nombor bersiri dan bukan tiga kiraan. Pecahannya
+                      kekal dalam tooltip dan dalam CSV, di mana ia berlajur. */}
+                  <td className="px-2.5 py-2 text-center whitespace-nowrap font-semibold text-slate-700"
+                      title={`Peserta ${r.bilPeserta} · Pemimpin ${r.bilPemimpin} · Penolong ${r.bilPenolong} · Pembantu ${r.bilPembantu}`}>
+                    {r.bilPeserta + r.bilPemimpin + r.bilPenolong + r.bilPembantu}
                   </td>
                   <td className="px-2.5 py-2 whitespace-nowrap">{formatRM(r.amount)}</td>
                   <td className="px-2.5 py-2 whitespace-nowrap text-slate-400">
@@ -275,6 +305,24 @@ export const AdminPaymentsTab: React.FC = () => {
                   </td>
                   <td className="px-2.5 py-2 whitespace-nowrap font-mono text-[10px] text-slate-500">
                     {r.referenceNumber || r.billCode || '–'}
+                  </td>
+                  <td className="px-2.5 py-2 whitespace-nowrap">
+                    {r.bukti.length === 0 ? (
+                      <span className="text-slate-300" title={r.method === 'toyyibpay'
+                        ? 'Bayaran FPX tiada bukti dimuat naik — pengesahan datang dari gateway'
+                        : 'Tiada bukti dimuat naik'}>–</span>
+                    ) : r.bukti.map((b, i) => (
+                      <button
+                        key={b.filePath}
+                        onClick={() => bukaBukti(b.filePath)}
+                        disabled={membukaBukti === b.filePath}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-sky-200 bg-sky-50 text-sky-700 text-[10px] font-bold hover:bg-sky-100 disabled:opacity-50 mr-1"
+                        title={b.fileName}
+                      >
+                        <Paperclip size={10} />
+                        {membukaBukti === b.filePath ? '...' : r.bukti.length > 1 ? `Bukti ${i + 1}` : 'Lihat'}
+                      </button>
+                    ))}
                   </td>
                 </tr>
               ))}

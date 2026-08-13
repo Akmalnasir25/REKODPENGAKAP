@@ -80,17 +80,17 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
   const aggTypeRows = orderTypes(Object.keys(aggShirt));
 
   const handleExport = () => {
-    const headers = ['Sekolah', 'Program', 'Peserta', 'Pemimpin', 'Penolong', 'Jumlah (RM)', 'Jenis Baju', 'Saiz', 'Bilangan'];
+    const headers = ['Sekolah', 'Program', 'Peserta', 'Pemimpin', 'Penolong', 'Pembantu', 'Jumlah (RM)', 'Jenis Baju', 'Saiz', 'Bilangan'];
     const rows: string[] = [headers.join(',')];
     summary.forEach(school => {
       school.programs.forEach(p => {
         const typeEntries = Object.entries(p.shirtByType);
         if (typeEntries.length === 0) {
-          rows.push([`"${school.schoolName}"`, `"${p.badge}${labelSiri(p.siri)}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), '', '', ''].join(','));
+          rows.push([`"${school.schoolName}"`, `"${p.badge}${labelSiri(p.siri)}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.countPembantu, p.total.toFixed(2), '', '', ''].join(','));
         } else {
           typeEntries.forEach(([type, sizes]) => {
             Object.entries(sizes).forEach(([size, n]) => {
-              rows.push([`"${school.schoolName}"`, `"${p.badge}${labelSiri(p.siri)}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.total.toFixed(2), `"${type}"`, `"${size}"`, n].join(','));
+              rows.push([`"${school.schoolName}"`, `"${p.badge}${labelSiri(p.siri)}"`, p.countPeserta, p.countPemimpin, p.countPenolong, p.countPembantu, p.total.toFixed(2), `"${type}"`, `"${size}"`, n].join(','));
             });
           });
         }
@@ -201,6 +201,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                       { label: 'Peserta', count: p.countPeserta, fee: p.feePeserta, sub: p.subtotalPeserta },
                       { label: 'Pemimpin', count: p.countPemimpin, fee: p.feePemimpin, sub: p.subtotalPemimpin },
                       { label: 'Penolong Pemimpin', count: p.countPenolong, fee: p.feePenolong, sub: p.subtotalPenolong },
+                      { label: 'Pembantu', count: p.countPembantu, fee: p.feePembantu, sub: p.subtotalPembantu },
                     ].filter(r => r.count > 0 || (r.fee !== null && r.fee !== undefined)).map(r => (
                       <tr key={r.label}>
                         <td className="py-1.5 text-gray-600">{r.label}</td>

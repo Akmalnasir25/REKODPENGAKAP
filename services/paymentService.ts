@@ -20,6 +20,7 @@ export interface PecahanProgram {
   peserta: number;
   pemimpin: number;
   penolong: number;
+  pembantu: number;
 }
 
 export interface ProgramDilangkau {
@@ -345,10 +346,14 @@ export interface BarisRumusanBayaran {
   billCode: string | null;
   paidAt: string | null;
   createdAt: string;
-  programs: Array<{ name: string; amount: number; peserta: number; pemimpin: number; penolong: number }>;
+  programs: Array<{ name: string; amount: number; peserta: number; pemimpin: number; penolong: number; pembantu: number }>;
   bilPeserta: number;
   bilPemimpin: number;
   bilPenolong: number;
+  bilPembantu: number;
+  /** Bukti bayaran yang dimuat naik. Kosong bagi bil FPX — gateway tidak
+   *  menghasilkan lampiran. */
+  bukti: Array<{ fileName: string; filePath: string }>;
 }
 
 /**
@@ -365,7 +370,8 @@ export const getRumusanBayaran = async (tahun?: number): Promise<BarisRumusanBay
         id, year, siri, amount, transaction_fee, total_amount, method, status,
         reference_number, external_bill_code, paid_at, created_at,
         school:school_id(name, school_code, school_type, daerah:daerah_id(name)),
-        payments(amount, seat_status, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, badge:badge_id(name))
+        payments(amount, seat_status, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, snapshot_pembantu, badge:badge_id(name)),
+        attachments(file_name, file_path, category)
       `)
       .order('created_at', { ascending: false });
     if (tahun) q = q.eq('year', tahun);
@@ -382,6 +388,7 @@ export const getRumusanBayaran = async (tahun?: number): Promise<BarisRumusanBay
         peserta: p.snapshot_peserta ?? 0,
         pemimpin: p.snapshot_pemimpin ?? 0,
         penolong: p.snapshot_penolong ?? 0,
+        pembantu: p.snapshot_pembantu ?? 0,
         seatStatus: p.seat_status,
       }));
       return {
@@ -402,10 +409,14 @@ export const getRumusanBayaran = async (tahun?: number): Promise<BarisRumusanBay
         billCode: r.external_bill_code,
         paidAt: r.paid_at,
         createdAt: r.created_at,
+        bukti: (r.attachments || [])
+          .filter((a: any) => a.category === 'payment_proof')
+          .map((a: any) => ({ fileName: a.file_name, filePath: a.file_path })),
         programs: items,
         bilPeserta: items.reduce((n: number, i: any) => n + i.peserta, 0),
         bilPemimpin: items.reduce((n: number, i: any) => n + i.pemimpin, 0),
         bilPenolong: items.reduce((n: number, i: any) => n + i.penolong, 0),
+        bilPembantu: items.reduce((n: number, i: any) => n + i.pembantu, 0),
       };
     });
   } catch (error) {
@@ -427,7 +438,7 @@ export const getDataResit = async (billId: string): Promise<DataResit | null> =>
         id, year, siri, amount, transaction_fee, total_amount, method,
         reference_number, paid_at, confirmed_at,
         school:school_id(name, school_code, daerah:daerah_id(name), negeri:negeri_id(name)),
-        payments(amount, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, badge:badge_id(name))
+        payments(amount, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, snapshot_pembantu, badge:badge_id(name))
       `)
       .eq('id', billId)
       .maybeSingle();
@@ -443,6 +454,7 @@ export const getDataResit = async (billId: string): Promise<DataResit | null> =>
       peserta: p.snapshot_peserta ?? 0,
       pemimpin: p.snapshot_pemimpin ?? 0,
       penolong: p.snapshot_penolong ?? 0,
+      pembantu: p.snapshot_pembantu ?? 0,
     }));
 
     return {

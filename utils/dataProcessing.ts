@@ -22,13 +22,17 @@ export interface RoleStats {
   femaleStudents: number;
   leaders: number;
   assistants: number;
+  /** PEMBANTU. Dikira berasingan daripada `assistants` walaupun kadar yuran
+   *  dan pengiraan tempatnya sama — mencampurkannya bermakna papan pemuka
+   *  tidak dapat memaparkan kedua-duanya. */
+  pembantu: number;
   examiners: number;
   rambu: number;
   total: number;
 }
 
 export function computeRoleStats(records: SubmissionData[]): RoleStats {
-  const stats: RoleStats = { students: 0, maleStudents: 0, femaleStudents: 0, leaders: 0, assistants: 0, examiners: 0, rambu: 0, total: records.length };
+  const stats: RoleStats = { students: 0, maleStudents: 0, femaleStudents: 0, leaders: 0, assistants: 0, pembantu: 0, examiners: 0, rambu: 0, total: records.length };
   for (const d of records) {
     const role = (d.role || 'PESERTA').toUpperCase();
     const gender = (d.gender || '').toUpperCase();
@@ -38,6 +42,7 @@ export function computeRoleStats(records: SubmissionData[]): RoleStats {
       else if (gender === 'PEREMPUAN' || gender === 'P') stats.femaleStudents++;
     } else if (role === 'PEMIMPIN') stats.leaders++;
     else if (role.includes('PENOLONG')) stats.assistants++;
+    else if (role === 'PEMBANTU') stats.pembantu++;
     else if (role === 'PENGUJI') stats.examiners++;
     if (role.includes('RAMBU')) stats.rambu++;
   }

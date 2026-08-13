@@ -157,6 +157,21 @@ export const fetchCloudData = async (
         if (notes.editPermissions) acc[key] = notes.editPermissions;
         return acc;
       }, {});
+      // Kebenaran fasa kedua: terpakai selepas dihantar/disahkan. Dibaca
+      // daripada kunci JSON berasingan supaya kebenaran sebelum-hantar tidak
+      // pernah terganggu oleh yang ini.
+      const badgeEditPermissionsSelepas = statusRows.reduce((acc: Record<string, any>, r: any) => {
+        if (!r.badge?.name || !r.year) return acc;
+        const key = badgeStatusKey(r.badge.name, r.year, r.siri ?? 1);
+        let notes: any = {};
+        try {
+          notes = typeof r.notes === 'string' && r.notes.trim().startsWith('{') ? JSON.parse(r.notes) : {};
+        } catch (_) {
+          notes = {};
+        }
+        if (notes.editPermissionsSelepas) acc[key] = notes.editPermissionsSelepas;
+        return acc;
+      }, {});
       return {
         name: s.name,
         schoolCode: s.school_code,
@@ -178,6 +193,7 @@ export const fetchCloudData = async (
           .map((r: any) => r.badge?.name ? badgeStatusKey(r.badge.name, r.year, r.siri ?? 1) : '')
           .filter(Boolean),
         badgeEditPermissions,
+        badgeEditPermissionsSelepas,
       };
     });
 
@@ -395,10 +411,17 @@ export const submitRegistration = async (
   submissionStatus: 'draft' | 'submitted' = 'draft'
 ): Promise<ApiResponse> => {
   try {
+    // Peranan yang DIBAWA oleh baris itu menang; hujah kedudukan hanya lalai.
+    //
+    // Dahulunya setiap baris dalam `assistants` dipaksa menjadi
+    // 'PENOLONG PEMIMPIN'. Borang memasukkan PEMIMPIN dan PENOLONG PEMIMPIN ke
+    // dalam senarai yang sama, jadi sesiapa yang didaftarkan sebagai PEMIMPIN
+    // disimpan sebagai PENOLONG PEMIMPIN — senyap, dan tanpa jalan untuk
+    // memerhatikannya dari borang. PEMBANTU akan hilang dengan cara yang sama.
     const allPeople = [
-      ...participants.map(p => ({ ...p, role: 'PESERTA' })),
-      ...assistants.map(p => ({ ...p, role: 'PENOLONG PEMIMPIN' })),
-      ...examiners.map(p => ({ ...p, role: 'PENGUJI' })),
+      ...participants.map(p => ({ ...p, role: (p as any).role || 'PESERTA' })),
+      ...assistants.map(p => ({ ...p, role: (p as any).role || 'PENOLONG PEMIMPIN' })),
+      ...examiners.map(p => ({ ...p, role: (p as any).role || 'PENGUJI' })),
     ];
     const result = await createSubmissionWithPeople(leaderInfo, allPeople, customDate, 'manual', submissionStatus);
     return result as ApiResponse;
@@ -415,8 +438,8 @@ export const bulkSubmitRegistration = async (
     schoolCode: string;
     badgeType: string;
     year: number;
-    role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU';
-    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; siri?: number; remarks?: string; }>;
+    role: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PEMBANTU' | 'PENGUJI' | 'PENERIMA RAMBU';
+    records: Array<{ student: string; icNumber: string; membershipId: string; gender: string; race: string; phoneNumber?: string; role?: 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PEMBANTU' | 'PENGUJI' | 'PENERIMA RAMBU'; category?: string; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; siri?: number; remarks?: string; }>;
   },
   _csrfToken?: string
 ): Promise<ApiResponse> => {
@@ -1267,7 +1290,16 @@ export const getSubmittedSchools = async (daerahCode?: string, year?: number, ne
   }
 };
 
-export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean, year: number = currentYear(), _csrfToken?: string): Promise<ApiResponse> => {
+/**
+ * `fasa` menentukan kunci JSON mana yang ditulis:
+ *   'sebelum' → editPermissions          (kebenaran asal, sebelum hantar)
+ *   'selepas' → editPermissionsSelepas   (selepas hantar/sah; pegawai sahaja)
+ *
+ * Kedua-duanya berasingan sepenuhnya. Membuka pegawai selepas pengesahan
+ * tidak boleh mengubah apa yang dibenarkan sebelum penghantaran, dan
+ * sebaliknya.
+ */
+export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean, year: number = currentYear(), _csrfToken?: string, fasa: 'sebelum' | 'selepas' = 'sebelum'): Promise<ApiResponse> => {
   try {
     const badge = await getBadgeByName(badgeName);
     if (!badge) return { status: 'error', message: 'Program tidak dijumpai.' };
@@ -1295,9 +1327,15 @@ export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: st
       bySchool.set(r.school_id, list);
     });
 
+    // Fasa 'selepas' tidak pernah menyentuh `students`: PESERTA kekal terkunci
+    // selepas penghantaran dalam semua keadaan, termasuk melalui butang MASTER.
     const applyPermission = (current: any = {}) => permissionType === 'all'
-      ? { ...current, students: allow, assistants: allow, examiners: allow }
+      ? (fasa === 'selepas'
+          ? { ...current, assistants: allow, examiners: allow }
+          : { ...current, students: allow, assistants: allow, examiners: allow })
       : { ...current, [permissionType]: allow };
+
+    const kunciJson = fasa === 'selepas' ? 'editPermissionsSelepas' : 'editPermissions';
 
     const buildRow = (existing: any, schoolId: string, siri: number) => {
       let notes: any = {};
@@ -1316,7 +1354,7 @@ export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: st
         approved_at: existing?.approved_at || null,
         approved_by: existing?.approved_by || null,
         locked_at: existing?.locked_at || null,
-        notes: JSON.stringify({ ...notes, editPermissions: applyPermission(notes.editPermissions || {}) }),
+        notes: JSON.stringify({ ...notes, [kunciJson]: applyPermission(notes[kunciJson] || {}) }),
       };
     };
 
@@ -1795,6 +1833,7 @@ export interface ProgramFeeOverride {
   feePeserta: number | null;
   feePemimpin: number | null;
   feePenolong: number | null;
+  feePembantu: number | null;
 }
 
 // Diambil sekali dan diselesaikan di klien. Jadual ini kecil (segelintir baris),
@@ -1813,6 +1852,7 @@ export const getProgramFeeOverrides = async (): Promise<ProgramFeeOverride[]> =>
       feePeserta: r.fee_peserta !== null ? Number(r.fee_peserta) : null,
       feePemimpin: r.fee_pemimpin !== null ? Number(r.fee_pemimpin) : null,
       feePenolong: r.fee_penolong !== null ? Number(r.fee_penolong) : null,
+      feePembantu: r.fee_pembantu !== null && r.fee_pembantu !== undefined ? Number(r.fee_pembantu) : null,
     }));
   } catch (error) {
     console.error('getProgramFeeOverrides error:', error);
@@ -1828,7 +1868,7 @@ export const getProgramFeeOverrides = async (): Promise<ProgramFeeOverride[]> =>
  */
 export const saveProgramFeeOverrides = async (
   programSettingId: string,
-  rows: Array<{ siri: number | null; schoolType: SchoolType | null; feePeserta: number | null; feePemimpin: number | null; feePenolong: number | null }>,
+  rows: Array<{ siri: number | null; schoolType: SchoolType | null; feePeserta: number | null; feePemimpin: number | null; feePenolong: number | null; feePembantu: number | null }>,
 ): Promise<ApiResponse> => {
   try {
     const { error: delErr } = await supabase
@@ -1839,7 +1879,8 @@ export const saveProgramFeeOverrides = async (
 
     // Baris yang semua yurannya kosong tidak bermakna apa-apa — ia hanya
     // menyebabkan resolusi memilihnya lalu jatuh balik ke yuran asas.
-    const bermakna = rows.filter(r => r.feePeserta !== null || r.feePemimpin !== null || r.feePenolong !== null);
+    const bermakna = rows.filter(r => r.feePeserta !== null || r.feePemimpin !== null
+      || r.feePenolong !== null || r.feePembantu !== null);
     if (bermakna.length === 0) return { status: 'success', message: 'Override yuran dikemas kini.' };
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -1851,6 +1892,7 @@ export const saveProgramFeeOverrides = async (
         fee_peserta: r.feePeserta,
         fee_pemimpin: r.feePemimpin,
         fee_penolong: r.feePenolong,
+        fee_pembantu: r.feePembantu,
         created_by: user?.id || null,
       })),
     );
@@ -1875,6 +1917,7 @@ export interface ProgramSetting {
   feePeserta: number | null;
   feePemimpin: number | null;
   feePenolong: number | null;
+  feePembantu: number | null;
   shirtEnabled: boolean;
   siriEnabled: boolean;
   maxSiri: number;
@@ -1888,7 +1931,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, shirt_enabled, siri_enabled, max_siri, submission_open,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1912,6 +1955,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         feePeserta: r.fee_peserta !== null && r.fee_peserta !== undefined ? Number(r.fee_peserta) : null,
         feePemimpin: r.fee_pemimpin !== null && r.fee_pemimpin !== undefined ? Number(r.fee_pemimpin) : null,
         feePenolong: r.fee_penolong !== null && r.fee_penolong !== undefined ? Number(r.fee_penolong) : null,
+        feePembantu: r.fee_pembantu !== null && r.fee_pembantu !== undefined ? Number(r.fee_pembantu) : null,
         shirtEnabled: !!r.shirt_enabled,
         siriEnabled: !!r.siri_enabled,
         maxSiri: r.max_siri || 5,
@@ -1936,6 +1980,7 @@ export interface UpsertProgramSettingInput {
   feePeserta: number | null;
   feePemimpin: number | null;
   feePenolong: number | null;
+  feePembantu: number | null;
   shirtEnabled: boolean;
   siriEnabled: boolean;
   maxSiri: number;
@@ -1966,6 +2011,7 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       fee_peserta: input.paymentEnabled ? input.feePeserta : null,
       fee_pemimpin: input.paymentEnabled ? input.feePemimpin : null,
       fee_penolong: input.paymentEnabled ? input.feePenolong : null,
+      fee_pembantu: input.paymentEnabled ? input.feePembantu : null,
       shirt_enabled: input.shirtEnabled,
       siri_enabled: input.siriEnabled,
       max_siri: input.siriEnabled ? Math.min(Math.max(input.maxSiri || 5, 1), 20) : 5,
@@ -2098,6 +2144,12 @@ export interface ProgramSiriSetting {
   maxPeserta: number | null;      // null = tiada had bagi siri ini
   paymentDeadline: string | null; // null = ikut tarikh akhir program
   isClosed: boolean;
+
+  // §15: null = warisi program_settings. Nilai eksplisit mengatasi induk dan
+  // berhenti mewarisi. UI memaparkan nilai BERKESAN, bukan nilai tersimpan —
+  // admin tidak sepatutnya melihat kotak kosong yang sebenarnya mencaj.
+  paymentRequired: boolean | null;
+  submissionOpen: boolean | null;
 }
 
 // Had peserta kembali ke sini (migrasi 048). Setiap siri ialah pusingan
@@ -2108,7 +2160,7 @@ export const getProgramSiriSettings = async (): Promise<ProgramSiriSetting[]> =>
   try {
     const { data, error } = await supabase
       .from('program_siri_settings')
-      .select('program_setting_id, siri, max_peserta, payment_deadline, is_closed');
+      .select('program_setting_id, siri, max_peserta, payment_deadline, is_closed, payment_online_required, submission_open');
     if (error) throw error;
     return (data || []).map((r: any) => ({
       programSettingId: r.program_setting_id,
@@ -2116,6 +2168,9 @@ export const getProgramSiriSettings = async (): Promise<ProgramSiriSetting[]> =>
       maxPeserta: r.max_peserta ?? null,
       paymentDeadline: r.payment_deadline,
       isClosed: !!r.is_closed,
+      // `?? null` dan bukan `!!` — false dan null bermakna berlainan di sini.
+      paymentRequired: r.payment_online_required ?? null,
+      submissionOpen: r.submission_open ?? null,
     }));
   } catch (error) {
     console.error('getProgramSiriSettings error:', error);
@@ -2125,7 +2180,14 @@ export const getProgramSiriSettings = async (): Promise<ProgramSiriSetting[]> =>
 
 export const saveProgramSiriSettings = async (
   programSettingId: string,
-  rows: Array<{ siri: number; maxPeserta: number | null; paymentDeadline: string | null; isClosed: boolean }>,
+  rows: Array<{
+    siri: number;
+    maxPeserta: number | null;
+    paymentDeadline: string | null;
+    isClosed: boolean;
+    paymentRequired: boolean | null;
+    submissionOpen: boolean | null;
+  }>,
 ): Promise<ApiResponse> => {
   try {
     const { error: delErr } = await supabase
@@ -2137,7 +2199,15 @@ export const saveProgramSiriSettings = async (
     // Baris tanpa tarikh tutup dan tidak ditutup bermakna sama seperti tiada
     // baris langsung. Menyimpannya hanya menambah baris yang perlu difahami
     // kemudian.
-    const bermakna = rows.filter(r => r.maxPeserta !== null || r.paymentDeadline !== null || r.isClosed);
+    //
+    // `!== null` bagi dua medan terakhir, BUKAN kebenarannya. Siri yang
+    // satu-satunya tetapannya ialah "tidak perlu bayaran" membawa `false`,
+    // dan menapis mengikut kebenaran akan menggugurkan tepat baris itu:
+    // borang menerimanya, ia tidak pernah ditulis, dan ia dibaca semula
+    // sebagai null — iaitu warisi, iaitu berbayar. Itu kegagalan cddd0c8.
+    const bermakna = rows.filter(r =>
+      r.maxPeserta !== null || r.paymentDeadline !== null || r.isClosed
+      || r.paymentRequired !== null || r.submissionOpen !== null);
     if (bermakna.length === 0) return { status: 'success', message: 'Had siri dikemas kini.' };
 
     const { error } = await supabase.from('program_siri_settings').insert(
@@ -2147,6 +2217,8 @@ export const saveProgramSiriSettings = async (
         max_peserta: r.maxPeserta,
         payment_deadline: r.paymentDeadline,
         is_closed: r.isClosed,
+        payment_online_required: r.paymentRequired,
+        submission_open: r.submissionOpen,
       })),
     );
     if (error) throw error;

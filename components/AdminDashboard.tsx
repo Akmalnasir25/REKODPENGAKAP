@@ -24,7 +24,7 @@ interface AdminDashboardProps {
   readOnlyBadges?: Set<string>;
 }
 
-type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'examiners' | 'principals' | 'archive';
+type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'pembantu' | 'examiners' | 'principals' | 'archive';
 type PrintMode = 'none' | 'stats' | 'list' | 'archive';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete, onFloat, readOnlyBadges }) => {
@@ -168,7 +168,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
         total: number; 
         male: number; 
         female: number;
-        leaders: number;
+        leaders: number;      // PEMIMPIN sahaja
+        assistants: number;   // PENOLONG PEMIMPIN
+        pembantu: number;     // PEMBANTU
         examiners: number;
         rambu: number; // New Field for Rambu recipients
         students: number; // Explicit student count
@@ -188,6 +190,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
             male: 0, 
             female: 0,
             leaders: 0,
+            assistants: 0,
+            pembantu: 0,
             examiners: 0,
             rambu: 0,
             students: 0
@@ -203,8 +207,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
       
       if (role === 'PENGUJI') {
           stats[schoolName].examiners += 1;
-      } else if (role.includes('PENOLONG') || role === 'PEMIMPIN') {
+      } else if (role === 'PEMIMPIN') {
           stats[schoolName].leaders += 1;
+      } else if (role.includes('PENOLONG')) {
+          stats[schoolName].assistants += 1;
+      } else if (role === 'PEMBANTU') {
+          stats[schoolName].pembantu += 1;
       } else {
           // It's a student (PESERTA or PENERIMA RAMBU)
           stats[schoolName].students += 1;
@@ -236,11 +244,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
         male: acc.male + curr.male,
         female: acc.female + curr.female,
         leaders: acc.leaders + curr.leaders,
+        assistants: acc.assistants + curr.assistants,
+        pembantu: acc.pembantu + curr.pembantu,
         examiners: acc.examiners + curr.examiners,
         rambu: acc.rambu + curr.rambu,
         total: acc.total + curr.total,
         students: acc.students + curr.students
-    }), { male: 0, female: 0, leaders: 0, examiners: 0, rambu: 0, total: 0, students: 0 });
+    }), { male: 0, female: 0, leaders: 0, assistants: 0, pembantu: 0, examiners: 0, rambu: 0, total: 0, students: 0 });
   }, [schoolStats]);
 
   const maxTotal = useMemo(() => {
@@ -387,6 +397,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
               case 'students': return role === 'PESERTA' || role === 'PENERIMA RAMBU';
               case 'leaders': return role === 'PEMIMPIN';
               case 'assistants': return role.includes('PENOLONG');
+              case 'pembantu': return role === 'PEMBANTU';
               case 'examiners': return role === 'PENGUJI';
               default: return true; // 'all'
           }
@@ -398,6 +409,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
           if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 1;
           if (r === 'PEMIMPIN') return 2;
           if (r.includes('PENOLONG')) return 3;
+          if (r === 'PEMBANTU') return 4;
           if (r === 'PENGUJI') return 4;
           return 5;
       };
@@ -664,7 +676,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
         {/* STATS SUMMARY CARDS (Aggregated Counts) */}
         {activeTab !== 'archive' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-[fadeIn_0.3s_ease-out]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-6 animate-[fadeIn_0.3s_ease-out]">
                 {/* SEKOLAH CARD (NEW) */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500 relative overflow-hidden">
                     <div className="flex justify-between items-start z-10 relative">
@@ -700,15 +712,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                 <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-indigo-500 relative overflow-hidden">
                     <div className="flex justify-between items-start z-10 relative">
                         <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Pemimpin & Penolong</p>
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Pemimpin</p>
                             <h3 className="text-3xl font-black text-gray-800">{totals.leaders}</h3>
-                            <p className="text-xs text-indigo-600 font-semibold mt-1">Pegawai Bertugas</p>
+                            <p className="text-xs text-indigo-600 font-semibold mt-1">Ketua Pemimpin</p>
                         </div>
                         <div className="p-3 bg-indigo-50 rounded-lg text-indigo-600">
+                            <Crown size={24} />
+                        </div>
+                    </div>
+                    <Crown size={100} className="absolute -bottom-4 -right-4 text-indigo-50 opacity-50 z-0" />
+                </div>
+
+                {/* PENOLONG CARD */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-sky-500 relative overflow-hidden">
+                    <div className="flex justify-between items-start z-10 relative">
+                        <div>
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Penolong</p>
+                            <h3 className="text-3xl font-black text-gray-800">{totals.assistants}</h3>
+                            <p className="text-xs text-sky-600 font-semibold mt-1">Penolong Pemimpin</p>
+                        </div>
+                        <div className="p-3 bg-sky-50 rounded-lg text-sky-600">
                             <Shield size={24} />
                         </div>
                     </div>
-                    <Shield size={100} className="absolute -bottom-4 -right-4 text-indigo-50 opacity-50 z-0" />
+                    <Shield size={100} className="absolute -bottom-4 -right-4 text-sky-50 opacity-50 z-0" />
+                </div>
+
+                {/* PEMBANTU CARD */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-teal-500 relative overflow-hidden">
+                    <div className="flex justify-between items-start z-10 relative">
+                        <div>
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Pembantu</p>
+                            <h3 className="text-3xl font-black text-gray-800">{totals.pembantu}</h3>
+                            <p className="text-xs text-teal-600 font-semibold mt-1">Pembantu Bertugas</p>
+                        </div>
+                        <div className="p-3 bg-teal-50 rounded-lg text-teal-600">
+                            <Users size={24} />
+                        </div>
+                    </div>
+                    <Users size={100} className="absolute -bottom-4 -right-4 text-teal-50 opacity-50 z-0" />
                 </div>
 
                 {/* PENGUJI CARD */}
@@ -776,6 +818,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                             <th className="px-4 py-3 text-center w-20 text-pink-600">Peserta (P)</th>
                             <th className="px-4 py-3 text-center w-24 bg-teal-50 text-teal-700">Jum. Peserta</th>
                             <th className="px-4 py-3 text-center w-20 text-indigo-600">Pemimpin</th>
+                            <th className="px-4 py-3 text-center w-20 text-sky-600">Penolong</th>
+                            <th className="px-4 py-3 text-center w-20 text-teal-600">Pembantu</th>
                             <th className="px-4 py-3 text-center w-20 text-green-600">Penguji</th>
                             <th className="px-4 py-3 text-center w-24 bg-blue-100/50">Jumlah Besar</th>
                         </tr>
@@ -797,13 +841,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                 <td className="px-4 py-2 text-center text-gray-600 font-semibold">{stat.female}</td>
                                 <td className="px-4 py-2 text-center text-teal-600 font-bold bg-teal-50/50">{stat.students}</td>
                                 <td className="px-4 py-2 text-center text-indigo-600 font-bold bg-indigo-50/50">{stat.leaders}</td>
+                                <td className="px-4 py-2 text-center text-sky-600 font-bold bg-sky-50/50">{stat.assistants}</td>
+                                <td className="px-4 py-2 text-center text-teal-600 font-bold bg-teal-50/50">{stat.pembantu}</td>
                                 <td className="px-4 py-2 text-center text-green-600 font-bold bg-green-50/50">{stat.examiners}</td>
                                 <td className="px-4 py-2 text-center font-bold bg-gray-50 text-gray-900">{stat.total}</td>
                             </tr>
                         ))}
                         {schoolStats.length === 0 && (
                         <tr>
-                            <td colSpan={7} className="px-4 py-8 text-center text-gray-400 italic">
+                            <td colSpan={9} className="px-4 py-8 text-center text-gray-400 italic">
                             Tiada rekod statistik untuk paparan ini.
                             </td>
                         </tr>
@@ -817,6 +863,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                 <td className="px-4 py-3 text-center text-pink-200">{totals.female}</td>
                                 <td className="px-4 py-3 text-center text-teal-300">{totals.students}</td>
                                 <td className="px-4 py-3 text-center text-indigo-200">{totals.leaders}</td>
+                                <td className="px-4 py-3 text-center text-sky-200">{totals.assistants}</td>
+                                <td className="px-4 py-3 text-center text-teal-200">{totals.pembantu}</td>
                                 <td className="px-4 py-3 text-center text-green-200">{totals.examiners}</td>
                                 <td className="px-4 py-3 text-center bg-gray-900 text-yellow-400 text-base">{totals.total}</td>
                             </tr>
@@ -950,6 +998,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                         <TabButton id="students" label="Peserta" icon={Users} colorClass="bg-blue-600" />
                         <TabButton id="leaders" label="Pemimpin" icon={Crown} colorClass="bg-purple-600" />
                         <TabButton id="assistants" label="Penolong" icon={Shield} colorClass="bg-indigo-600" />
+                        <TabButton id="pembantu" label="Pembantu" icon={Shield} colorClass="bg-teal-600" />
                         <TabButton id="examiners" label="Penguji" icon={GraduationCap} colorClass="bg-green-600" />
                         <TabButton id="principals" label="GB/Pengetua" icon={SchoolIcon} colorClass="bg-amber-600" />
                     </div>

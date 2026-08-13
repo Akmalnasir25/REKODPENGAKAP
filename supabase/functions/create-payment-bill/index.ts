@@ -62,7 +62,7 @@ interface Item {
   badgeId: string;
   badgeName: string;
   amount: number;
-  kira: { peserta: number; pemimpin: number; penolong: number };
+  kira: { peserta: number; pemimpin: number; penolong: number; pembantu: number };
   gatewayId: string | null;
 }
 
@@ -161,15 +161,20 @@ serve(async (req) => {
     (subs || []).forEach((s: any) => badgeBagiSub.set(s.id, s.badge_id));
 
     // Kiraan peranan bagi setiap program dalam siri ini.
-    const kiraanIkutBadge = new Map<string, { peserta: number; pemimpin: number; penolong: number }>();
+    const kiraanIkutBadge = new Map<string, { peserta: number; pemimpin: number; penolong: number; pembantu: number }>();
     orang.forEach((p: any) => {
       const badgeId = badgeBagiSub.get(p.submission_id);
       if (!badgeId) return;
-      const k = kiraanIkutBadge.get(badgeId) || { peserta: 0, pemimpin: 0, penolong: 0 };
+      const k = kiraanIkutBadge.get(badgeId) || { peserta: 0, pemimpin: 0, penolong: 0, pembantu: 0 };
       const r = String(p.role || 'PESERTA').toUpperCase();
       if (r === 'PESERTA' || r === 'PENERIMA RAMBU') k.peserta++;
       else if (r === 'PEMIMPIN') k.pemimpin++;
       else if (r.includes('PENOLONG')) k.penolong++;
+      // PEMBANTU mempunyai kadar dan snapshotnya sendiri sejak migrasi 051.
+      // Ia TIDAK boleh dikira ke dalam baldi penolong: snapshot itulah yang
+      // menentukan siapa sudah dilindungi bila bil susulan dijana, dan
+      // mencampurkan dua kadar berbeza di situ mengecaj jumlah yang salah.
+      else if (r === 'PEMBANTU') k.pembantu++;
       // PENGUJI sengaja diabaikan — tiada lajur yuran untuknya
       kiraanIkutBadge.set(badgeId, k);
     });
@@ -192,7 +197,7 @@ serve(async (req) => {
     // dijelaskan dalam bil pertama.
     const { data: bayaranSedia } = await admin
       .from('payments')
-      .select('badge_id, status, snapshot_peserta, snapshot_pemimpin, snapshot_penolong')
+      .select('badge_id, status, snapshot_peserta, snapshot_pemimpin, snapshot_penolong, snapshot_pembantu')
       .eq('school_id', schoolId).eq('year', year).eq('siri', siri)
       .in('status', ['paid', 'pending_review']);
 
@@ -202,12 +207,13 @@ serve(async (req) => {
     // memberitahu — dan perbandingan mesti per PERANAN, bukan jumlah
     // keseluruhan: sekolah yang membayar 2 peserta kemudian menambah seorang
     // pemimpin mempunyai jumlah yang sama tetapi hutang yang berbeza.
-    const dilindungi = new Map<string, { peserta: number; pemimpin: number; penolong: number }>();
+    const dilindungi = new Map<string, { peserta: number; pemimpin: number; penolong: number; pembantu: number }>();
     (bayaranSedia || []).forEach((r: any) => {
-      const d = dilindungi.get(r.badge_id) || { peserta: 0, pemimpin: 0, penolong: 0 };
+      const d = dilindungi.get(r.badge_id) || { peserta: 0, pemimpin: 0, penolong: 0, pembantu: 0 };
       d.peserta  += r.snapshot_peserta  ?? 0;
       d.pemimpin += r.snapshot_pemimpin ?? 0;
       d.penolong += r.snapshot_penolong ?? 0;
+      d.pembantu += r.snapshot_pembantu ?? 0;
       dilindungi.set(r.badge_id, d);
     });
 
@@ -240,18 +246,30 @@ serve(async (req) => {
 
       const { data: ps } = await admin
         .from('program_settings')
-        .select('id, payment_online_required, submission_open, fee_peserta, fee_pemimpin, fee_penolong, negeri_id, daerah_id')
+        .select('id, payment_online_required, submission_open, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, negeri_id, daerah_id')
         .eq('id', psId).single();
+
+      // Kedua-dua togol ialah per program x SIRI sejak §15. Dibaca melalui
+      // penyelesai, bukan terus daripada program_settings: pencetus pangkalan
+      // data membaca nilai yang sama, dan dua bacaan berasingan bagi peraturan
+      // yang sama akan menyimpang.
+      const [{ data: bolehHantar }, { data: perluBayar }] = await Promise.all([
+        admin.rpc('siri_submission_open',  { p_program_setting_id: psId, p_siri: siri }),
+        admin.rpc('siri_payment_required', { p_program_setting_id: psId, p_siri: siri }),
+      ]);
 
       // Penghantaran belum dibuka admin (§14). Disemak SEBELUM apa-apa lagi:
       // program percuma pun tidak boleh dihantar, dan mencipta bil untuk
       // program yang tidak boleh dihantar hanya mengambil wang tanpa guna.
-      if (ps && ps.submission_open === false) {
-        dilangkau.push({ program: nama, sebab: 'penghantaran belum dibuka oleh admin' });
+      if (bolehHantar === false) {
+        dilangkau.push({ program: nama, sebab: `penghantaran Siri ${siri} belum dibuka oleh admin` });
         continue;
       }
 
-      if (!ps?.payment_online_required) { terusHantar.push(badgeId); continue; }
+      // Siri percuma: tiada bil, hantar terus. Satu siri boleh mengandungi
+      // program berbayar dan program percuma serentak — gelung ini sudah
+      // mengasingkannya per badge.
+      if (!perluBayar) { terusHantar.push(badgeId); continue; }
 
       const { data: yuranRows } = await admin.rpc('resolve_program_fees', {
         p_program_setting_id: psId,
@@ -262,21 +280,22 @@ serve(async (req) => {
 
       // Hanya yang BELUM dilindungi oleh bayaran terdahulu dicaj (§13.12).
       // Bil susulan mengecaj beza, bukan jumlah penuh dan bukan tiada apa-apa.
-      const lindung = dilindungi.get(badgeId) || { peserta: 0, pemimpin: 0, penolong: 0 };
+      const lindung = dilindungi.get(badgeId) || { peserta: 0, pemimpin: 0, penolong: 0, pembantu: 0 };
       const baki = {
         peserta:  Math.max(0, kira.peserta  - lindung.peserta),
         pemimpin: Math.max(0, kira.pemimpin - lindung.pemimpin),
         penolong: Math.max(0, kira.penolong - lindung.penolong),
+        pembantu: Math.max(0, kira.pembantu - lindung.pembantu),
       };
 
-      if (dilindungi.has(badgeId) && baki.peserta + baki.pemimpin + baki.penolong === 0) {
+      if (dilindungi.has(badgeId) && baki.peserta + baki.pemimpin + baki.penolong + baki.pembantu === 0) {
         // Dilindungi sepenuhnya. Dilangkau supaya sekolah tidak dibil dua
         // kali — tetapi DILAPORKAN, kerana program yang hilang dari bil tanpa
         // penjelasan kelihatan seperti sistem tersilap kira.
         sudahDibayar.push({
           program: nama,
-          dibayarUntuk: lindung.peserta + lindung.pemimpin + lindung.penolong,
-          kini: kira.peserta + kira.pemimpin + kira.penolong,
+          dibayarUntuk: lindung.peserta + lindung.pemimpin + lindung.penolong + lindung.pembantu,
+          kini: kira.peserta + kira.pemimpin + kira.penolong + kira.pembantu,
         });
         // Sudah dibayar tetapi belum dalam giliran. Berlaku apabila admin
         // membuka semula pendaftaran yang sudah dijelaskan: melangkaunya
@@ -291,7 +310,8 @@ serve(async (req) => {
       const amount =
         (ps.fee_peserta  !== null ? baki.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
         (ps.fee_pemimpin !== null ? baki.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
-        (ps.fee_penolong !== null ? baki.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0);
+        (ps.fee_penolong !== null ? baki.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0) +
+        (ps.fee_pembantu !== null ? baki.pembantu * Number(yuran?.fee_pembantu ?? ps.fee_pembantu) : 0);
 
       // RM0 bermakna tiada peranan yang didaftarkan dicaj. Bil RM0 akan
       // menyekat sekolah pada skrin yang mustahil dilepasi.
@@ -302,7 +322,8 @@ serve(async (req) => {
       const minta =
         (ps.fee_peserta  !== null ? baki.peserta  : 0) +
         (ps.fee_pemimpin !== null ? baki.pemimpin : 0) +
-        (ps.fee_penolong !== null ? baki.penolong : 0);
+        (ps.fee_penolong !== null ? baki.penolong : 0) +
+        (ps.fee_pembantu !== null ? baki.pembantu : 0);
 
       const { data: sedia2 } = await admin.rpc('check_siri_availability', {
         p_school_id: schoolId, p_badge_id: badgeId, p_year: year,
@@ -460,6 +481,7 @@ serve(async (req) => {
         snapshot_peserta: i.kira.peserta,
         snapshot_pemimpin: i.kira.pemimpin,
         snapshot_penolong: i.kira.penolong,
+        snapshot_pembantu: i.kira.pembantu,
         method: body.method,
         status: 'pending',
         gateway_settings_id: gatewayId,
@@ -476,7 +498,7 @@ serve(async (req) => {
 
     const pecahan = itemDibil.map(i => ({
       program: i.badgeName, amount: i.amount,
-      peserta: i.kira.peserta, pemimpin: i.kira.pemimpin, penolong: i.kira.penolong,
+      peserta: i.kira.peserta, pemimpin: i.kira.pemimpin, penolong: i.kira.penolong, pembantu: i.kira.pembantu,
     }));
 
     // ── Kaedah manual: tiada panggilan gateway ────────────────────────

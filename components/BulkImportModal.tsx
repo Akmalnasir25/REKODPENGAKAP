@@ -5,7 +5,7 @@ import { Badge } from '../types';
 import { bulkSubmitRegistration } from '../services/supabaseApi';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 
-type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI';
+type BulkRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PEMBANTU' | 'PENGUJI';
 
 type ParsedRecord = {
   rowNumber: number;
@@ -42,7 +42,7 @@ const categoryOptions = ['Pengakap Kanak-kanak', 'Pengakap Muda', 'Pengakap Rema
 const unitOptions = ['Perdana', 'Udara', 'Laut', 'PPKI', 'PPKI Udara'];
 const makananOptions = ['Biasa', 'Vegetarian'];
 const masalahKesihatanOptions = ['Tiada', 'Alahan', 'Asma', 'Gastrik', 'Penyakit Jantung', 'Migrain', 'Penyakit Kronik', 'Lain-lain'];
-const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PENGUJI'];
+const roleOptions: BulkRole[] = ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU', 'PENGUJI'];
 const raceOptions = ['MELAYU', 'CINA', 'INDIA', 'BUMIPUTERA SABAH', 'BUMIPUTERA SARAWAK', 'ORANG ASLI', 'LAIN-LAIN'];
 const normalize = (value: any) => String(value || '').trim();
 const compact = (value: any) => normalize(value).replace(/\s+/g, ' ');
@@ -59,6 +59,7 @@ const normalizeRole = (value: any, fallback: BulkRole): BulkRole | string => {
   if (['PESERTA', 'MURID', 'AHLI'].includes(raw)) return 'PESERTA';
   if (['PEMIMPIN', 'LEADER'].includes(raw)) return 'PEMIMPIN';
   if (['PENOLONG PEMIMPIN', 'PENOLONG', 'ASSISTANT', 'ASSISTANT LEADER'].includes(raw)) return 'PENOLONG PEMIMPIN';
+  if (['PEMBANTU', 'HELPER', 'ASSISTANT HELPER'].includes(raw)) return 'PEMBANTU';
   if (['PENGUJI', 'EXAMINER'].includes(raw)) return 'PENGUJI';
   if (['PENERIMA RAMBU', 'RAMBU'].includes(raw)) return 'PESERTA';
   return normalize(value);
@@ -294,6 +295,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               <option value="PESERTA">Peserta</option>
               <option value="PEMIMPIN">Pemimpin</option>
               <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+              <option value="PEMBANTU">Pembantu</option>
               <option value="PENGUJI">Penguji</option>
             </select>
             <button onClick={downloadTemplate} className="bg-green-600 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2"><Download size={16} /> Template Excel</button>

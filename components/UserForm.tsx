@@ -60,7 +60,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   const [selectedDaerah, setSelectedDaerah] = useState('');
   
   // Registration Data
-  type PersonRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PENGUJI';
+  type PersonRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PEMBANTU' | 'PENGUJI';
   
   const participantIdCounterRef = useRef(0);
   const createEmptyParticipant = (role: PersonRole = 'PESERTA'): Participant & { role: PersonRole } => ({ 
@@ -103,6 +103,26 @@ export const UserForm: React.FC<UserFormProps> = ({
   const baseAllowExaminers = currentSchoolSettings?.allowExaminers ?? currentSchoolSettings?.allowEdit ?? false;
   // Tahun kohort = tahun pendaftaran dipilih (boleh backdated). Semua semakan kebenaran/kunci/pendua ikut tahun ini.
   const currentYear = registrationYear;
+
+  const schoolNegeriCode = currentSchoolSettings?.negeriCode;
+  const schoolDaerahCode = currentSchoolSettings?.daerahCode;
+
+  // Tetapan program dibaca DI SINI, sebelum kebenaran diselesaikan. Kebenaran
+  // fasa kedua perlu tahu peranan mana yang dicaj, jadi ia tidak boleh dikira
+  // sebelum tetapan ini wujud.
+  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
+  useEffect(() => {
+    let active = true;
+    getProgramSettings(currentYear).then(s => { if (active) setProgramSettings(s); });
+    return () => { active = false; };
+  }, [currentYear]);
+  const selectedProgramSetting = programSettings.find(s =>
+    s.badgeName === leaderInfo.badgeType &&
+    ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
+     (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
+  const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
+  const siriEnabled = !!selectedProgramSetting?.siriEnabled;
+  const siriOptions = Array.from({ length: selectedProgramSetting?.maxSiri || 5 }, (_, i) => i + 1);
   // Kunci status ikut siri (migrasi 027) — setiap siri ialah pusingan berasingan.
   // Kebenaran diselesaikan dengan sandaran ke Siri 1 — togol admin ialah
   // peringkat PROGRAM, jadi Siri 2 tidak boleh terbuka semata-mata kerana
@@ -111,10 +131,49 @@ export const UserForm: React.FC<UserFormProps> = ({
     currentSchoolSettings?.badgeEditPermissions,
     leaderInfo.badgeType, currentYear, registrationSiri,
   );
-  const allowStudents = selectedBadgePermissions?.students ?? baseAllowStudents;
-  const allowAssistants = selectedBadgePermissions?.assistants ?? baseAllowAssistants;
-  const allowExaminers = selectedBadgePermissions?.examiners ?? baseAllowExaminers;
   const lockedBadges = currentSchoolSettings?.lockedBadges || [];
+  const approvedBadges = currentSchoolSettings?.approvedBadges || [];
+
+  // Sudah dihantar ATAU sudah disahkan. Dahulunya hanya `lockedBadges` (status
+  // 'submitted') disemak di sini, jadi lencana yang DILULUSKAN keluar daripada
+  // senarai itu dan pendaftaran terbuka semula secara senyap — sedangkan
+  // mengedit rekod yang sama kekal disekat di papan pemuka. Tambah dan edit
+  // kini mengikut peraturan yang sama.
+  const kunciSemasa = badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri);
+  const sudahHantar = !!leaderInfo.badgeType
+    && (lockedBadges.includes(kunciSemasa) || approvedBadges.includes(kunciSemasa));
+
+  // Fasa kedua: hanya pegawai yang TIDAK dicaj, dan hanya bila admin membukanya.
+  const izinSelepas = resolveBadgePermissions(
+    currentSchoolSettings?.badgeEditPermissionsSelepas,
+    leaderInfo.badgeType, currentYear, registrationSiri,
+  );
+  const pegawaiDicaj = selectedProgramSetting
+    ? (selectedProgramSetting.feePemimpin != null || selectedProgramSetting.feePenolong != null)
+    : false;
+
+  // Versi per program bagi senarai lungsur: adakah program ini masih menerima
+  // sesuatu selepas dihantar? Menggunakan tetapan program itu sendiri, bukan
+  // yang sedang dipilih.
+  const pegawaiTerbukaSelepas = (badgeName: string) => {
+    const izin = resolveBadgePermissions(
+      currentSchoolSettings?.badgeEditPermissionsSelepas, badgeName, currentYear, registrationSiri,
+    );
+    if (izin?.examiners === true) return true;
+    if (izin?.assistants !== true) return false;
+    const ps = programSettings.find(s =>
+      s.badgeName === badgeName &&
+      ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
+       (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
+    return !(ps && (ps.feePemimpin != null || ps.feePenolong != null));
+  };
+
+  const allowStudents = sudahHantar ? false
+    : (selectedBadgePermissions?.students ?? baseAllowStudents);
+  const allowAssistants = sudahHantar ? (izinSelepas?.assistants === true && !pegawaiDicaj)
+    : (selectedBadgePermissions?.assistants ?? baseAllowAssistants);
+  const allowExaminers = sudahHantar ? (izinSelepas?.examiners === true)
+    : (selectedBadgePermissions?.examiners ?? baseAllowExaminers);
 
   // Peranan yang benar-benar boleh didaftar untuk program ini.
   //
@@ -125,7 +184,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   const peranaanDibenarkan = React.useMemo<PersonRole[]>(() => {
     const senarai: PersonRole[] = [];
     if (allowStudents) senarai.push('PESERTA');
-    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN');
+    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU');
     if (allowExaminers) senarai.push('PENGUJI');
     return senarai;
   }, [allowStudents, allowAssistants, allowExaminers]);
@@ -152,23 +211,6 @@ export const UserForm: React.FC<UserFormProps> = ({
   }, [peranaanDibenarkan, peranaanLalai]);
 
   // FILTER BADGES BY SCOPE based on current school's negeri/daerah
-  const schoolNegeriCode = currentSchoolSettings?.negeriCode;
-  const schoolDaerahCode = currentSchoolSettings?.daerahCode;
-
-  // Tetapan program (saiz baju) untuk badge dipilih + tahun + skop sekolah
-  const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
-  useEffect(() => {
-    let active = true;
-    getProgramSettings(currentYear).then(s => { if (active) setProgramSettings(s); });
-    return () => { active = false; };
-  }, [currentYear]);
-  const selectedProgramSetting = programSettings.find(s =>
-    s.badgeName === leaderInfo.badgeType &&
-    ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
-     (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
-  const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
-  const siriEnabled = !!selectedProgramSetting?.siriEnabled;
-  const siriOptions = Array.from({ length: selectedProgramSetting?.maxSiri || 5 }, (_, i) => i + 1);
   // Reset ke Siri 1 bila tukar ke program yang tak aktifkan siri, atau siri terpilih melebihi had program baru.
   useEffect(() => {
     if (!siriEnabled || registrationSiri > siriOptions.length) setRegistrationSiri(1);
@@ -286,8 +328,10 @@ export const UserForm: React.FC<UserFormProps> = ({
     
     // Kunci ikut program + tahun + SIRI. Sekolah yang sudah hantar Siri 1 masih
     // boleh hantar Siri 2 untuk program yang sama (migrasi 027).
-    const lockKey = badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri);
-    if (lockedBadges.includes(lockKey)) {
+    // Sudah dihantar/disahkan tidak lagi bermakna tertutup rapat: admin boleh
+    // membuka pegawai yang tidak dicaj. Yang menutup pintu ialah ketiadaan
+    // peranan yang dibenarkan, bukan status itu sendiri.
+    if (sudahHantar && peranaanDibenarkan.length === 0) {
         const siriLabel = siriEnabled ? ` (Siri ${registrationSiri})` : '';
         alert(`Maaf, pendaftaran sekolah anda untuk '${leaderInfo.badgeType}'${siriLabel} tahun ${currentYear} telah DITUTUP (Telah Dihantar).`);
         return;
@@ -368,7 +412,7 @@ export const UserForm: React.FC<UserFormProps> = ({
         // Split allPeople by role; tag siri (bila program aktifkan) untuk semua peserta dalam borang ini.
         const withSiri = (list: typeof allPeople) => siriEnabled ? list.map(p => ({ ...p, siri: registrationSiri })) : list;
         const participants = withSiri(allPeople.filter(p => (p as any).role === 'PESERTA' && p.name.trim()));
-        const assistants = withSiri(allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN') && p.name.trim()));
+        const assistants = withSiri(allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN' || (p as any).role === 'PEMBANTU') && p.name.trim()));
         const examiners = withSiri(allPeople.filter(p => (p as any).role === 'PENGUJI' && p.name.trim()));
         // customDate = tarikh tahun kohort dipilih (membolehkan pendaftaran backdated).
         const cohortDate = `${registrationYear}-01-01`;
@@ -573,17 +617,27 @@ export const UserForm: React.FC<UserFormProps> = ({
                                 if (badge.name === 'Anugerah Rambu') return null;
 
                                 const lockKey = badgeStatusKey(badge.name, currentYear, registrationSiri);
-                                const isLocked = lockedBadges.includes(lockKey);
+                                const dihantar = lockedBadges.includes(lockKey) || approvedBadges.includes(lockKey);
+                                // Dihantar tetapi pegawai dibuka: masih boleh dipilih,
+                                // cuma senarai peranannya terhad.
+                                const pegawaiSahaja = dihantar && pegawaiTerbukaSelepas(badge.name);
+                                const isLocked = dihantar && !pegawaiSahaja;
                                 const closed = isBadgeClosed(badge);
                                 return (
                                 <option key={idx} value={badge.name} disabled={closed || isLocked} className={closed || isLocked ? 'text-gray-400' : ''}>
-                                    {badge.name} {isLocked ? '(TELAH DIHANTAR)' : closed && badge.isOpen ? '(TAMAT TEMPOH)' : ''}
+                                    {badge.name} {isLocked ? '(TELAH DIHANTAR)' : pegawaiSahaja ? '(PEGAWAI SAHAJA)' : closed && badge.isOpen ? '(TAMAT TEMPOH)' : ''}
                                 </option>
                             )})}
                         </select>
-                         {leaderInfo.badgeType && lockedBadges.includes(badgeStatusKey(leaderInfo.badgeType, currentYear, registrationSiri)) && (
+                         {sudahHantar && peranaanDibenarkan.length === 0 && (
                              <p className="text-red-500 text-xs mt-1 font-bold">
                                Pendaftaran program ini{siriEnabled ? ` (Siri ${registrationSiri})` : ''} telah anda hantar. Sila hubungi Admin jika perlu ubah.
+                             </p>
+                         )}
+                         {sudahHantar && peranaanDibenarkan.length > 0 && (
+                             <p className="text-amber-600 text-xs mt-1 font-bold">
+                               Pendaftaran program ini{siriEnabled ? ` (Siri ${registrationSiri})` : ''} telah dihantar.
+                               Anda masih boleh menambah {peranaanDibenarkan.join(', ')}. Peserta tidak boleh ditambah lagi.
                              </p>
                          )}
                          {leaderInfo.badgeType && (() => {
@@ -674,6 +728,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     <option value="PESERTA" disabled={!allowStudents}>Peserta</option>
                                     <option value="PEMIMPIN" disabled={!allowAssistants}>Pemimpin</option>
                                     <option value="PENOLONG PEMIMPIN" disabled={!allowAssistants}>Penolong Pemimpin</option>
+                                    <option value="PEMBANTU" disabled={!allowAssistants}>Pembantu</option>
                                     <option value="PENGUJI" disabled={!allowExaminers}>Penguji</option>
                                 </select>
                             </div>
@@ -777,7 +832,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                             </div>
 
                             {/* BAJU (hanya jika program aktifkan; untuk peserta, pemimpin, penolong) */}
-                            {shirtEnabled && ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN'].includes((person as any).role) && (
+                            {shirtEnabled && ['PESERTA', 'PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU'].includes((person as any).role) && (
                               <>
                               <div className="sm:col-span-4 lg:col-span-3">
                                   <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Jenis Baju</label>

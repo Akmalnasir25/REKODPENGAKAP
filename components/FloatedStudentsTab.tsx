@@ -357,6 +357,7 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
                   <option value="PESERTA">Peserta</option>
                   <option value="PEMIMPIN">Pemimpin</option>
                   <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                  <option value="PEMBANTU">Pembantu</option>
                   <option value="PENGUJI">Penguji</option>
                 </select>
               </div>
@@ -470,6 +471,7 @@ export const FloatedStudentsTab: React.FC<FloatedStudentsTabProps> = ({
                       <option value="PESERTA">Peserta</option>
                       <option value="PEMIMPIN">Pemimpin</option>
                       <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
+                      <option value="PEMBANTU">Pembantu</option>
                       <option value="PENGUJI">Penguji</option>
                     </select>
                   </div>

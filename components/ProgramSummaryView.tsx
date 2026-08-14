@@ -234,6 +234,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                 <th className="px-4 py-3 text-center">Peserta</th>
                 <th className="px-4 py-3 text-center">Pemimpin</th>
                 <th className="px-4 py-3 text-center">Penolong</th>
+                <th className="px-4 py-3 text-center">Pembantu</th>
                 <th className="px-4 py-3 text-right">Jumlah</th>
               </tr>
             </thead>
@@ -252,6 +253,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                     <td className="px-4 py-2 text-center">{p.countPeserta}</td>
                     <td className="px-4 py-2 text-center">{p.countPemimpin}</td>
                     <td className="px-4 py-2 text-center">{p.countPenolong}</td>
+                    <td className="px-4 py-2 text-center">{p.countPembantu}</td>
                     <td className="px-4 py-2 text-right font-semibold text-emerald-700">{formatRM(p.total)}</td>
                   </tr>
                 ));
@@ -259,7 +261,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
             </tbody>
             <tfoot className="bg-gray-800 text-white font-bold">
               <tr>
-                <td className="px-4 py-3 uppercase text-xs" colSpan={5}>Jumlah Kutipan Dijangka</td>
+                <td className="px-4 py-3 uppercase text-xs" colSpan={6}>Jumlah Kutipan Dijangka</td>
                 <td className="px-4 py-3 text-right text-yellow-400">{formatRM(grandTotalAll)}</td>
               </tr>
             </tfoot>

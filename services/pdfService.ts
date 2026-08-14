@@ -227,6 +227,7 @@ export const generateSummaryReport = (
   const totalParticipants = currentYearData.filter(d => (d.role || 'PESERTA').toUpperCase() === 'PESERTA').length;
   const totalLeaders = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PEMIMPIN').length;
   const totalAssistants = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PENOLONG PEMIMPIN').length;
+  const totalPembantu = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PEMBANTU').length;
   const totalExaminers = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PENGUJI').length;
 
   // Badge breakdown
@@ -237,14 +238,14 @@ export const generateSummaryReport = (
   });
 
   // School breakdown — pecahan lengkap setiap sekolah
-  type SchoolStats = { name: string; code: string; peserta: number; pemimpin: number; penolong: number; penguji: number; total: number; lelaki: number; perempuan: number };
+  type SchoolStats = { name: string; code: string; peserta: number; pemimpin: number; penolong: number; pembantu: number; penguji: number; total: number; lelaki: number; perempuan: number };
   const schoolStatsMap: Record<string, SchoolStats> = {};
   currentYearData.forEach(d => {
     const school = d.school || 'Tidak Dinyatakan';
     const code = d.schoolCode || '';
     const key = school + '||' + code;
     if (!schoolStatsMap[key]) {
-      schoolStatsMap[key] = { name: school, code, peserta: 0, pemimpin: 0, penolong: 0, penguji: 0, total: 0, lelaki: 0, perempuan: 0 };
+      schoolStatsMap[key] = { name: school, code, peserta: 0, pemimpin: 0, penolong: 0, pembantu: 0, penguji: 0, total: 0, lelaki: 0, perempuan: 0 };
     }
     const s = schoolStatsMap[key];
     s.total++;
@@ -252,10 +253,11 @@ export const generateSummaryReport = (
     const gender = (d.gender || '').toUpperCase();
     if (role === 'PENGUJI') s.penguji++;
     else if (role === 'PEMIMPIN') s.pemimpin++;
-    // PEMBANTU dikumpul bersama penolong dalam laporan ringkas ini; jadual
-    // PDF mempunyai lajur tetap. Yang PENTING ialah ia tidak jatuh ke dalam
-    // `else` di bawah, iaitu baldi PESERTA.
-    else if (role.includes('PENOLONG') || role === 'PEMBANTU') s.penolong++;
+    else if (role.includes('PENOLONG')) s.penolong++;
+    // Berasingan, sama seperti papan pemuka. `else` di bawah ialah baldi
+    // PESERTA — mana-mana peranan yang tidak disenaraikan di sini jatuh ke
+    // sana dan dikira sebagai peserta.
+    else if (role === 'PEMBANTU') s.pembantu++;
     else {
       s.peserta++;
       if (gender.startsWith('L') || gender.startsWith('M')) s.lelaki++;
@@ -298,6 +300,7 @@ export const generateSummaryReport = (
       ['Jumlah Peserta', totalParticipants.toString()],
       ['Jumlah Pemimpin', totalLeaders.toString()],
       ['Jumlah Penolong Pemimpin', totalAssistants.toString()],
+      ['Jumlah Pembantu', totalPembantu.toString()],
       ['Jumlah Penguji', totalExaminers.toString()],
       ['JUMLAH KESELURUHAN', currentYearData.length.toString()],
     ],
@@ -352,15 +355,16 @@ export const generateSummaryReport = (
       peserta: acc.peserta + s.peserta,
       pemimpin: acc.pemimpin + s.pemimpin,
       penolong: acc.penolong + s.penolong,
+      pembantu: acc.pembantu + s.pembantu,
       penguji: acc.penguji + s.penguji,
       lelaki: acc.lelaki + s.lelaki,
       perempuan: acc.perempuan + s.perempuan,
       total: acc.total + s.total,
-    }), { peserta: 0, pemimpin: 0, penolong: 0, penguji: 0, lelaki: 0, perempuan: 0, total: 0 });
+    }), { peserta: 0, pemimpin: 0, penolong: 0, pembantu: 0, penguji: 0, lelaki: 0, perempuan: 0, total: 0 });
 
     autoTable(doc, {
       startY: yPos,
-      head: [['No.', 'Sekolah', 'Kod', 'Peserta (L)', 'Peserta (P)', 'Pemimpin', 'Penolong', 'Penguji', 'Jumlah']],
+      head: [['No.', 'Sekolah', 'Kod', 'Peserta (L)', 'Peserta (P)', 'Pemimpin', 'Penolong', 'Pembantu', 'Penguji', 'Jumlah']],
       body: [
         ...schoolStatsList.map((s, i) => [
           (i + 1).toString(),
@@ -370,6 +374,7 @@ export const generateSummaryReport = (
           s.perempuan.toString(),
           s.pemimpin.toString(),
           s.penolong.toString(),
+          s.pembantu.toString(),
           s.penguji.toString(),
           s.total.toString(),
         ]),
@@ -379,6 +384,7 @@ export const generateSummaryReport = (
           { content: grandTotal.perempuan.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.pemimpin.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.penolong.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
+          { content: grandTotal.pembantu.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.penguji.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.total.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
         ],
@@ -394,7 +400,9 @@ export const generateSummaryReport = (
         5: { halign: 'center' },
         6: { halign: 'center' },
         7: { halign: 'center' },
-        8: { halign: 'center', fontStyle: 'bold' },
+        8: { halign: 'center' },
+        // Lajur Jumlah bergerak dari 8 ke 9 apabila Pembantu ditambah.
+        9: { halign: 'center', fontStyle: 'bold' },
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
     });

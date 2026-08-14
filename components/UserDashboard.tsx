@@ -12,7 +12,7 @@ const getSubmissionYear = (value?: string | null) => {
   return Number.isFinite(year) ? year : null;
 };
 import { updateParticipantId, lockSchoolBadge, submitRegistration, bulkSubmitRegistration, changePassword, updateUserProfile, validatePassword, bulkDeleteSubmissions, updateParticipantFields, getProgramSettings, ProgramSetting, setParticipantsSiri, getBakiTempat, BakiTempat, getProgramSiriSettings, ProgramSiriSetting } from '../services/supabaseApi';
-import { badgeStatusKey, resolveBadgePermissions, computeRoleStats } from '../utils/dataProcessing';
+import { badgeStatusKey, resolveBadgePermissions, computeRoleStats, gabungPegawaiSiri } from '../utils/dataProcessing';
 import { PaymentScreen } from './PaymentScreen';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { SearchFilter } from './ui/SearchFilter';
@@ -293,7 +293,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Satu sumber kebenaran mengelakkan jubin memaparkan medan yang tidak
   // wujud, dan mengelakkan peranan seterusnya jatuh senyap ke dalam kiraan
   // peserta.
-  const myStats = useMemo(() => computeRoleStats(myData), [myData]);
+  const myStats = useMemo(() => computeRoleStats(gabungPegawaiSiri(myData)), [myData]);
 
   // Available badges for filter dropdown based on myData
   const availableBadges = useMemo(() => {
@@ -305,6 +305,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     let data = myData;
     if (selectedBadgeFilter) {
         data = data.filter(item => item.badge === selectedBadgeFilter);
+    } else {
+        // Tiada program dipilih: pegawai yang sama merentas beberapa program
+        // dalam satu siri digabungkan menjadi satu baris. Penapis program
+        // bermakna "tunjukkan program ini", jadi dalam konteks itu setiap
+        // baris ialah pendaftaran programnya sendiri dan tidak digabungkan.
+        data = gabungPegawaiSiri(data);
     }
     if (selectedSiriFilter !== '') {
         data = data.filter(item => (item.siri || 1) === selectedSiriFilter);
@@ -2090,7 +2096,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                     return (
                                     <tr key={i} className={`hover:bg-slate-50 transition ${isLocked ? 'bg-slate-50/50' : ''} ${selectedForDelete.has(i) ? 'bg-red-50' : ''}`}>
                                         <td className="px-3 py-3">
-                                          <input type="checkbox" checked={selectedForDelete.has(i)} onChange={() => toggleSelectForDelete(i)} disabled={isLocked} className="rounded" />
+                                          <input type="checkbox" checked={selectedForDelete.has(i)} onChange={() => toggleSelectForDelete(i)} disabled={isLocked || !!item.digabung} className="rounded" />
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="font-bold text-slate-900 uppercase text-xs sm:text-sm">{item.student}</div>
@@ -2099,7 +2105,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         <td className="px-4 py-3">
                                             <div className="font-mono text-xs text-slate-700">{item.icNumber || '-'}</div>
                                             <div className="flex items-center gap-1 mt-1">
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.badge.includes('Emas') ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-200 text-gray-700'}`}>{item.badge}</span>
+                                                {(item.programGabung && item.programGabung.length > 1
+                                                  ? item.programGabung
+                                                  : [item.badge]
+                                                ).map(nm => (
+                                                  <span key={nm} className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${nm.includes('Emas') ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-200 text-gray-700'}`}>{nm}</span>
+                                                ))}
                                                 {isLocked && <Lock size={10} className="text-gray-400"/>}
                                                 {isMigrated && <span className="text-[9px] bg-blue-50 text-blue-600 px-1 border border-blue-100 rounded">MIGRASI</span>}
                                             </div>
@@ -2129,7 +2140,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                              {canModifyRecord(item) && !isMigrated && (
+                                              {item.digabung && (
+                                                <span className="text-[9px] text-slate-400 italic mr-1" title="Baris ini mewakili beberapa pendaftaran. Tapis mengikut Program untuk menyunting salah satu.">
+                                                  {item.programGabung?.length} program
+                                                </span>
+                                              )}
+                                              {canModifyRecord(item) && !isMigrated && !item.digabung && (
                                                 <>
                                                   <button
                                                     onClick={() => { if (item.personId) setFloatModalStudent({ personId: item.personId, studentName: item.student }); }}
@@ -2141,7 +2157,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                                   <button onClick={() => handleEditRow(item, i)} className="p-1.5 rounded text-blue-600 hover:bg-blue-50" title="Edit"><Edit2 size={14} /></button>
                                                 </>
                                               )}
-                                              <button onClick={() => onDelete(item)} disabled={!canModifyRecord(item) || isMigrated} className={`p-1.5 rounded ${canModifyRecord(item) && !isMigrated ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}><Trash2 size={14} /></button>
+                                              <button onClick={() => onDelete(item)} disabled={!canModifyRecord(item) || isMigrated || !!item.digabung} className={`p-1.5 rounded ${canModifyRecord(item) && !isMigrated && !item.digabung ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-gray-200 cursor-not-allowed'}`}><Trash2 size={14} /></button>
                                             </div>
                                         </td>
                                     </tr>

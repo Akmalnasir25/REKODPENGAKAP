@@ -162,12 +162,93 @@ export function deduplicateRecords(data: SubmissionData[], schools: School[], sh
     if (year === null) return false;
     const cleanName = String(item.student).trim().toUpperCase();
     const cleanIC = item.icNumber ? String(item.icNumber).trim() : '';
+    // Siri WAJIB ada dalam kunci. Tanpanya, orang yang sama didaftarkan
+    // dalam Siri 1 dan Siri 2 bagi program yang sama runtuh menjadi satu
+    // baris, dan salah satu sirinya lenyap daripada papan pemuka tanpa
+    // amaran — pemimpin yang mengiringi kedua-dua pusingan ialah kes biasa.
+    const siri = item.siri || 1;
     const uniqueKey = cleanIC && cleanIC.length > 4
-      ? `${cleanIC}_${item.badge}_${year}`
-      : `${cleanName}_${item.school}_${item.badge}_${year}`;
+      ? `${cleanIC}_${item.badge}_${year}_${siri}`
+      : `${cleanName}_${item.school}_${item.badge}_${year}_${siri}`;
 
     if (uniqueKeys.has(uniqueKey)) return false;
     uniqueKeys.add(uniqueKey);
     return true;
   });
+}
+
+/**
+ * Peranan yang dikira sebagai PEGAWAI bagi tujuan penggabungan.
+ * Peserta sengaja tiada — lihat komen dalam gabungPegawaiSiri.
+ */
+const adalahPegawai = (role?: string) => {
+  const r = (role || 'PESERTA').toUpperCase();
+  return r === 'PEMIMPIN' || r.includes('PENOLONG') || r === 'PEMBANTU' || r === 'PENGUJI';
+};
+
+/**
+ * Identiti orang. Peraturan yang SAMA seperti deduplicateRecords — nombor KP
+ * bila ia cukup panjang untuk dipercayai, jika tidak nama + sekolah.
+ * Dua definisi "orang yang sama" akan menyimpang, jadi hanya ada satu.
+ */
+const kunciOrang = (d: SubmissionData) => {
+  const ic = d.icNumber ? String(d.icNumber).trim() : '';
+  return ic.length > 4
+    ? ic
+    : `${String(d.student || '').trim().toUpperCase()}_${d.school}`;
+};
+
+/**
+ * Gabungkan pegawai yang sama merentas program dalam SIRI yang sama.
+ *
+ * Satu siri lazimnya mengandungi beberapa program, dan sekolah mendaftarkan
+ * pemimpin serta penguji yang sama untuk setiap satu. Tanpa penggabungan ini
+ * nama yang sama muncul tiga kali dalam senarai dan dikira tiga kali dalam
+ * statistik.
+ *
+ * PESERTA TIDAK DIGABUNGKAN. Seorang murid yang muncul dalam dua program
+ * dalam satu siri ialah DUA pendaftaran sebenar — dua tempat, dua yuran.
+ * Menyembunyikannya menyembunyikan sama ada kesilapan pendaftaran atau kos
+ * sebenar. Pegawai berbeza: seorang guru yang mengiringi tiga program tetap
+ * seorang guru.
+ *
+ * INI PAPARAN SAHAJA. Bil dan kiraan tempat kekal per program — seorang
+ * pemimpin yang didaftarkan untuk tiga program masih dicaj tiga kali. Jubin
+ * statistik dan bil akan berbeza dengan sengaja.
+ *
+ * Baris gabungan membawa `programGabung` berisi setiap nama program, dan
+ * `digabung` supaya paparan boleh melumpuhkan butang Sunting dan Padam:
+ * baris itu mewakili tiga pendaftaran dan butang hanya boleh menyentuh satu.
+ */
+export function gabungPegawaiSiri(data: SubmissionData[]): SubmissionData[] {
+  const pertama = new Map<string, SubmissionData>();
+  const program = new Map<string, string[]>();
+  const keluar: SubmissionData[] = [];
+
+  for (const d of data) {
+    if (!adalahPegawai(d.role)) { keluar.push(d); continue; }
+
+    const tahun = safeGetYear(d.date);
+    if (tahun === null) { keluar.push(d); continue; }
+
+    // Program TIDAK dalam kunci — itulah dimensi yang digabungkan.
+    // Siri ada di dalamnya: Siri 1 dan Siri 2 ialah pusingan berasingan.
+    const kunci = `${kunciOrang(d)}_${tahun}_${d.siri || 1}_${(d.role || '').toUpperCase()}`;
+    const sedia = pertama.get(kunci);
+
+    if (!sedia) {
+      const salinan: SubmissionData = { ...d, programGabung: [d.badge] };
+      pertama.set(kunci, salinan);
+      program.set(kunci, [d.badge]);
+      keluar.push(salinan);
+      continue;
+    }
+
+    const senarai = program.get(kunci)!;
+    if (!senarai.includes(d.badge)) senarai.push(d.badge);
+    sedia.programGabung = senarai;
+    sedia.digabung = senarai.length > 1;
+  }
+
+  return keluar;
 }

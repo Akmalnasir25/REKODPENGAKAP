@@ -116,7 +116,9 @@ export const generateParticipantReport = (
         item.race || '',
         schoolName,
         schoolCode || '',
-        item.badge || '',
+        (item.programGabung && item.programGabung.length > 1)
+          ? item.programGabung.join(', ')
+          : (item.badge || ''),
         item.role || 'PESERTA',
         item.category || '-',
         item.id || '-',
@@ -503,7 +505,9 @@ const appendParticipantTable = (
         item.race || '',
         schoolName,
         schoolCode || '',
-        item.badge || '',
+        (item.programGabung && item.programGabung.length > 1)
+          ? item.programGabung.join(', ')
+          : (item.badge || ''),
         item.role || 'PESERTA',
         item.category || '-',
         item.id || '-',

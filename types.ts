@@ -48,8 +48,14 @@ export interface SubmissionData {
   id: string; 
   personId?: string;
   icNumber?: string;
-  studentPhone?: string; 
+  studentPhone?: string;
   role?: string;
+  /** Diisi oleh gabungPegawaiSiri: setiap program yang pegawai ini
+   *  didaftarkan untuknya dalam siri yang sama. Paparan sahaja. */
+  programGabung?: string[];
+  /** Benar bila baris ini mewakili LEBIH daripada satu pendaftaran. Butang
+   *  Sunting dan Padam mesti dilumpuhkan — ia hanya boleh menyentuh satu. */
+  digabung?: boolean;
   groupNumber?: string;
   principalName?: string;
   principalPhone?: string;

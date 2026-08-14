@@ -10,7 +10,7 @@ import { BulkWhatsApp } from './ui/BulkWhatsApp';
 import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
 import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 import { FloatStudentModal } from './FloatStudentModal';
-import { safeGetYear, deduplicateRecords, computeRoleStats, parseBadgeStatusKey } from '../utils/dataProcessing';
+import { safeGetYear, deduplicateRecords, computeRoleStats, parseBadgeStatusKey, gabungPegawaiSiri } from '../utils/dataProcessing';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
@@ -179,7 +179,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     // Apply badge filter to statistics if a badge is selected
     const dataToProcess = selectedBadgeFilter 
         ? yearData.filter(d => d.badge === selectedBadgeFilter)
-        : yearData;
+        : gabungPegawaiSiri(yearData);
 
     dataToProcess.forEach(item => {
       const schoolName = item.school || "Tidak Diketahui";
@@ -264,7 +264,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     // Apply badge filter
     const dataToProcess = selectedBadgeFilter 
         ? yearData.filter(d => d.badge === selectedBadgeFilter)
-        : yearData;
+        : gabungPegawaiSiri(yearData);
 
     dataToProcess.forEach(item => {
         const role = (item.role || 'PESERTA').toUpperCase();
@@ -289,7 +289,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     const details: Array<{ name: string; school: string; makanan: string; badge: string }> = [];
     const dataToProcess = selectedBadgeFilter 
         ? yearData.filter(d => d.badge === selectedBadgeFilter)
-        : yearData;
+        : gabungPegawaiSiri(yearData);
 
     dataToProcess.forEach(item => {
         const role = (item.role || 'PESERTA').toUpperCase();
@@ -322,7 +322,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     const details: Array<{ name: string; school: string; penyakit: string; badge: string }> = [];
     const dataToProcess = selectedBadgeFilter 
         ? yearData.filter(d => d.badge === selectedBadgeFilter)
-        : yearData;
+        : gabungPegawaiSiri(yearData);
 
     dataToProcess.forEach(item => {
         const role = (item.role || 'PESERTA').toUpperCase();
@@ -357,6 +357,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
     // Filter by Badge
     if (selectedBadgeFilter) {
         result = result.filter(item => item.badge === selectedBadgeFilter);
+    } else {
+        // Tiada program dipilih: pegawai yang sama merentas beberapa
+        // program dalam satu siri menjadi satu baris. Penapis program
+        // bermakna "tunjukkan program ini", jadi dalam konteks itu
+        // setiap baris ialah pendaftaran programnya sendiri.
+        result = gabungPegawaiSiri(result);
     }
 
     // Filter by Search Query
@@ -534,7 +540,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                         <td className="border border-black px-2 py-1 uppercase">{item.student}</td>
                         <td className="border border-black px-2 py-1 text-center">{item.icNumber}</td>
                         <td className="border border-black px-2 py-1 uppercase">{item.school} <span className="text-[9px]">({item.schoolCode})</span></td>
-                        <td className="border border-black px-2 py-1 text-center uppercase">{item.role || 'PESERTA'} {item.badge ? `(${item.badge})` : ''}</td>
+                        <td className="border border-black px-2 py-1 text-center uppercase">{item.role || 'PESERTA'} {(item.programGabung && item.programGabung.length > 1) ? `(${item.programGabung.join(', ')})` : item.badge ? `(${item.badge})` : ''}</td>
                         <td className="border border-black px-2 py-1 text-center">{item.category || '-'}</td>
                         <td className="border border-black px-2 py-1 text-center">{item.id || '-'}</td>
                     </tr>
@@ -1045,7 +1051,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-2">
                                             {getRoleBadge(item.role)}
-                                            <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded border">{item.badge}</span>
+                                            {(item.programGabung && item.programGabung.length > 1 ? item.programGabung : [item.badge]).map(nm => (
+                                              <span key={nm} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded border mr-1">{nm}</span>
+                                            ))}
                                         </div>
                                         {item.category && <div className="text-[10px] font-bold text-purple-700 mt-1">Kategori: {item.category}</div>}
                                         {item.id && <div className="text-[10px] font-mono font-bold text-blue-800 mt-1">ID: {item.id}</div>}
@@ -1072,6 +1080,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                                             {readOnlyBadges?.has(item.badge) ? (
                                                 <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-2 py-1 rounded" title="Program peringkat negeri - hanya boleh dipantau">
                                                     NEGERI
+                                                </span>
+                                            ) : item.digabung ? (
+                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded"
+                                                      title="Baris ini mewakili beberapa pendaftaran. Tapis mengikut Program untuk memadam salah satu.">
+                                                    {item.programGabung?.length} PROGRAM
                                                 </span>
                                             ) : (
                                                 <button 

@@ -3,7 +3,7 @@ import { Lock, School, Medal, Users, Plus, Trash2, Save, CheckCircle, ArrowLeft,
 import { LeaderInfo, Participant, BadgeType, UserSession, Badge, School as SchoolType, SubmissionData } from '../types';
 import { APP_VERSION, LOGO_URL, LOCAL_STORAGE_KEYS } from '../constants';
 import { LoadingSpinner } from './ui/LoadingSpinner';
-import { submitRegistration, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
+import { submitRegistration, getProgramSettings, ProgramSetting, getProgramSiriSettings, ProgramSiriSetting } from '../services/supabaseApi';
 import { useResolvedLogo } from '../hooks/useResolvedLogo';
 import { PrivacyNotice } from './ui/PrivacyNotice';
 import { badgeStatusKey, resolveBadgePermissions } from '../utils/dataProcessing';
@@ -123,6 +123,20 @@ export const UserForm: React.FC<UserFormProps> = ({
   const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
   const siriEnabled = !!selectedProgramSetting?.siriEnabled;
   const siriOptions = Array.from({ length: selectedProgramSetting?.maxSiri || 5 }, (_, i) => i + 1);
+
+  // Siri yang ditutup admin. Dipaparkan tetapi tidak boleh dipilih — senarai
+  // yang tiba-tiba kehilangan Siri 1 menimbulkan pertanyaan kepada admin.
+  const [siriSettings, setSiriSettings] = useState<ProgramSiriSetting[]>([]);
+  useEffect(() => { getProgramSiriSettings().then(setSiriSettings).catch(() => {}); }, []);
+  const siriDitutup = React.useMemo(() => {
+    const set = new Set<number>();
+    if (!selectedProgramSetting) return set;
+    siriSettings.forEach(s => {
+      if (s.programSettingId === selectedProgramSetting.id && s.isClosed) set.add(s.siri);
+    });
+    return set;
+  }, [siriSettings, selectedProgramSetting]);
+  const siriTerbuka = siriOptions.filter(s => !siriDitutup.has(s));
   // Kunci status ikut siri (migrasi 027) — setiap siri ialah pusingan berasingan.
   // Kebenaran diselesaikan dengan sandaran ke Siri 1 — togol admin ialah
   // peringkat PROGRAM, jadi Siri 2 tidak boleh terbuka semata-mata kerana
@@ -212,9 +226,15 @@ export const UserForm: React.FC<UserFormProps> = ({
 
   // FILTER BADGES BY SCOPE based on current school's negeri/daerah
   // Reset ke Siri 1 bila tukar ke program yang tak aktifkan siri, atau siri terpilih melebihi had program baru.
+  // Lalai mesti siri TERBUKA pertama. Versi lama jatuh kembali kepada Siri 1
+  // tanpa syarat — kalau Siri 1 ditutup, borang memilih siri tertutup sebagai
+  // lalai, iaitu tepat kesilapan yang penutupan ini cuba hapuskan.
   useEffect(() => {
-    if (!siriEnabled || registrationSiri > siriOptions.length) setRegistrationSiri(1);
-  }, [siriEnabled, siriOptions.length]);
+    if (!siriEnabled) { setRegistrationSiri(1); return; }
+    if (registrationSiri > siriOptions.length || siriDitutup.has(registrationSiri)) {
+      setRegistrationSiri(siriTerbuka[0] ?? 1);
+    }
+  }, [siriEnabled, siriOptions.length, siriDitutup, registrationSiri]);
   const filteredBadges = (badgeTypes || []).filter((badge: Badge) => {
     const scope = badge.scope || 'daerah';
     if (scope === 'daerah') {
@@ -679,10 +699,16 @@ export const UserForm: React.FC<UserFormProps> = ({
                             onChange={e => setRegistrationSiri(Number(e.target.value))}
                         >
                             {siriOptions.map(s => (
-                                <option key={s} value={s}>Siri {s}</option>
+                                <option key={s} value={s} disabled={siriDitutup.has(s)}>
+                                    Siri {s}{siriDitutup.has(s) ? ' (DITUTUP)' : ''}
+                                </option>
                             ))}
                         </select>
-                        <p className="text-gray-400 text-xs mt-1">Program ini dijalankan berperingkat. Pilih siri yang berkenaan untuk semua peserta dalam borang ini.</p>
+                        {siriTerbuka.length === 0 ? (
+                          <p className="text-red-600 text-xs mt-1 font-bold">Semua siri bagi program ini ditutup. Pendaftaran belum dibuka.</p>
+                        ) : (
+                          <p className="text-gray-400 text-xs mt-1">Program ini dijalankan berperingkat. Pilih siri yang berkenaan untuk semua peserta dalam borang ini.</p>
+                        )}
                     </div>
                     )}
                 </div>

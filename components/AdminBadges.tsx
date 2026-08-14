@@ -860,6 +860,11 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                           mengikut tetapan program di atas. Menukarnya di sini mengikat siri itu
                           sahaja, dan siri itu berhenti mengikut tetapan program selepas ini.
                           Nyahtanda Perlu Bayar bermakna sekolah menghantar terus tanpa bil.
+                          <br />
+                          <strong>Tutup Siri</strong> mengeluarkan siri itu daripada senarai pilihan semasa
+                          pendaftaran, Import Naik dan Set Siri — ia dipaparkan kelabu berlabel DITUTUP.
+                          Program itu sendiri kekal terbuka, dan rekod yang sudah ada dalam siri tersebut
+                          tidak hilang.
                         </p>
 
                         <table className="w-full text-[11px]">
@@ -873,7 +878,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                               <th className="font-bold uppercase text-[9px] pb-1">Tutup Bayaran</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Perlu Bayar</th>
                               <th className="font-bold uppercase text-[9px] pb-1">Buka Hantar</th>
-                              <th className="font-bold uppercase text-[9px] pb-1">Tutup</th>
+                              <th className="font-bold uppercase text-[9px] pb-1">Tutup Siri</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -928,7 +933,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                                       type="checkbox"
                                       checked={h.ditutup}
                                       onChange={(e) => tulisHad(siri, 'ditutup', e.target.checked)}
-                                      title="Tutup siri ini secara manual walaupun belum penuh"
+                                      title="Tutup siri ini: ia tidak lagi boleh dipilih semasa pendaftaran, import atau Set Siri, dan tempat berhenti dijual. Program TIDAK ditutup — hanya siri ini. Rekod sedia ada dalam siri ini kekal."
                                       className="w-4 h-4 accent-purple-600"
                                     />
                                   </td>

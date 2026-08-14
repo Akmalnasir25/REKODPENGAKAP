@@ -123,6 +123,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [siriSettings, setSiriSettings] = useState<ProgramSiriSetting[]>([]);
   useEffect(() => { getProgramSiriSettings().then(setSiriSettings); }, []);
 
+  // Siri yang ditutup admin bagi satu program. Menutup siri mengeluarkannya
+  // daripada PILIHAN BAHARU sahaja — rekod sedia ada dalam siri itu kekal
+  // kelihatan, dikira, dan boleh dihantar.
+  const siriDitutupBagi = useCallback((programSettingId?: string) => {
+    const set = new Set<number>();
+    if (!programSettingId) return set;
+    siriSettings.forEach(s => { if (s.programSettingId === programSettingId && s.isClosed) set.add(s.siri); });
+    return set;
+  }, [siriSettings]);
+
+  // Versi ikut NAMA program, untuk tapak yang hanya mempunyai nama.
+  const siriDitutupNama = useCallback((badgeName: string) => {
+    const ps = programSettings.find(p => p.badgeName === badgeName && p.year === selectedYear);
+    return siriDitutupBagi(ps?.id);
+  }, [programSettings, selectedYear, siriDitutupBagi]);
+
   // Cerminan siri_payment_required() dalam migrasi 049. Siri mengatasi
   // program; program mengatasi lalai palsu.
   const bayaranDiwajibkan = useCallback((ps: ProgramSetting, siri: number) => {
@@ -939,9 +955,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       alert('Tiada rekod yang boleh diubah. Rekod yang dipilih terkunci, sudah disahkan, atau peranannya telah ditutup oleh admin.');
       return;
     }
-    const eligible = selItems.filter(d => siriEnabledBadgeNames.has(d.badge));
+    const layak = selItems.filter(d => siriEnabledBadgeNames.has(d.badge));
+    // Siri yang ditutup tidak boleh menjadi sasaran, walaupun program itu
+    // mengaktifkan siri. Senarai lungsur hanya melumpuhkan siri yang ditutup
+    // bagi SEMUA program; penapisan sebenar per rekod berlaku di sini.
+    const eligible = layak.filter(d => !siriDitutupNama(d.badge).has(siri));
+    const ditutup = layak.length - eligible.length;
     const skipped = dipilih.length - eligible.length;
-    if (eligible.length === 0) { alert('Tiada peserta dipilih yang program-nya aktifkan Siri.'); return; }
+    if (eligible.length === 0) {
+      alert(ditutup > 0
+        ? `Siri ${siri} ditutup bagi program peserta yang dipilih.`
+        : 'Tiada peserta dipilih yang program-nya aktifkan Siri.');
+      return;
+    }
     const personIds = eligible.map(d => d.participantId).filter((id): id is string => !!id);
     if (!confirm(`Tandakan ${personIds.length} peserta sebagai Siri ${siri}?${skipped > 0 ? `\n(${skipped} peserta lain diabaikan — program tidak aktifkan Siri, atau rekod terkunci/peranan ditutup.)` : ''}`)) return;
     setIsSettingSiri(true);
@@ -1968,7 +1994,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 <div className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1">
                                   <Layers size={12} className="text-purple-600" />
                                   <select value={bulkSiriTarget} onChange={(e) => setBulkSiriTarget(Number(e.target.value))} className="bg-transparent text-xs font-bold text-purple-700 outline-none">
-                                    {Array.from({ length: maxSiriAcrossEnabled }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
+                                    {Array.from({ length: maxSiriAcrossEnabled }, (_, i) => i + 1).map(s => {
+                                      const nama = Array.from(siriEnabledBadgeNames);
+                                      const tutupSemua = nama.length > 0 && nama.every(n => siriDitutupNama(n).has(s));
+                                      return <option key={s} value={s} disabled={tutupSemua}>Siri {s}{tutupSemua ? ' (DITUTUP)' : ''}</option>;
+                                    })}
                                   </select>
                                   <button onClick={() => handleBulkSetSiri(bulkSiriTarget)} disabled={isSettingSiri} className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-purple-700 disabled:opacity-50">
                                     {isSettingSiri ? <LoadingSpinner size="sm" color="border-white" /> : `Set Siri ${bulkSiriTarget}`}
@@ -2336,7 +2366,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     <div>
                         <div className="font-bold text-gray-700 text-xs uppercase mb-1">Siri Sasaran</div>
                         <select className="bg-white border rounded px-2 py-1.5 text-gray-700 w-full text-xs font-bold" value={importTargetSiri} onChange={(e) => setImportTargetSiri(Number(e.target.value))}>
-                            {Array.from({ length: importTargetSiriSetting?.maxSiri || 5 }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
+                            {Array.from({ length: importTargetSiriSetting?.maxSiri || 5 }, (_, i) => i + 1).map(s => {
+                              const tutup = siriDitutupBagi(importTargetSiriSetting?.id).has(s);
+                              return <option key={s} value={s} disabled={tutup}>Siri {s}{tutup ? ' (DITUTUP)' : ''}</option>;
+                            })}
                         </select>
                     </div>
                     )}

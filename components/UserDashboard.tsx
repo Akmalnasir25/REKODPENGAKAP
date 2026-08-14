@@ -765,7 +765,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const peranan = (d: any) => (d.role || 'PESERTA').toUpperCase();
       if (!dalam.some(d => ['PESERTA', 'PENERIMA RAMBU'].includes(peranan(d)))) return;
 
-      const adaL = dalam.filter(d => peranan(d) === 'PEMIMPIN').length;
+      // PEMIMPIN dan PENOLONG PEMIMPIN kedua-duanya memenuhi syarat (migrasi
+      // 053). PEMBANTU tidak. Mesti sepadan dengan semak_syarat_pegawai —
+      // dua peraturan yang menyimpang bermakna paparan membenarkan apa yang
+      // pangkalan data kemudian menolak.
+      const adaL = dalam.filter(d => ['PEMIMPIN', 'PENOLONG PEMIMPIN'].includes(peranan(d))).length;
       const adaU = dalam.filter(d => peranan(d) === 'PENGUJI').length;
       const perlu: string[] = [];
       if (adaL < minL) perlu.push(`${minL - adaL} Pemimpin`);
@@ -1038,7 +1042,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           ...kurangPegawai,
           '',
           'Sila daftarkan pegawai yang kurang sebelum menghantar.',
-          'Nota: Penolong Pemimpin dan Pembantu tidak dikira sebagai Pemimpin.',
+          'Nota: Pemimpin dan Penolong Pemimpin kedua-duanya dikira; Pembantu tidak.',
         ].join('\n'));
         return;
       }

@@ -282,7 +282,7 @@ serve(async (req) => {
         if ((syarat.kurang_penguji ?? 0) > 0) kurang.push(`${syarat.kurang_penguji} Penguji`);
         dilangkau.push({
           program: nama,
-          sebab: `kurang ${kurang.join(' dan ')} — Penolong Pemimpin dan Pembantu tidak dikira sebagai Pemimpin`,
+          sebab: `kurang ${kurang.join(' dan ')} — Pemimpin dan Penolong Pemimpin kedua-duanya dikira; Pembantu tidak`,
         });
         continue;
       }

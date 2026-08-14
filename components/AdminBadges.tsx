@@ -697,9 +697,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                   </div>
                   {(Number(formMinPemimpin) > 0 || Number(formMinPenguji) > 0) && (
                     <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">
-                      Hanya peranan <strong>Pemimpin</strong> dikira. Penolong Pemimpin dan
-                      Pembantu <strong>tidak</strong> memenuhi syarat ini — sekolah yang hanya
-                      mendaftarkan penolong akan tersekat sehingga mereka menukar peranan itu.
+                      <strong>Pemimpin</strong> dan <strong>Penolong Pemimpin</strong>
+                      kedua-duanya memenuhi syarat pemimpin. <strong>Pembantu tidak</strong> —
+                      ia peranan sokongan, bukan pengganti ketua rombongan.
                     </p>
                   )}
                 </div>

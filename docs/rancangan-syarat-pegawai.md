@@ -61,8 +61,17 @@ Bukan "syarat tidak dipenuhi", tetapi "Keris Perak Siri 2: tiada Penguji didafta
 
 ## 4. Keputusan lanjut
 
-**K5 — Hanya PEMIMPIN memenuhi syarat pemimpin.**
-Penolong Pemimpin dan Pembantu tidak. Syaratnya bermaksud seorang ketua, dan menerima Penolong menjadikannya bermaksud "seorang dewasa". Sekolah yang hanya mendaftarkan Penolong akan tersekat, dan mesej ralat mesti menyatakan sebabnya dengan cukup jelas untuk mereka membetulkan peranan itu sendiri.
+**K5 — PEMIMPIN atau PENOLONG PEMIMPIN memenuhi syarat pemimpin.** *(diselakkan — lihat K9)*
+
+~~Hanya PEMIMPIN. Penolong Pemimpin dan Pembantu tidak.~~
+
+**K9 — Penolong Pemimpin dikira sebagai memenuhi syarat pemimpin (migrasi 053).**
+
+Keputusan asal K5 menolak Penolong Pemimpin atas alasan syarat itu bermaksud seorang *ketua*. Dalam amalan ia terlalu ketat: sekolah kerap mendaftarkan guru pengiring sebagai Penolong Pemimpin, dan mereka memang guru bertugas.
+
+Ia juga bertembung dengan realiti data. Pepijat `submitRegistration` menulis setiap Pemimpin sebagai Penolong Pemimpin sehingga ia dibetulkan; sekolah yang mendaftar sebelum itu mungkin tiada satu pun baris `PEMIMPIN` sebenar walaupun mereka ada ketua. Menguatkuasakan K5 pada data tersebut menyekat sekolah atas kesilapan sistem, bukan kesilapan mereka.
+
+**PEMBANTU masih tidak dikira.** Ia peranan sokongan yang baru diperkenalkan untuk program tertentu, bukan pengganti ketua rombongan.
 
 **K6 — Program yang gagal DILANGKAU; yang lain diteruskan.**
 Laluan `dilangkau` sudah wujud dalam `create-payment-bill` dan sudah memulangkan sebab kepada UI. Sekolah membayar program yang lengkap hari ini, membetulkan yang kurang, dan menghantarnya kemudian melalui bil susulan (§13.11).

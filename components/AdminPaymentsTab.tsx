@@ -118,7 +118,11 @@ export const AdminPaymentsTab: React.FC = () => {
     const jumlahDibayar = ditapis.reduce((n, r) => n + r.totalAmount, 0);
     const caj = ditapis.reduce((n, r) => n + r.transactionFee, 0);
     const sekolah = new Set(ditapis.map(r => r.schoolName)).size;
-    const orang = ditapis.reduce((n, r) => n + r.bilPeserta + r.bilPemimpin + r.bilPenolong + r.bilPembantu, 0);
+    // PESERTA sahaja. Pemimpin, penolong dan pembantu dicaj juga, tetapi
+    // angka yang diperlukan untuk logistik kem — makan, khemah, kumpulan —
+    // ialah bilangan peserta. Pecahan penuh kekal dalam lajur Bil. Orang
+    // setiap baris dan dalam CSV.
+    const orang = ditapis.reduce((n, r) => n + r.bilPeserta, 0);
     const ikutKaedah = ditapis.reduce((acc: Record<string, { bil: number; jumlah: number }>, r) => {
       const k = r.method;
       acc[k] = acc[k] || { bil: 0, jumlah: 0 };
@@ -220,7 +224,7 @@ export const AdminPaymentsTab: React.FC = () => {
           { label: 'Jumlah Diterima', nilai: formatRM(ringkasan.jumlahDibayar), warna: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
           { label: 'Yuran (tanpa caj)', nilai: formatRM(ringkasan.jumlahYuran), warna: 'text-slate-700 bg-white border-slate-200' },
           { label: 'Sekolah', nilai: String(ringkasan.sekolah), warna: 'text-slate-700 bg-white border-slate-200' },
-          { label: 'Orang Dibil', nilai: String(ringkasan.orang), warna: 'text-slate-700 bg-white border-slate-200' },
+          { label: 'Peserta Dibayar', nilai: String(ringkasan.orang), warna: 'text-slate-700 bg-white border-slate-200' },
         ].map(k => (
           <div key={k.label} className={`rounded-xl border p-3 ${k.warna}`}>
             <p className="text-[10px] font-bold uppercase opacity-70">{k.label}</p>

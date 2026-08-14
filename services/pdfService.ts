@@ -195,7 +195,10 @@ export const generateSummaryReport = (
     logoUrl
   } = options;
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  // LANDSCAPE. Jadual pecahan sekolah mempunyai sembilan lajur; pada potret
+  // (~182mm boleh guna) nama sekolah dan kod terpaksa membalut. Landscape
+  // memberi ~269mm, cukup untuk setiap lajur berada pada satu baris.
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Logo
@@ -287,63 +290,63 @@ export const generateSummaryReport = (
 
   let yPos = (negeri || daerah) ? headerStartY + 20 : headerStartY + 14;
 
-  // Summary table
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('RINGKASAN KESELURUHAN', 14, yPos);
-  yPos += 2;
+  // TIGA JADUAL RINGKAS, BERSEBELAHAN
+  //
+  // Dahulunya ia bertindan menegak, setiap satu 110mm lebar sedangkan jadual
+  // sekolah di bawahnya 253mm — saiz yang tidak sekata, dan jadual ketiga
+  // terbelah merentas muka surat. Halaman landscape mempunyai ruang mendatar
+  // yang tidak digunakan; tiga lajur 82mm menjajar tepat dengan lebar jadual
+  // sekolah dan muat pada satu muka surat.
+  const KOL_X = [14, 100, 186];
+  const KOL_W = [82, 82, 81];
+  const kepalaJadual = yPos;
 
-  autoTable(doc, {
-    startY: yPos,
-    head: [['Kategori', 'Jumlah']],
-    body: [
-      ['Jumlah Peserta', totalParticipants.toString()],
-      ['Jumlah Pemimpin', totalLeaders.toString()],
-      ['Jumlah Penolong Pemimpin', totalAssistants.toString()],
-      ['Jumlah Pembantu', totalPembantu.toString()],
-      ['Jumlah Penguji', totalExaminers.toString()],
-      ['JUMLAH KESELURUHAN', currentYearData.length.toString()],
-    ],
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
-    columnStyles: { 1: { halign: 'center', fontStyle: 'bold' } },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 10;
-
-  // Badge breakdown table
-  doc.setFont('helvetica', 'bold');
-  doc.text('PECAHAN MENGIKUT LENCANA', 14, yPos);
-  yPos += 2;
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [['Program', 'Bilangan']],
-    body: Object.entries(badgeCount).sort((a, b) => b[1] - a[1]).map(([badge, count]) => [badge, count.toString()]),
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: [30, 58, 138], textColor: [255, 255, 255], fontStyle: 'bold' },
-    columnStyles: { 1: { halign: 'center', fontStyle: 'bold' } },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 10;
-
-  // Category breakdown (if exists)
-  if (Object.keys(categoryCount).length > 0) {
+  const jadualRingkas = (
+    idx: number,
+    tajuk: string,
+    kepala: string[],
+    badan: string[][],
+    warna: [number, number, number],
+  ) => {
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
-    doc.text('PECAHAN MENGIKUT KATEGORI', 14, yPos);
-    yPos += 2;
-
+    doc.text(tajuk, KOL_X[idx], kepalaJadual);
     autoTable(doc, {
-      startY: yPos,
-      head: [['Kategori', 'Bilangan']],
-      body: Object.entries(categoryCount).sort((a, b) => b[1] - a[1]).map(([cat, count]) => [cat, count.toString()]),
-      styles: { fontSize: 9, cellPadding: 3 },
-      headStyles: { fillColor: [88, 28, 135], textColor: [255, 255, 255], fontStyle: 'bold' },
-      columnStyles: { 1: { halign: 'center', fontStyle: 'bold' } },
+      startY: kepalaJadual + 2,
+      margin: { left: KOL_X[idx] },
+      tableWidth: KOL_W[idx],
+      head: [kepala],
+      body: badan,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: warna, textColor: [255, 255, 255], fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'center', fontStyle: 'bold', cellWidth: 22 } },
     });
+    return (doc as any).lastAutoTable.finalY;
+  };
 
-    yPos = (doc as any).lastAutoTable.finalY + 10;
+  const hujung: number[] = [];
+
+  hujung.push(jadualRingkas(0, 'RINGKASAN KESELURUHAN', ['Kategori', 'Jumlah'], [
+    ['Jumlah Peserta', totalParticipants.toString()],
+    ['Jumlah Pemimpin', totalLeaders.toString()],
+    ['Jumlah Penolong Pemimpin', totalAssistants.toString()],
+    ['Jumlah Pembantu', totalPembantu.toString()],
+    ['Jumlah Penguji', totalExaminers.toString()],
+    ['JUMLAH KESELURUHAN', currentYearData.length.toString()],
+  ], [15, 23, 42]));
+
+  hujung.push(jadualRingkas(1, 'PECAHAN MENGIKUT LENCANA', ['Program', 'Bilangan'],
+    Object.entries(badgeCount).sort((a, b) => b[1] - a[1]).map(([badge, count]) => [badge, count.toString()]),
+    [30, 58, 138]));
+
+  if (Object.keys(categoryCount).length > 0) {
+    hujung.push(jadualRingkas(2, 'PECAHAN MENGIKUT KATEGORI', ['Kategori', 'Bilangan'],
+      Object.entries(categoryCount).sort((a, b) => b[1] - a[1]).map(([cat, count]) => [cat, count.toString()]),
+      [88, 28, 135]));
   }
+
+  // Ketiga-tiganya bermula pada Y yang sama tetapi berakhir berlainan.
+  yPos = Math.max(...hujung) + 10;
 
   // Pecahan setiap sekolah - peserta + pemimpin dalam satu jadual
   if (schoolStatsList.length > 0) {
@@ -364,7 +367,11 @@ export const generateSummaryReport = (
 
     autoTable(doc, {
       startY: yPos,
-      head: [['No.', 'Sekolah', 'Kod', 'Peserta (L)', 'Peserta (P)', 'Pemimpin', 'Penolong', 'Pembantu', 'Penguji', 'Jumlah']],
+      // Pemimpin dan Penolong Pemimpin dicantum menjadi SATU lajur. Sepuluh
+      // lajur memaksa pengepala membalut ("Peser/ta (L)", "Penolo/ng") dan
+      // jadual terkeluar halaman. Pecahannya kekal dalam jadual Kategori di
+      // atas, yang menyenaraikannya menegak tanpa had lebar.
+      head: [['No.', 'Sekolah', 'Kod', 'Peserta (L)', 'Peserta (P)', 'Pemimpin/Penolong', 'Pembantu', 'Penguji', 'Jumlah']],
       body: [
         ...schoolStatsList.map((s, i) => [
           (i + 1).toString(),
@@ -372,8 +379,7 @@ export const generateSummaryReport = (
           s.code || '-',
           s.lelaki.toString(),
           s.perempuan.toString(),
-          s.pemimpin.toString(),
-          s.penolong.toString(),
+          (s.pemimpin + s.penolong).toString(),
           s.pembantu.toString(),
           s.penguji.toString(),
           s.total.toString(),
@@ -382,27 +388,29 @@ export const generateSummaryReport = (
           { content: 'JUMLAH', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [254, 243, 199] } },
           { content: grandTotal.lelaki.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.perempuan.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
-          { content: grandTotal.pemimpin.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
-          { content: grandTotal.penolong.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
+          { content: (grandTotal.pemimpin + grandTotal.penolong).toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.pembantu.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.penguji.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
           { content: grandTotal.total.toString(), styles: { fontStyle: 'bold', halign: 'center', fillColor: [254, 243, 199] } },
         ],
       ],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
+      // Lebar SETIAP lajur ditetapkan. Sebelum ini hanya tiga yang pertama
+      // ditetapkan (10 + 60 + 20 = 90mm) dan enam lajur selebihnya berkongsi
+      // baki ~92mm pada halaman POTRET — kira-kira 15mm setiap satu, terlalu
+      // sempit untuk tajuknya, jadi setiap pengepala membalut di tengah
+      // perkataan. Jumlah lebar di bawah ialah 170mm daripada ~182mm yang ada.
+      headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center', fontSize: 7, valign: 'middle' },
       columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
-        1: { cellWidth: 60 },
-        2: { halign: 'center', cellWidth: 20 },
-        3: { halign: 'center' },
-        4: { halign: 'center' },
-        5: { halign: 'center' },
-        6: { halign: 'center' },
-        7: { halign: 'center' },
-        8: { halign: 'center' },
-        // Lajur Jumlah bergerak dari 8 ke 9 apabila Pembantu ditambah.
-        9: { halign: 'center', fontStyle: 'bold' },
+        0: { halign: 'center', cellWidth: 10 },  // No.
+        1: { cellWidth: 85 },                    // Sekolah
+        2: { halign: 'center', cellWidth: 26 },  // Kod
+        3: { halign: 'center', cellWidth: 20 },  // Peserta (L)
+        4: { halign: 'center', cellWidth: 20 },  // Peserta (P)
+        5: { halign: 'center', cellWidth: 34 },  // Pemimpin/Penolong
+        6: { halign: 'center', cellWidth: 20 },  // Pembantu
+        7: { halign: 'center', cellWidth: 18 },  // Penguji
+        8: { halign: 'center', cellWidth: 20, fontStyle: 'bold' },  // Jumlah
       },
       alternateRowStyles: { fillColor: [248, 250, 252] },
     });

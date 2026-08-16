@@ -208,14 +208,31 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
     return acc;
   }, {});
 
-  const getParticipantCount = (schoolName: string, badgeName: string, siri: number = 1) => {
-    const currentYear = new Date().getFullYear();
-    return data.filter(d =>
+  // PESERTA dan pegawai dikira BERASINGAN.
+  //
+  // Versi lama mengira setiap baris, jadi "4 peserta" sebenarnya bermaksud 1
+  // peserta + 3 pegawai. Nombor itu digunakan admin untuk logistik kem —
+  // makan, khemah, kumpulan — jadi mencampurkan pegawai ke dalamnya memberi
+  // angka yang salah kepada keputusan sebenar.
+  //
+  // Tahun diambil daripada BARIS itu, bukan daripada jam pelayar. Menetapkan
+  // tahun semasa bermakna kohort 2025 yang masih menunggu pengesahan akan
+  // memaparkan sifar — kelemahan yang sama yang menyembunyikan peserta Jaya
+  // SMK Gunung Rapat daripada pengiraan yuran.
+  const getParticipantCount = (
+    schoolName: string, badgeName: string, siri: number = 1, tahun?: number,
+  ) => {
+    const baris = data.filter(d =>
       d.school === schoolName &&
       d.badge === badgeName &&
       (d.siri || 1) === siri &&
-      new Date(d.date).getFullYear() === currentYear
-    ).length;
+      (tahun === undefined || new Date(d.date).getFullYear() === tahun)
+    );
+    const peserta = baris.filter(d => {
+      const r = String(d.role || 'PESERTA').toUpperCase();
+      return r === 'PESERTA' || r === 'PENERIMA RAMBU';
+    }).length;
+    return { peserta, pegawai: baris.length - peserta };
   };
 
   return (
@@ -383,7 +400,7 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
               const schoolName = item.school?.name || 'Tidak Diketahui';
               const daerah = item.school?.daerah?.code || '';
               const siri = item.siri ?? 1;
-              const participantCount = getParticipantCount(schoolName, badgeName, siri);
+              const kiraan = getParticipantCount(schoolName, badgeName, siri, item.year);
               const submittedDate = item.submitted_at ? tarikhPendek(item.submitted_at) : '-';
               const isApproving = actionLoading === `approve-${schoolName}-${badgeName}-${siri}`;
               const isReopening = actionLoading === `reopen-${schoolName}-${badgeName}-${siri}`;
@@ -402,7 +419,12 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                   <div className="flex-1">
                     <p className="font-semibold text-slate-800 text-sm">{schoolName}</p>
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
-                      <span className="flex items-center gap-1"><Users size={12} /> {participantCount} peserta</span>
+                      <span className="flex items-center gap-1">
+                        <Users size={12} /> {kiraan.peserta} peserta
+                        {kiraan.pegawai > 0 && (
+                          <span className="text-slate-400">+{kiraan.pegawai} pegawai</span>
+                        )}
+                      </span>
                       <span className="flex items-center gap-1"><Medal size={12} /> {badgeName}</span>
                       {siri > 1 && <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-semibold">Siri {siri}</span>}
                       {statusBayar !== 'not_required' && (

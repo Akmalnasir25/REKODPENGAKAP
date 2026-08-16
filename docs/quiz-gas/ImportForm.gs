@@ -423,8 +423,133 @@ function onOpen() {
     .addItem('Import dari Word (.docx di Drive)…', 'importFromWordDoc')
     .addItem('Bersih label A/B/C/D bertindan', 'cleanChoiceLabels')
     .addSeparator()
+    .addItem('Diagnos gambar Form…', 'diagnosGambarForm')
     .addItem('(Pilihan) Isi Kuiz Contoh', 'seedDemoQuiz')
     .addToUi();
+}
+
+/**
+ * Kenapa gambar tidak masuk semasa import? Jawab dengan FAKTA, bukan tekaan.
+ *
+ * Ada DUA laluan gambar yang berasingan sepenuhnya, dan ia gagal atas sebab
+ * yang berbeza:
+ *
+ *   BLOK IMEJ berasingan  → FormApp.ItemType.IMAGE. Berfungsi terus, tiada
+ *                           skop tambahan, tiada API perlu diaktifkan.
+ *   Gambar INLINE         → Forms REST API. Perlu skop yang betul DAN Forms
+ *                           API diaktifkan pada projek GCP skrip ini.
+ *
+ * Fungsi ini memeriksa kedua-duanya dan melaporkan skop sebenar yang dipegang
+ * token skrip, supaya pembetulan menyasar punca yang betul.
+ */
+function diagnosGambarForm() {
+  var ui = SpreadsheetApp.getUi();
+  var resp = ui.prompt('Diagnos Gambar Form',
+                       'Tampal URL EDIT atau ID Google Form:', ui.ButtonSet.OK_CANCEL);
+  if (resp.getSelectedButton() !== ui.Button.OK) return;
+  var laporan;
+  try { laporan = _diagnosGambarForm(resp.getResponseText()); }
+  catch (e) { laporan = 'Ralat tidak dijangka: ' + e.message; }
+  ui.alert('Diagnos Gambar Form', laporan, ui.ButtonSet.OK);
+}
+
+/** Bahagian logik diagnos, dipisahkan supaya boleh dipanggil tanpa UI */
+function _diagnosGambarForm(ref) {
+  var L = [];
+  var formId;
+  try { formId = resolveFormId(ref); }
+  catch (e) { return 'GAGAL: ' + e.message; }
+  L.push('Form: ' + formId);
+
+  // ---- 1. Blok imej berasingan (laluan yang sentiasa berfungsi) ----
+  var blok = 0, soalanForm = 0;
+  try {
+    FormApp.openById(formId).getItems().forEach(function (it) {
+      var t = it.getType();
+      if (t === FormApp.ItemType.IMAGE) blok++;
+      else if (t === FormApp.ItemType.MULTIPLE_CHOICE ||
+               t === FormApp.ItemType.CHECKBOX ||
+               t === FormApp.ItemType.LIST) soalanForm++;
+    });
+    L.push('FormApp  : ' + soalanForm + ' soalan berpilihan, ' + blok + ' blok imej berasingan');
+  } catch (e) {
+    L.push('FormApp  : GAGAL buka - ' + e.message);
+  }
+
+  // ---- 2. Skop sebenar yang dipegang token ----
+  var adaSkopForms = false;
+  try {
+    var t = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' +
+              encodeURIComponent(ScriptApp.getOAuthToken()), { muteHttpExceptions: true });
+    var skop = String((JSON.parse(t.getContentText() || '{}') || {}).scope || '')
+                 .split(' ').filter(String);
+    // Forms API v1 forms.get menerima mana-mana daripada ini
+    var diterima = ['https://www.googleapis.com/auth/drive',
+                    'https://www.googleapis.com/auth/drive.readonly',
+                    'https://www.googleapis.com/auth/drive.file',
+                    'https://www.googleapis.com/auth/forms.body',
+                    'https://www.googleapis.com/auth/forms.body.readonly'];
+    adaSkopForms = skop.some(function (s) { return diterima.indexOf(s) >= 0; });
+    L.push('');
+    L.push('SKOP TOKEN (' + skop.length + '):');
+    skop.forEach(function (s) {
+      L.push('  ' + s.replace('https://www.googleapis.com/auth/', ''));
+    });
+    L.push('  -> memadai untuk Forms API? ' + (adaSkopForms ? 'YA' : 'TIDAK'));
+  } catch (e) {
+    L.push('Skop token: tidak dapat dibaca - ' + e.message);
+  }
+
+  // ---- 3. Panggilan sebenar ke Forms REST API ----
+  L.push('');
+  var kod = 0, badan = '';
+  try {
+    var r = UrlFetchApp.fetch('https://forms.googleapis.com/v1/forms/' + encodeURIComponent(formId), {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true });
+    kod = r.getResponseCode();
+    badan = r.getContentText() || '';
+  } catch (e) {
+    L.push('FORMS API: pengecualian - ' + e.message);
+    return L.join('\n');
+  }
+  L.push('FORMS API: HTTP ' + kod);
+
+  if (kod === 200) {
+    var items = ((function () { try { return JSON.parse(badan); } catch (e) { return {}; } })().items) || [];
+    var inline = 0;
+    items.forEach(function (it) {
+      if (it.questionItem && it.questionItem.image && it.questionItem.image.contentUri) inline++;
+    });
+    L.push('  gambar INLINE dijumpai: ' + inline);
+    L.push('');
+    L.push(inline > 0
+      ? 'BAIK. Gambar inline akan masuk semasa import.'
+      : 'Forms API berfungsi, tetapi Form ini tiada gambar inline.\n' +
+        'Kalau gambar nampak di Form, ia BLOK IMEJ berasingan (' + blok + ' dijumpai)\n' +
+        '- itu memang sudah diimport tanpa apa-apa tetapan tambahan.');
+    return L.join('\n');
+  }
+
+  L.push('  ' + badan.slice(0, 300));
+  L.push('');
+  if (/SERVICE_DISABLED|has not been used in project|is disabled/i.test(badan)) {
+    L.push('PUNCA: Forms API belum diaktifkan untuk projek GCP skrip ini.');
+    L.push('Skrip menggunakan projek GCP LALAI, dan API tidak boleh diaktifkan');
+    L.push('pada projek lalai - projek GCP standard mesti dilampirkan dahulu');
+    L.push('(Project Settings > Google Cloud Platform (GCP) Project > Change).');
+  } else if (kod === 401 || kod === 403) {
+    L.push('PUNCA: skop tidak mencukupi' + (adaSkopForms ? ' (walaupun skop nampak betul - semak API)' : '') + '.');
+    L.push('Tambah oauthScopes pada appsscript.json, simpan, jalankan sekali');
+    L.push('untuk memberi kebenaran semula.');
+  } else if (kod === 404) {
+    L.push('PUNCA: Form tidak dijumpai, atau akaun ini tiada akses kepadanya.');
+  }
+  L.push('');
+  L.push('SEMENTARA ITU: guna BLOK IMEJ berasingan di Google Form');
+  L.push('(toolbar "Tambah imej", diletak SEBELUM soalan). Laluan itu tidak');
+  L.push('memerlukan Forms API langsung, dan sudah berfungsi hari ini.');
+  return L.join('\n');
 }
 
 /** Import dari Google Form melalui menu Sheet (guna Forms API + gambar) */

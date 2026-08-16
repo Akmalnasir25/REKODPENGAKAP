@@ -216,13 +216,17 @@ function adminGetSchoolSummary(token, quizId) {
   // 1) Senarai sekolah + jumlah berdaftar (dari scoutnadi)
   var schools = [];
   try { schools = getSchoolsForProgram(quizId) || []; } catch (e) { schools = []; }
-  var byCode = {}; // schoolCode -> {schoolCode, schoolName, registered, answered, passed, students[]}
+  // schoolCode -> {schoolCode, schoolName, registered, answered, passed}
+  // Senarai murid TIDAK disertakan di sini — ia dimuat atas permintaan melalui
+  // adminGetSchoolStudents, supaya ringkasan 60 sekolah tidak membawa setiap
+  // baris Keputusan sekali gus.
+  var byCode = {};
   schools.forEach(function (s) {
     var code = String(s.schoolCode || '').trim();
     byCode[code] = {
       schoolCode: code, schoolName: s.name || code,
       registered: (typeof s.registered === 'number' ? s.registered : null),
-      answered: 0, passed: 0, students: [],
+      answered: 0, passed: 0,
     };
   });
 
@@ -231,14 +235,9 @@ function adminGetSchoolSummary(token, quizId) {
     .filter(function (r) { return _normId(r.quizId) === quizId; })
     .forEach(function (r) {
       var code = String(r.schoolCode || '').trim();
-      if (!byCode[code]) byCode[code] = { schoolCode: code, schoolName: code, registered: null, answered: 0, passed: 0, students: [] };
+      if (!byCode[code]) byCode[code] = { schoolCode: code, schoolName: code, registered: null, answered: 0, passed: 0 };
       byCode[code].answered += 1;
       if (_truthy(r.passed)) byCode[code].passed += 1;
-      byCode[code].students.push({
-        nama: String(r.nama == null ? '' : r.nama), bestScore: Number(r.bestScore) || 0,
-        total: Number(r.total) || 0, passed: _truthy(r.passed), attempts: Number(r.attempts) || 0,
-        certNo: String(r.certNo == null ? '' : r.certNo), claimedAt: _s(r.claimedAt),
-      });
     });
 
   // 3) Susun ikut nama; kira jumlah keseluruhan
@@ -254,6 +253,65 @@ function adminGetSchoolSummary(token, quizId) {
   });
 
   return { rows: rows, totals: totals };
+}
+
+/**
+ * Murid satu sekolah, dipecah kepada SUDAH JAWAB dan BELUM JAWAB.
+ *
+ * Ringkasan sekolah hanya boleh memberitahu BERAPA yang belum jawab, kerana
+ * angka itu dikira sebagai (berdaftar − jawab). NAMA mereka tidak wujud di
+ * mana-mana dalam Sheet: orang yang tidak pernah menjawab tidak meninggalkan
+ * baris di tab Keputusan. Satu-satunya cara mendapatkannya ialah membandingkan
+ * senarai pendaftaran scoutnadi terhadap tab Keputusan — itulah yang dilakukan
+ * di sini.
+ *
+ * Perbandingan dibuat pada participantId, bukan nama. Dua murid boleh berkongsi
+ * nama yang sama, dan padanan ikut nama akan menyembunyikan salah seorang
+ * daripada senarai "belum jawab" secara senyap.
+ *
+ * `adaSenarai:false` bermakna endpoint scoutnadi tidak menjawab. Bila itu
+ * berlaku, senarai "belum jawab" yang KOSONG tidak bermakna semua sudah
+ * menjawab — ia bermakna kita tidak tahu, dan skrin mesti mengatakannya.
+ */
+function adminGetSchoolStudents(token, quizId, schoolCode) {
+  _requireAdmin(token);
+  quizId = _normId(quizId);
+  schoolCode = String(schoolCode == null ? '' : schoolCode).trim();
+  if (!schoolCode) throw new Error('schoolCode diperlukan.');
+
+  // 1) Yang sudah menjawab (tab Keputusan)
+  var jawab = [], sudah = {};
+  _readObjects(SHEET_KEPUTUSAN).forEach(function (r) {
+    if (_normId(r.quizId) !== quizId) return;
+    if (String(r.schoolCode == null ? '' : r.schoolCode).trim() !== schoolCode) return;
+    var pid = String(r.participantId == null ? '' : r.participantId).trim();
+    if (pid) sudah[pid] = true;
+    jawab.push({
+      nama: String(r.nama == null ? '' : r.nama),
+      bestScore: Number(r.bestScore) || 0, total: Number(r.total) || 0,
+      passed: _truthy(r.passed), attempts: Number(r.attempts) || 0,
+      certNo: String(r.certNo == null ? '' : r.certNo), claimedAt: _s(r.claimedAt),
+    });
+  });
+
+  // 2) Yang berdaftar (scoutnadi). Kegagalan di sini TIDAK boleh kelihatan
+  //    seperti "tiada siapa tertinggal".
+  var berdaftar = [], adaSenarai = true;
+  try { berdaftar = getParticipants(quizId, schoolCode) || []; }
+  catch (e) { berdaftar = []; adaSenarai = false; }
+
+  // 3) Berdaftar tetapi tiada rekod menjawab
+  var belum = berdaftar
+    .filter(function (p) { return !sudah[String(p.id == null ? '' : p.id).trim()]; })
+    .map(function (p) { return { nama: String(p.name == null ? '' : p.name) }; });
+
+  jawab.sort(function (a, b) { return String(a.nama).localeCompare(String(b.nama)); });
+  belum.sort(function (a, b) { return String(a.nama).localeCompare(String(b.nama)); });
+
+  return {
+    schoolCode: schoolCode, jawab: jawab, belum: belum,
+    adaSenarai: adaSenarai, berdaftar: berdaftar.length,
+  };
 }
 
 // ---- Import dari Google Form (melalui panel) — guna Forms API + gambar ----

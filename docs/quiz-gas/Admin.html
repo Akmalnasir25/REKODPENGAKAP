@@ -669,18 +669,56 @@ function renderSummary(){
     '<div id="schooldetail"></div>';
 }
 function showSchoolStudents(code){
+  var d=document.getElementById('schooldetail'); if(!d) return;
   var row=((window._SUM&&window._SUM.rows)||[]).filter(function(r){ return String(r.schoolCode).trim()===String(code).trim(); })[0];
-  var list=(row&&row.students)||[];
-  var rows=list.map(function(r){
+  var nama=(row&&row.schoolName)||code;
+  d.innerHTML='<div class="box"><b>'+esc(nama)+' ('+esc(code)+')</b>'+
+    '<div class="muted" style="margin-top:8px"><span class="spin"></span> Memuatkan senarai murid…</div></div>';
+  d.scrollIntoView({behavior:'smooth', block:'nearest'});
+  var sel=document.getElementById('sqz');
+  call('adminGetSchoolStudents',[TOKEN,sel?sel.value:'',code],function(res){
+    renderSchoolStudents(nama,code,res);
+  },function(e){
+    d.innerHTML='<div class="box"><b>'+esc(nama)+'</b><div class="err">⚠ '+
+      esc((e&&e.message)||'Gagal memuat senarai murid.')+'</div></div>';
+  });
+}
+function renderSchoolStudents(nama,code,res){
+  var jawab=(res&&res.jawab)||[], belum=(res&&res.belum)||[];
+  var barisJawab=jawab.map(function(r){
     return '<tr><td>'+esc(r.nama)+'</td><td>'+esc(r.bestScore)+'/'+esc(r.total)+'</td><td>'+esc(r.attempts)+'</td>'+
       '<td>'+(r.passed?'<span class="pill ok">LULUS</span>':'<span class="pill no">BELUM</span>')+'</td>'+
       '<td>'+esc(r.certNo||'')+(r.claimedAt?'<br><span class="muted">dah cetak</span>':'')+'</td></tr>';
   }).join('');
-  var d=document.getElementById('schooldetail');
-  d.innerHTML='<div class="box"><b>Murid dah jawab · '+esc((row&&row.schoolName)||code)+' ('+esc(code)+')</b>'+
-    '<table><tr><th>Nama</th><th>Markah</th><th>Cubaan</th><th>Status</th><th>Slip</th></tr>'+
-    (rows||'<tr><td colspan="5" class="muted">Belum ada murid dari sekolah ini menjawab.</td></tr>')+'</table></div>';
-  d.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+  // Senarai KOSONG bermakna dua perkara yang sangat berbeza bergantung pada
+  // sama ada senarai pendaftaran berjaya diambil. Jangan biarkan kegagalan
+  // endpoint kelihatan seperti "semua sudah menjawab".
+  var bahagianBelum;
+  if(!res || res.adaSenarai===false){
+    bahagianBelum='<div class="warn fatal" style="margin-top:6px">⚠ Senarai pendaftaran tidak dapat diambil dari scoutnadi, '+
+      'jadi <b>tidak diketahui</b> siapa yang belum menjawab. Cuba lagi sebentar nanti.</div>';
+  } else if(!belum.length){
+    bahagianBelum='<div class="ok" style="margin-top:6px">✔ Semua '+esc(res.berdaftar)+' murid berdaftar sudah menjawab.</div>';
+  } else {
+    bahagianBelum='<table><tr><th>#</th><th>Nama</th></tr>'+
+      belum.map(function(r,i){
+        return '<tr><td>'+(i+1)+'</td><td><b style="color:var(--bad)">'+esc(r.nama)+'</b></td></tr>';
+      }).join('')+'</table>';
+  }
+
+  document.getElementById('schooldetail').innerHTML=
+    '<div class="box"><b>'+esc(nama)+' ('+esc(code)+')</b>'+
+      '<div class="muted" style="margin:6px 0 10px;font-size:.8rem">'+
+        esc(jawab.length)+' sudah jawab'+
+        (res && res.adaSenarai!==false ? ' · <b style="color:var(--bad)">'+esc(belum.length)+' belum jawab</b> · '+esc(res.berdaftar)+' berdaftar' : '')+
+      '</div>'+
+      '<div style="font-weight:800;font-size:.82rem;color:var(--c2);margin-top:12px">✍️ Sudah jawab</div>'+
+      '<table><tr><th>Nama</th><th>Markah</th><th>Cubaan</th><th>Status</th><th>Slip</th></tr>'+
+      (barisJawab||'<tr><td colspan="5" class="muted">Belum ada murid dari sekolah ini menjawab.</td></tr>')+'</table>'+
+      '<div style="font-weight:800;font-size:.82rem;color:var(--c2);margin-top:16px">⏳ Belum jawab</div>'+
+      bahagianBelum+
+    '</div>';
 }
 
 // ---- Muat naik imej soalan ----

@@ -1,6 +1,6 @@
 # Rancangan: Pratonton Soalan Selepas Import dari Google Form
 
-Status: **rancangan tertutup · sedia untuk implementasi**. Semua keputusan di §8 sudah dijawab.
+Status: **selesai dilaksanakan** (16 Ogos 2026). Semua keputusan di §8 dijawab; §7 diuji dengan harness luar talian (98 ujian lulus) — lihat §9 untuk apa yang berubah semasa pelaksanaan.
 
 Keputusan yang sudah ditutup (16 Ogos 2026):
 
@@ -141,10 +141,19 @@ Menu Sheet (`importFromGoogleForm`, `ImportForm.gs:243`) kekal terus-tulis. Dial
 |---|---|---|---|
 | `dipotong` | Form ada >5 pilihan; pilihan ke-6+ dibuang | Soalan masih boleh dijawab | ☑ ditanda |
 | `kunci-dipotong` | Jawapan betul ialah pilihan ke-6+ → kunci jadi kosong | **Tidak boleh dijawab** | ☐ tidak |
+| `kunci-separa` | Kotak semak: SEBAHAGIAN jawapan betul jatuh pada pilihan yang dibuang | Boleh dijawab, tetapi **kuncinya salah** | ☐ tidak |
 | `tiada-kunci` | Lajur Jawapan kosong (Form bukan jenis Kuiz) | **Tidak boleh dijawab** | ☐ tidak |
 | `kunci-tanpa-teks` | Kunci menunjuk huruf yang teksnya kosong | **Tidak boleh dijawab** | ☐ tidak |
+| `pilihan-kurang` | Kurang daripada dua pilihan berteks | **Tidak boleh dijawab** | ☐ tidak |
 | `duplikat` | Teks soalan sama sudah wujud dalam quizId ini | Boleh dijawab, tetapi berganda | ☐ tidak |
 | `tiada-gambar` | Blok/inline imej dikesan tetapi gagal disimpan | Soalan tanpa gambar | ☑ ditanda |
+
+> **`kunci-separa` tidak dijangka semasa merancang** dan muncul semasa menulis kod.
+> Soalan kotak semak dengan 9 pilihan yang jawapan betulnya ialah pilihan 1 **dan** 7
+> menghasilkan kunci `A` sahaja — soalan yang lulus setiap semakan, keluar dalam kuiz,
+> dan **menanda salah murid yang menjawabnya betul-betul ikut Form asal**. Ia lebih
+> bahaya daripada soalan yang dibuang, kerana soalan yang dibuang sekurang-kurangnya
+> senyap. Ia satu-satunya amaran di mana `boleh` benar tetapi tanda lalai tetap kosong.
 
 `kunci-dipotong` dan `tiada-kunci` dibezakan dengan memeriksa sama ada mana-mana `choice.isCorrectAnswer()` benar pada indeks ≥5 — maklumat yang sudah ada dalam gelung `_soalanDariPilihan` tetapi dibuang hari ini.
 
@@ -297,3 +306,28 @@ Pembetulan dibuat selepas simpan melalui editor soalan sedia ada (`Admin.html:20
 
 **S3 — Berapa banyak soalan satu Form?** → **30–60.**
 Kad penuh dikekalkan (itu maksud "macam murid nampak"), dengan bar ringkasan melekat di §4.2 supaya butang Simpan sentiasa dalam jangkauan. Togol paparan jadual **tidak** dibina sekarang — ia ditambah hanya kalau saiz sebenar melepasi 60 dan skrol menjadi masalah nyata.
+
+---
+
+## 9. Yang berubah semasa pelaksanaan
+
+Empat perkara berbeza daripada rancangan asal. Semuanya ditemui dengan menulis kod atau ujian, bukan dengan membaca semula doc.
+
+**9.1 Amaran ketujuh: `kunci-separa`** — lihat kotak di §3.3. Rancangan menganggap jawapan betul yang dipotong sentiasa menghasilkan kunci kosong. Itu benar untuk soalan bulatan sahaja; kotak semak boleh kehilangan *sebahagian* kunci dan tetap kelihatan sihat.
+
+**9.2 `pilihan-kurang` dinaikkan menjadi amaran sebenar.** Rancangan menyebutnya sebagai mustahil (`_soalanDariPilihan` menolak item dengan <2 pilihan). Ia masih mustahil melalui laluan Form, tetapi `_soalanBolehDijawab` memulangkannya sebagai sebab, dan membuangnya bermakna kes itu jatuh senyap. Ia kini dipapar.
+
+**9.3 `_optionsDariBaris` diekstrak bersama `_soalanBolehDijawab`.** Bukan dirancang, tetapi tanpanya pratonton membina senarai pilihan dengan cara sendiri — dan cara yang salah senang: lajur B kosong dengan lajur C berisi mesti menghasilkan `[A, C]`, bukan `[A, B]`, kerana kunci jawapan menunjuk kepada **huruf**. Diuji ([11]).
+
+**9.4 Kuiz yang dipilih dikekalkan selepas kembali dari pratonton.** `showTab('soalan')` melukis semula panel dari kosong, jadi dropdown melompat balik ke kuiz pertama sementara mesej berkata "5 soalan disimpan" — merujuk kuiz lain. Mekanisme `flash()` + `selected` pada `<option>` menutupnya.
+
+### Ujian
+
+Dua harness luar talian (dalam scratchpad, tidak dikomit — Apps Script tiada pelari ujian):
+
+| Harness | Liputan | Keputusan |
+|---|---|---|
+| `uji-import.js` | Stub `FormApp`/`DriveApp`/`SpreadsheetApp`, muat `.gs` sebenar, jalankan kes §7 (1–12) | 63 lulus |
+| `uji-render.js` | Jalankan `renderPreview` dengan DOM olokan; semak struktur, escaping, kiraan bar, `markAll` | 35 lulus |
+
+Yang **belum** diuji dan hanya boleh disahkan pada Apps Script sebenar: gambar inline melalui Forms REST API (§2 `_inlineImagesFromApi` memerlukan skop OAuth), penukaran data URI oleh `_imageForClient`, dan bar melekat pada skrin telefon sebenar.

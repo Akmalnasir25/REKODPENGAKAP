@@ -130,10 +130,38 @@ Sistem auto-kesan jenis template (Google **Docs** atau **Slides**).
 
 ## E. Import soalan
 
-Buka semula Sheet → menu **Kuiz** muncul:
-- **Import dari Google Form** — tampal **URL EDIT** (`.../forms/d/<ID>/edit`) atau ID +
-  `quizId`. Jika Form ialah kuiz berkunci jawapan, lajur Jawapan diisi automatik; jika
-  tidak, isi A–E sendiri.
+Ada **dua jalan** import dari Google Form, dan ia berkelakuan berbeza:
+
+| Jalan | Kelakuan |
+|---|---|
+| **Panel Admin ▸ Soalan ▸ ⬇ Import dari Google Form** | **Pratonton dahulu.** Soalan dipapar seperti murid akan nampak, dengan amaran per soalan. Tiada apa-apa ditulis sehingga tuan tekan **Simpan**. Ini jalan yang disyorkan. |
+| **Menu Sheet ▸ Kuiz ▸ Import dari Google Form…** | **Terus tulis** semua soalan, termasuk yang rosak. Cepat, tetapi tiada jalan batal. |
+
+Kedua-duanya menerima **URL EDIT** (`.../forms/d/<ID>/edit`) atau ID sahaja. Jika Form
+ialah kuiz berkunci jawapan, lajur Jawapan diisi automatik; jika tidak, isi A–E sendiri.
+
+### Pratonton (panel admin)
+
+Selepas membaca Form, setiap soalan dipapar sebagai kad dengan kotak semak **"Ambil
+soalan ini"**. Soalan yang bermasalah **tidak ditanda secara lalai** — tuan masih boleh
+menandanya sendiri kalau mahu menyimpannya dan membetulkannya kemudian.
+
+| Amaran | Maksudnya |
+|---|---|
+| Form ada lebih 5 pilihan | Pilihan ke-6 dan seterusnya dibuang (tab `Soalan` hanya A–E). Soalan masih boleh dijawab. |
+| Jawapan betul ialah pilihan ke-6+ | Kunci hilang sepenuhnya. **Soalan tidak akan keluar dalam kuiz.** |
+| Sebahagian jawapan betul dipotong | Kotak semak sahaja. Kunci **tidak lengkap** — murid yang jawab betul akan ditanda salah. Paling bahaya. |
+| Tiada kunci jawapan | Form bukan jenis **Kuiz**. Soalan tidak akan keluar sehingga jawapan diisi. |
+| Soalan serupa sudah wujud | Import berulang. Menyimpannya menggandakan soalan. |
+| Gambar gagal disimpan | Form ada gambar untuk soalan itu tetapi ia tidak dapat diambil. |
+
+Tekan **Batal** dan tiada apa-apa disimpan — gambar yang sempat dimuat turun ke Drive
+turut dibuang. Tekan **Simpan** dan hanya soalan yang ditanda ditulis; gambar bagi
+soalan yang ditolak dibuang.
+
+> Kalau **semua** soalan menunjukkan "tiada kunci jawapan", Form itu bukan jenis Kuiz.
+> Tuan boleh tekan **Tanda semua** dan menyimpannya, kemudian isi jawapan di tab
+> `Soalan` atau melalui **Panel Admin ▸ Soalan ▸ Edit**.
 
 ### Jenis soalan yang diimport
 | Jenis di Google Form | Hasil dalam tab `Soalan` |
@@ -146,6 +174,8 @@ Buka semula Sheet → menu **Kuiz** muncul:
 > Had **5 pilihan** setiap soalan, kerana tab `Soalan` hanya ada lajur A–E.
 > Soalan dengan 6 pilihan atau lebih akan dipotong, dan import akan memberi
 > amaran berapa soalan terjejas. Semak soalan tersebut sebelum kuiz dibuka.
+> Pratonton panel admin menunjukkan soalan **mana** yang terjejas, dan yang lebih
+> penting, sama ada **jawapan betulnya** yang dipotong.
 
 ### Gambar pada soalan
 - **Blok imej berasingan** (toolbar Form "Tambah imej" 🖼️, sebelum soalan) →
@@ -186,7 +216,8 @@ Buka semula Sheet → menu **Kuiz** muncul:
   dibenarkan: `daerah_admin`, `negeri_admin`, `admin`, `developer`).
 - Tab **Kuiz**: tambah/edit program, ambang lulus, bil. soalan, kaedah sahkan, ID
   template sijil, aktif/tidak.
-- Tab **Soalan**: tambah/edit/padam soalan, atau **Import dari Google Form**.
+- Tab **Soalan**: tambah/edit/padam soalan, atau **Import dari Google Form** dengan
+  pratonton (lihat §E).
 - Tab **Keputusan**: lihat markah/lulus/sijil setiap peserta.
 - Pengubahan tetap menulis ke tab Sheet yang sama — jadi tuan boleh guna panel **atau**
   edit Sheet terus, ikut keselesaan.

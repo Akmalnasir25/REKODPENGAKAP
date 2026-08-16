@@ -47,6 +47,14 @@ export interface BilDijana {
   dilangkau?: ProgramDilangkau[];
   /** Program yang dilangkau kerana sudah dibayar sebelum ini. */
   sudahDibayar?: ProgramSudahDibayar[];
+  /**
+   * Program yang tiada yuran dan telah DIHANTAR terus untuk pengesahan.
+   *
+   * Satu tekanan Hantar meliputi semua program dalam siri itu, jadi ini boleh
+   * mengandungi program yang guru tidak sedar termasuk. Ia mesti dipaparkan,
+   * bukan disimpan senyap dalam respons.
+   */
+  dihantarPercuma?: string[];
   /** true bila tiada yuran langsung — pintu bayaran dilangkau. */
   skipped?: boolean;
   message?: string;

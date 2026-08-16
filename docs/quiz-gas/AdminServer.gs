@@ -64,7 +64,7 @@ function adminListQuestions(token, quizId) {
       return {
         row: r._row, quizId: String(r.quizId).trim(), soalan: r.soalan,
         A: r.A, B: r.B, C: r.C, D: r.D, E: r.E,
-        jawapan: String(r.jawapan || '').trim().toUpperCase(),
+        jawapan: _normKunci(r.jawapan).join(','),
         markah: r.markah || 1, aktif: _truthy(r.aktif),
         gambar: _gambarCell(r), // teguh: fallback baca lajur K jika header hilang
       };
@@ -81,7 +81,7 @@ function adminSaveQuestion(token, q) {
     var values = [[
       String(q.quizId).trim(), String(q.soalan).trim(),
       q.A || '', q.B || '', q.C || '', q.D || '', q.E || '',
-      String(q.jawapan || '').trim().toUpperCase(), q.markah || 1, q.aktif ? true : false,
+      _normKunci(q.jawapan).join(','), q.markah || 1, q.aktif ? true : false,
       String(q.gambar || '').trim(),
     ]];
     if (q.row) sh.getRange(q.row, 1, 1, SOALAN_COLS.length).setValues(values);

@@ -4,10 +4,50 @@
  */
 
 /**
+ * Normalkan kunci jawapan → array huruf unik & tersusun.
+ *
+ * Ini SATU-SATUNYA tempat kunci jawapan ditafsir. Import, pemarkahan, paparan
+ * dan editor admin semuanya melaluinya, supaya mustahil dua tempat menafsir
+ * "A,C" secara berbeza.
+ *
+ * Menerima rentetan ATAU array dengan sengaja: cubaan yang bermula SEBELUM
+ * sistem menyokong jawapan berbilang menyimpan kunci sebagai rentetan ('C')
+ * dalam cache, manakala yang baharu menyimpan array (['C']). Cache hidup 6 jam
+ * (Code.gs), jadi kedua-dua bentuk boleh wujud serentak semasa kemas kini.
+ *
+ *   'C'      -> ['C']        'A,C'     -> ['A','C']
+ *   'AC'     -> ['A','C']    'a, c'    -> ['A','C']
+ *   'C,A'    -> ['A','C']    'A,A'     -> ['A']
+ *   'A dan C'-> ['A','C']    ['A','C'] -> ['A','C']
+ *
+ * Input longgar, output ketat — admin boleh menaip ikut selesa, tetapi
+ * perbandingan sentiasa membanding bentuk yang sama.
+ */
+function _normKunci(v) {
+  if (v == null) return [];
+  var s = (Array.isArray(v) ? v.join(',') : String(v)).toUpperCase();
+  // Ada aksara selain A-E (koma, ruang, perkataan)? Anggap senarai bertanda
+  // pemisah dan terima token satu huruf sahaja — supaya "A dan C" tidak
+  // tersalah baca sebagai A, D, C. Kalau tiada, ia huruf berturut ("AC").
+  var tokens = /[^A-E]/.test(s.trim())
+    ? s.split(/[^A-E]+/).filter(function (t) { return t.length === 1; })
+    : s.trim().split('');
+  var out = [], seen = {};
+  tokens.forEach(function (L) {
+    if (L && !seen[L]) { seen[L] = true; out.push(L); }
+  });
+  return out.sort();
+}
+
+/**
  * Pilih N soalan rawak aktif bagi quizId.
- * Pulang: { questions: [{ id, soalan, options:[{key,text}] }],
- *           answerKey: { id -> 'A'.. }, total }
+ * Pulang: { questions: [{ id, soalan, options:[{key,text}], multi }],
+ *           answerKey: { id -> ['A','C'] }, total }
  * (answerKey TIDAK dihantar ke klien — disimpan dalam cache cubaan.)
+ *
+ * `multi` memberitahu klien untuk memapar kotak semak. Ia mendedahkan bahawa
+ * soalan itu ada lebih daripada satu jawapan betul — sama seperti Google Form
+ * yang memaparkan kotak semak — tetapi tidak mendedahkan berapa atau yang mana.
  */
 function pickQuestions(cfg) {
   const all = _readObjects(SHEET_SOALAN).filter(function (r) {
@@ -30,16 +70,32 @@ function pickQuestions(cfg) {
       if (text !== '') options.push({ key: L, text: text });
     });
     if (options.length < 2) return; // langkau soalan tak lengkap
-    answerKey[qid] = String(r.jawapan).trim().toUpperCase();
+
+    const kunci = _normKunci(r.jawapan);
+    if (kunci.length === 0) return; // tiada kunci — soalan mustahil dinilai
+
+    // Setiap huruf kunci mesti ada teks pilihan. Kunci 'E' pada soalan yang
+    // lajur E-nya kosong bermakna soalan itu tidak boleh dijawab betul oleh
+    // sesiapa; lebih baik dilangkau daripada menjatuhkan markah murid senyap.
+    const adaTeks = {};
+    options.forEach(function (o) { adaTeks[o.key] = true; });
+    const kunciSah = kunci.every(function (L) { return adaTeks[L] === true; });
+    if (!kunciSah) return;
+
+    answerKey[qid] = kunci;
     questions.push({
       id: qid,
       soalan: String(r.soalan).trim(),
       gambar: _imageForClient(_gambarCell(r)),
       options: options,
+      multi: kunci.length > 1,
     });
   });
 
-  if (questions.length === 0) throw new Error('Soalan tidak lengkap (perlu sekurang-kurangnya 2 pilihan).');
+  if (questions.length === 0) {
+    throw new Error('Soalan tidak lengkap — perlu sekurang-kurangnya 2 pilihan ' +
+                    'dan kunci jawapan yang menunjuk kepada pilihan yang ada.');
+  }
   return { questions: questions, answerKey: answerKey, total: questions.length };
 }
 

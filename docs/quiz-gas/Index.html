@@ -188,10 +188,15 @@ var STEPS = {
       '<div class="muted" id="prog2" style="margin-bottom:4px">Dijawab 0 / '+S.questions.length+'</div>';
     S.questions.forEach(function(q, idx){
       html += '<div class="q"><div class="t"><span class="n">'+(idx+1)+'</span>'+esc(q.soalan)+'</div>';
+      // Murid MESTI tahu soalan ini menerima lebih daripada satu jawapan —
+      // pemarkahan semua-atau-tiada, jadi tersilap faham bermakna markah sifar.
+      if(q.multi) html += '<div class="muted" style="margin:2px 0 8px 30px">Pilih SEMUA jawapan yang betul.</div>';
       if(q.gambar) html += qImg(q.gambar);
       q.options.forEach(function(o){
-        html += '<label class="opt" id="o_'+q.id+'_'+o.key+'" onclick="pick(\''+q.id+'\',\''+o.key+'\')">'+
-                '<input type="radio" name="'+q.id+'" '+(S.answers[q.id]===o.key?'checked':'')+'>'+
+        var sel = hasAns(q.id, o.key);
+        html += '<label class="opt'+(sel?' sel':'')+'" id="o_'+q.id+'_'+o.key+'" '+
+                'onclick="'+(q.multi?'toggle':'pick')+'(\''+q.id+'\',\''+o.key+'\')">'+
+                '<input type="'+(q.multi?'checkbox':'radio')+'" name="'+q.id+'" '+(sel?'checked':'')+'>'+
                 '<span><span class="k">'+o.key+'.</span> '+esc(o.text)+'</span></label>';
       });
       html += '</div>';
@@ -258,6 +263,24 @@ function verifyAndStart(){
     go('quiz');
   }, function(e){ go('name'); setTimeout(function(){ showErr('nerr', e.message||'Pengesahan gagal.'); }, 50); });
 }
+/* Jawapan soalan biasa disimpan sebagai rentetan ('C'); soalan kotak semak
+   sebagai array (['A','C']). Tiga pembantu di bawah ialah satu-satunya tempat
+   perbezaan itu perlu difikirkan. */
+function hasAns(qid, key){
+  var v = S.answers[qid];
+  return Array.isArray(v) ? v.indexOf(key) >= 0 : v === key;
+}
+function isAnswered(qid){
+  var v = S.answers[qid];
+  // Array KOSONG bermakna murid menanda kemudian membuang semula semua tanda —
+  // kunci masih wujud, tetapi soalan itu belum dijawab.
+  return Array.isArray(v) ? v.length > 0 : !!v;
+}
+function countAnswered(){
+  var n = 0;
+  S.questions.forEach(function(q){ if (isAnswered(q.id)) n++; });
+  return n;
+}
 function pick(qid, key){
   S.answers[qid] = key;
   S.questions.forEach(function(q){ if (q.id===qid){ q.options.forEach(function(o){
@@ -265,14 +288,32 @@ function pick(qid, key){
   }); }});
   updateProg();
 }
+function toggle(qid, key){
+  var v = S.answers[qid];
+  if (!Array.isArray(v)) v = [];
+  var i = v.indexOf(key);
+  if (i >= 0) v.splice(i, 1); else v.push(key);
+  S.answers[qid] = v;
+  var on = v.indexOf(key) >= 0;
+  var el = document.getElementById('o_'+qid+'_'+key);
+  if (el) {
+    el.className = 'opt' + (on ? ' sel' : '');
+    // Label membalut input, jadi klik pada label MENUKAR kotak itu sendiri
+    // sebelum pengendali ini berjalan. Tetapkan semula daripada keadaan kita
+    // supaya DOM tidak pernah terpesong daripada S.answers.
+    var inp = el.querySelector('input');
+    if (inp) inp.checked = on;
+  }
+  updateProg();
+}
 function updateProg(){
-  var done = Object.keys(S.answers).length, total = S.questions.length;
+  var done = countAnswered(), total = S.questions.length;
   var bar = document.getElementById('bar'); var p = document.getElementById('prog2');
   if (bar) bar.style.width = (total? Math.round(done/total*100):0) + '%';
   if (p) p.textContent = 'Dijawab ' + done + ' / ' + total;
 }
 function submitQuiz(){
-  if (Object.keys(S.answers).length < S.questions.length) {
+  if (countAnswered() < S.questions.length) {
     showErr('qerr','Sila jawab semua soalan dahulu.'); return;
   }
   loading('Menyemak jawapan…');

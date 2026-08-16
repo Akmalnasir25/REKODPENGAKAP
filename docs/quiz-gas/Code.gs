@@ -160,8 +160,15 @@ function submitAttempt(attemptId, answers) {
 
   let score = 0;
   Object.keys(a.answerKey).forEach(function (qid) {
-    const given = answers ? String(answers[qid] || '').trim().toUpperCase() : '';
-    if (given && given === String(a.answerKey[qid]).trim().toUpperCase()) score++;
+    // KEDUA-DUA belah dinormalkan, bukan kunci sahaja. Cubaan yang bermula
+    // sebelum kemas kini membawa kunci bentuk lama ('C') dalam cache 6 jam,
+    // manakala klien baharu menghantar array (['A','C']). _normKunci
+    // meratakan kedua-duanya, jadi cubaan lama tidak mendapat markah sifar.
+    const kunci = _normKunci(a.answerKey[qid]);
+    const diberi = _normKunci(answers ? answers[qid] : '');
+    // Semua atau tiada: set jawapan mesti sama persis dengan kunci.
+    // Tick tak lengkap = salah. Tick lebih = salah. (Sama seperti Google Forms.)
+    if (kunci.length > 0 && diberi.join(',') === kunci.join(',')) score++;
   });
   const total = a.total;
   const peratus = total > 0 ? Math.round((score / total) * 100) : 0;

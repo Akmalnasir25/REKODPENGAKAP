@@ -171,15 +171,28 @@ serve(async (req) => {
         .maybeSingle();
       if (!badge) return jsonResponse({ participants: [] });
 
-      // Sekolah ini mesti TELAH DISAHKAN untuk program+tahun
-      const { data: sbs } = await supabase
+      // Sekolah ini mesti TELAH DISAHKAN untuk program+tahun.
+      //
+      // Sejak migrasi 027, school_badge_status dikunci pada
+      // (school_id, badge_id, year, SIRI) — jadi sekolah yang menyertai Siri 1
+      // dan Siri 2 mempunyai LEBIH DARIPADA SATU baris di sini. `.maybeSingle()`
+      // menolak keadaan itu (PGRST116) dan memulangkan data null, yang dahulu
+      // dibaca sebagai "belum disahkan" lalu melenyapkan seluruh sekolah secara
+      // senyap. Kuiz tidak mengambil kira siri — program + tahun sama sudah
+      // memadai — jadi mana-mana siri yang disahkan melayakkan sekolah, sama
+      // seperti helper approvedSchoolIds di atas.
+      const { data: sbsRows, error: sbsErr } = await supabase
         .from('school_badge_status')
         .select('status')
         .eq('school_id', school.id)
         .eq('badge_id', badge.id)
         .eq('year', year)
-        .maybeSingle();
-      if (!sbs || !['approved', 'locked'].includes((sbs as any).status)) {
+        .in('status', ['approved', 'locked']);
+
+      if (sbsErr) {
+        return jsonResponse({ error: 'Gagal semak status sekolah', details: sbsErr.message }, 500);
+      }
+      if (!sbsRows || sbsRows.length === 0) {
         return jsonResponse({ participants: [] }); // belum disahkan
       }
 

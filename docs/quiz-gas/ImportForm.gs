@@ -23,13 +23,21 @@ function resolveFormId(ref) {
 }
 
 /**
- * Import soalan dari Google Form ke tab Soalan — guna FormApp sahaja
- * (tiada API tambahan diperlukan). Membaca soalan aneka pilihan + kunci
- * jawapan. GAMBAR: hanya blok imej BERASINGAN (FormApp.ItemType.IMAGE)
- * boleh dibaca → disimpan ke Drive & dikaitkan dengan soalan SELEPASNYA.
- * Gambar "inline" (lekat pada soalan) tidak boleh dibaca FormApp → tampal
- * URL manual pada medan "URL Gambar" / lajur `gambar`.
- * Pulang { imported, withImage }.
+ * Import soalan dari Google Form ke tab Soalan.
+ *
+ * JENIS SOALAN yang dibaca:
+ *   MULTIPLE_CHOICE (bulatan)  -> satu jawapan     'C'
+ *   CHECKBOX (kotak semak)     -> jawapan berbilang 'A,C'
+ *   LIST (menu jatuh)          -> satu jawapan     'C'
+ *
+ * GAMBAR, dua sumber:
+ *   1. Blok imej BERASINGAN (FormApp.ItemType.IMAGE) — dikaitkan dengan
+ *      soalan SELEPASNYA.
+ *   2. Gambar INLINE (lekat terus pada soalan) — FormApp tidak mendedahkannya
+ *      langsung, jadi ia diambil melalui Forms REST API bila tersedia
+ *      (lihat _inlineImagesFromApi). Gambar inline mengatasi blok yang menunggu.
+ *
+ * Pulang { imported, withImage, dipotong }.
  */
 function importFormToSheet(formRef, quizId) {
   quizId = String(quizId || '').trim();
@@ -43,12 +51,15 @@ function importFormToSheet(formRef, quizId) {
     throw new Error('Gagal buka Form (guna akaun sama & URL EDIT): ' + e.message);
   }
 
+  var inlineImg = _inlineImagesFromApi(formId, quizId);
+
   var items = form.getItems();
   var rows = [];
   var pendingImg = '';     // gambar blok berasingan untuk soalan seterusnya
   var withImage = 0;
+  var dipotong = 0;
 
-  items.forEach(function (it) {
+  items.forEach(function (it, idx) {
     var type = it.getType();
 
     if (type === FormApp.ItemType.IMAGE) {
@@ -57,30 +68,134 @@ function importFormToSheet(formRef, quizId) {
       return;
     }
 
+    var soalan = null;
     if (type === FormApp.ItemType.MULTIPLE_CHOICE) {
-      var mc = it.asMultipleChoiceItem();
-      var choices = mc.getChoices();
-      var correct = '';
-      choices.forEach(function (c, i) {
-        try { if (c.isCorrectAnswer() && i < LETTERS.length) correct = LETTERS[i]; } catch (e) {}
-      });
-      // quizId|soalan|A|B|C|D|E|jawapan|markah|aktif|gambar
-      var row = [quizId, it.getTitle(), '', '', '', '', '', correct, 1, true, pendingImg];
-      for (var i = 0; i < choices.length && i < 5; i++) row[2 + i] = _stripChoiceLabel(choices[i].getValue(), i);
-      if (pendingImg) withImage++;
-      rows.push(row);
-      pendingImg = ''; // guna sekali sahaja
+      soalan = _soalanDariPilihan(it.asMultipleChoiceItem(), false);
+    } else if (type === FormApp.ItemType.CHECKBOX) {
+      soalan = _soalanDariPilihan(it.asCheckboxItem(), true);
+    } else if (type === FormApp.ItemType.LIST) {
+      soalan = _soalanDariPilihan(it.asListItem(), false);
     }
+
+    // Bukan soalan berpilihan (tajuk bahagian, pemisah halaman, jawapan
+    // pendek…). pendingImg SENGAJA dikekalkan supaya gambar tetap sampai
+    // kepada soalan berikutnya walaupun ada tajuk bahagian di antaranya.
+    if (!soalan) return;
+
+    var tajuk = String(it.getTitle() || '').trim();
+    // Gambar inline soalan ini mengatasi blok imej yang sedang menunggu.
+    var gambar = inlineImg[String(idx)] || inlineImg['T:' + tajuk] || pendingImg || '';
+
+    // quizId|soalan|A|B|C|D|E|jawapan|markah|aktif|gambar
+    var row = [quizId, tajuk, '', '', '', '', '', soalan.jawapan, 1, true, gambar];
+    for (var i = 0; i < soalan.pilihan.length && i < 5; i++) row[2 + i] = soalan.pilihan[i];
+
+    if (gambar) withImage++;
+    if (soalan.dipotong) dipotong++;
+    rows.push(row);
+
+    // Dikosongkan HANYA selepas satu baris soalan benar-benar ditulis.
+    // Sebelum ini pengosongan berlaku dalam cawangan MULTIPLE_CHOICE sahaja,
+    // jadi gambar sebelum soalan kotak semak (yang dahulunya dilangkau)
+    // melimpah dan melekat pada soalan berikutnya yang salah.
+    pendingImg = '';
   });
 
-  if (rows.length === 0) throw new Error('Tiada soalan aneka pilihan dijumpai dalam Form.');
+  if (rows.length === 0) {
+    throw new Error('Tiada soalan berpilihan dijumpai dalam Form ' +
+                    '(aneka pilihan, kotak semak, atau menu jatuh).');
+  }
 
   var lock = LockService.getScriptLock(); lock.waitLock(15000);
   try {
     var sh = _sheet(SHEET_SOALAN);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    return { imported: rows.length, withImage: withImage };
+    return { imported: rows.length, withImage: withImage, dipotong: dipotong };
   } finally { lock.releaseLock(); }
+}
+
+/**
+ * Baca satu item berpilihan → { pilihan:[teks…], jawapan:'A,C', dipotong }.
+ * Pulang null kalau item itu bukan soalan yang boleh digunakan.
+ *
+ * `multi` menentukan sama ada semua jawapan betul dikumpul (kotak semak) atau
+ * hanya yang pertama (bulatan / menu jatuh).
+ */
+function _soalanDariPilihan(item, multi) {
+  var choices;
+  try { choices = item.getChoices(); } catch (e) { return null; }
+  if (!choices || choices.length < 2) return null;
+
+  var pilihan = [];
+  var betul = [];
+  choices.forEach(function (c, i) {
+    if (i < 5) pilihan.push(_stripChoiceLabel(c.getValue(), i));
+    try {
+      if (c.isCorrectAnswer() && i < LETTERS.length) betul.push(LETTERS[i]);
+    } catch (e) {}   // Form bukan jenis Kuiz — tiada kunci jawapan
+  });
+
+  if (!multi && betul.length > 1) betul = [betul[0]];
+
+  return {
+    pilihan: pilihan,
+    jawapan: _normKunci(betul).join(','),
+    dipotong: choices.length > 5,   // tab Soalan hanya ada lajur A–E
+  };
+}
+
+/**
+ * Ambil gambar INLINE (yang dilekat terus pada soalan) melalui Forms REST API.
+ *
+ * FormApp tidak mendedahkan gambar inline langsung — itu had perkhidmatan
+ * klasik, bukan bug. REST API mendedahkannya pada questionItem.image.
+ *
+ * PERLU (lihat README-setup.md §C):
+ *   - Forms API diaktifkan untuk projek Google Cloud skrip ini
+ *   - skop https://www.googleapis.com/auth/forms.body.readonly
+ *
+ * Kalau mana-mana tiada, fungsi ini pulang peta KOSONG dan import berjalan
+ * seperti biasa dengan blok imej berasingan sahaja. Sengaja tidak membaling
+ * ralat: gambar inline ialah tambahan, bukan syarat untuk import berfungsi.
+ *
+ * Pulang peta { '<index item>': url, 'T:<tajuk>': url } — dipadan ikut
+ * kedudukan dahulu, kemudian tajuk sebagai sandaran.
+ */
+function _inlineImagesFromApi(formId, quizId) {
+  var peta = {};
+  var data;
+  try {
+    var resp = UrlFetchApp.fetch(
+      'https://forms.googleapis.com/v1/forms/' + encodeURIComponent(formId), {
+        headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+        muteHttpExceptions: true,
+      });
+    if (resp.getResponseCode() !== 200) return peta;   // API/skop tiada — senyap
+    data = JSON.parse(resp.getContentText() || '{}');
+  } catch (e) {
+    return peta;
+  }
+
+  var items = (data && data.items) || [];
+  items.forEach(function (it, idx) {
+    var img = it.questionItem && it.questionItem.image;
+    var uri = img && img.contentUri;
+    if (!uri) return;
+    var url;
+    try { url = _saveImageFromUrl(uri, quizId); } catch (e) { return; }
+    if (!url) return;
+    peta[String(idx)] = url;
+    var tajuk = String(it.title || '').trim();
+    if (tajuk) peta['T:' + tajuk] = url;
+  });
+  return peta;
+}
+
+/** Muat turun imej dari URL (contentUri Forms API) → Drive → pulang URL papar */
+function _saveImageFromUrl(url, quizId) {
+  var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (resp.getResponseCode() !== 200) return '';
+  return _saveImageBlob(resp.getBlob(), quizId);
 }
 
 /**
@@ -134,9 +249,15 @@ function importFromGoogleForm() {
 
   try {
     const r = importFormToSheet(formResp.getResponseText(), quizResp.getResponseText());
-    ui.alert(r.imported + ' soalan diimport (' + (r.withImage || 0) + ' dengan gambar blok berasingan).\n\n' +
-      '• Gambar INLINE (lekat pada soalan) tak boleh dibaca — tampal URL pada lajur "gambar".\n' +
-      '• Jika lajur Jawapan kosong, Form bukan kuiz berkunci — isi A–E manual.');
+    var msg = r.imported + ' soalan diimport (' + (r.withImage || 0) + ' dengan gambar).\n\n' +
+      '• Soalan kotak semak disimpan dengan jawapan berbilang, cth "A,C".\n' +
+      '• Jika lajur Jawapan kosong, Form bukan kuiz berkunci — isi A–E manual.';
+    if (r.dipotong) {
+      msg += '\n\n⚠ ' + r.dipotong + ' soalan ada LEBIH 5 pilihan. Tab Soalan hanya ' +
+             'ada lajur A–E, jadi pilihan ke-6 dan seterusnya DIBUANG. Semak soalan ' +
+             'tersebut sebelum kuiz dibuka.';
+    }
+    ui.alert(msg);
   } catch (e) {
     ui.alert('Gagal import: ' + e.message);
   }
@@ -216,17 +337,21 @@ function parseWordText(text, quizId) {
   lines.forEach(function (line) {
     const qMatch = line.match(/^(\d+)[.)]\s*(.+)$/);            // "1. soalan"
     const oMatch = line.match(/^(\*?)\s*([A-Ea-e])[.)]\s*(.+)$/); // "A. pilihan" / "*C. ..."
-    const ansMatch = line.match(/^jawapan\s*[:\-]?\s*([A-Ea-e])/i);
+    // Ambil SELURUH baki baris supaya "Jawapan: A, C" boleh dibaca, bukan
+    // huruf pertama sahaja. _normKunci yang memilih huruf yang sah.
+    const ansMatch = line.match(/^jawapan\s*[:\-]?\s*(.+)$/i);
 
     if (qMatch) {
       flush();
-      cur = { soalan: qMatch[2].trim(), options: {}, jawapan: '' };
+      cur = { soalan: qMatch[2].trim(), options: {}, jawapan: [] };
     } else if (oMatch && cur) {
       const L = oMatch[2].toUpperCase();
       cur.options[L] = oMatch[3].trim();
-      if (oMatch[1] === '*') cur.jawapan = L;
+      // Kumpul, bukan tulis ganti — dokumen boleh menanda '*' pada beberapa
+      // pilihan untuk soalan kotak semak.
+      if (oMatch[1] === '*') cur.jawapan.push(L);
     } else if (ansMatch && cur) {
-      cur.jawapan = ansMatch[1].toUpperCase();
+      cur.jawapan = _normKunci(ansMatch[1]);
     } else if (cur && Object.keys(cur.options).length === 0) {
       cur.soalan += ' ' + line; // sambungan teks soalan
     }
@@ -237,7 +362,8 @@ function parseWordText(text, quizId) {
   function toRow(c, qid) {
     const keys = Object.keys(c.options);
     const opts = LETTERS.map(function (L) { return c.options[L] || ''; });
-    return [qid, c.soalan, opts[0], opts[1], opts[2], opts[3], opts[4], c.jawapan, 1, true];
+    return [qid, c.soalan, opts[0], opts[1], opts[2], opts[3], opts[4],
+            _normKunci(c.jawapan).join(','), 1, true];
     void keys;
   }
 }

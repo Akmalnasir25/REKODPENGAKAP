@@ -42,6 +42,12 @@ Rujukan medan (untuk pengetahuan):
   - `badgeName` mesti **sama** dengan nama program di scoutnadi.
   - `verifyMethod`: `ic_last4` atau `membership`. `aktif`: TRUE untuk papar.
 - `Soalan`: `quizId | soalan | A | B | C | D | E | jawapan | markah | aktif`
+  - `jawapan` menerima **satu atau lebih** huruf. Satu huruf (`C`) → soalan
+    bulatan. Lebih daripada satu (`A,C`) → soalan **kotak semak**, dipapar
+    dengan kotak semak dan dinilai **semua atau tiada**: murid mesti menanda
+    tepat set itu — tak lengkap atau lebih dikira salah.
+  - Bentuk yang diterima: `A,C` · `AC` · `a, c` · `A dan C`. Semuanya
+    dinormalkan kepada `A,C` apabila disimpan melalui Panel Admin.
 - `Cubaan`, `Keputusan`: diisi automatik oleh sistem.
 
 ---
@@ -60,6 +66,25 @@ Rujukan medan (untuk pengetahuan):
    **Kuiz ▸ ① Bina / Semak Tab** (atau Run fungsi `setupSheets` di editor) untuk bina
    keempat-empat tab automatik.
 3. **Advanced Drive Service** (untuk import Word sahaja): Services ▸ tambah **Drive API**.
+
+### Gambar inline (pilihan — hanya jika soalan ada gambar lekat pada soalan)
+Tanpa langkah ini, import tetap berfungsi; cuma gambar **inline** tidak masuk.
+
+1. Apps Script ▸ **Project Settings** ▸ tandakan
+   *"Show appsscript.json manifest file in editor"*.
+2. Buka `appsscript.json`, tambah skop ini ke dalam `oauthScopes`
+   (kekalkan skop sedia ada — jangan padam):
+   ```json
+   "https://www.googleapis.com/auth/forms.body.readonly"
+   ```
+3. Apps Script ▸ **Project Settings** ▸ *Google Cloud Platform (GCP) Project* —
+   buka projek GCP tersebut, kemudian **APIs & Services ▸ Enable APIs** ▸
+   aktifkan **Google Forms API**.
+4. Jalankan import sekali; Google akan minta kebenaran baharu. Terima.
+
+> Kalau langkah ini dilangkau, `_inlineImagesFromApi` gagal **secara senyap**
+> dan import diteruskan dengan blok imej berasingan sahaja. Itu memang
+> disengajakan — gambar inline ialah tambahan, bukan syarat.
 4. **Set Script Properties**: Project Settings ▸ Script Properties, tambah:
    - `SUPABASE_FN_URL` = function URL (langkah A3)
    - `SUPABASE_ANON_KEY` = anon key (langkah A3)
@@ -110,14 +135,30 @@ Buka semula Sheet → menu **Kuiz** muncul:
   `quizId`. Jika Form ialah kuiz berkunci jawapan, lajur Jawapan diisi automatik; jika
   tidak, isi A–E sendiri.
 
+### Jenis soalan yang diimport
+| Jenis di Google Form | Hasil dalam tab `Soalan` |
+|---|---|
+| Aneka pilihan (bulatan) | satu huruf, cth `C` |
+| **Kotak semak** | huruf berbilang, cth `A,C` |
+| Menu jatuh (dropdown) | satu huruf, cth `C` |
+| Grid (kotak semak / aneka pilihan) | **tidak disokong** — dilangkau |
+
+> Had **5 pilihan** setiap soalan, kerana tab `Soalan` hanya ada lajur A–E.
+> Soalan dengan 6 pilihan atau lebih akan dipotong, dan import akan memberi
+> amaran berapa soalan terjejas. Semak soalan tersebut sebelum kuiz dibuka.
+
 ### Gambar pada soalan
 - **Blok imej berasingan** (toolbar Form "Tambah imej" 🖼️, sebelum soalan) →
   **auto-import**: disimpan ke folder Drive "Kuiz Pengakap - Gambar" & dikaitkan dengan
   soalan selepasnya (lajur `gambar`).
-- **Gambar inline** (lekat terus pada soalan) → tidak boleh dibaca FormApp (had Google).
-  Cara mudah: **Panel Admin ▸ Soalan ▸ Edit ▸ "Gambar Soalan" ▸ pilih fail imej** —
-  sistem muat naik ke Drive ("Kuiz Pengakap - Gambar") & isi URL automatik. Kuiz akan
-  paparkannya. (Atau tampal URL sendiri pada lajur `gambar`.)
+- **Gambar inline** (lekat terus pada soalan) → `FormApp` tidak boleh membacanya
+  (had Google). Sistem cuba mengambilnya melalui **Forms REST API**; kalau API itu
+  belum diaktifkan, import tetap berjalan tanpa gambar inline — **tiada ralat**,
+  jadi semak lajur `gambar` selepas import kalau tuan menjangkakannya.
+  Untuk mengaktifkan, lihat "Gambar inline" di §C.
+- **Sandaran manual** (sentiasa berfungsi): **Panel Admin ▸ Soalan ▸ Edit ▸
+  "Gambar Soalan" ▸ pilih fail imej** — sistem muat naik ke Drive & isi URL
+  automatik. (Atau tampal URL sendiri pada lajur `gambar`.)
 - **Import dari Word (.docx)** — muat naik .docx ke Drive, beri ID fail. Format:
   soalan bernombor `1.`, pilihan `A.`–`E.`, jawapan ditanda `*` atau baris `Jawapan: C`.
 - **CSV/Excel** — guna `File ▸ Import` Google Sheets terus ke tab `Soalan`

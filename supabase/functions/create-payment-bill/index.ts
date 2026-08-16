@@ -221,7 +221,11 @@ serve(async (req) => {
     const item: Item[] = [];
     const dilangkau: Dilangkau[] = [];
     const sudahDibayar: SudahDibayar[] = [];
-    const terusHantar: string[] = [];   // badge_id yang tidak perlu bayaran
+    // Tidak perlu bayaran, dihantar terus. Nama disimpan bersama id kerana
+    // respons mesti MENAMAKAN setiap program yang dihantar tanpa yuran: satu
+    // tekanan Hantar boleh menghantar program yang guru tidak sedar termasuk
+    // dalam siri itu (K2).
+    const terusHantar: { badgeId: string; nama: string }[] = [];
     // Sudah dibayar sepenuhnya tetapi belum berada dalam giliran — cth kerana
     // admin membukanya semula. Wang sudah masuk, jadi ia mesti boleh kembali
     // ke giliran tanpa membayar dua kali.
@@ -242,7 +246,7 @@ serve(async (req) => {
       });
 
       // Tiada tetapan program = tiada pintu bayaran. Hantar terus.
-      if (!psId) { terusHantar.push(badgeId); continue; }
+      if (!psId) { terusHantar.push({ badgeId, nama }); continue; }
 
       const { data: ps } = await admin
         .from('program_settings')
@@ -290,7 +294,7 @@ serve(async (req) => {
       // Siri percuma: tiada bil, hantar terus. Satu siri boleh mengandungi
       // program berbayar dan program percuma serentak — gelung ini sudah
       // mengasingkannya per badge.
-      if (!perluBayar) { terusHantar.push(badgeId); continue; }
+      if (!perluBayar) { terusHantar.push({ badgeId, nama }); continue; }
 
       const { data: yuranRows } = await admin.rpc('resolve_program_fees', {
         p_program_setting_id: psId,
@@ -309,10 +313,26 @@ serve(async (req) => {
         pembantu: Math.max(0, kira.pembantu - lindung.pembantu),
       };
 
-      if (dilindungi.has(badgeId) && baki.peserta + baki.pemimpin + baki.penolong + baki.pembantu === 0) {
-        // Dilindungi sepenuhnya. Dilangkau supaya sekolah tidak dibil dua
-        // kali — tetapi DILAPORKAN, kerana program yang hilang dari bil tanpa
-        // penjelasan kelihatan seperti sistem tersilap kira.
+      const amount =
+        (ps.fee_peserta  !== null ? baki.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
+        (ps.fee_pemimpin !== null ? baki.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
+        (ps.fee_penolong !== null ? baki.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0) +
+        (ps.fee_pembantu !== null ? baki.pembantu * Number(yuran?.fee_pembantu ?? ps.fee_pembantu) : 0);
+
+      // Sudah dibayar: wang pernah diterima bagi program ini, dan tiada apa lagi
+      // untuk dicaj.
+      //
+      // Soalannya ialah "adakah masih ada apa-apa untuk dicaj", BUKAN "adakah
+      // baki sifar". Peranan beryuran NULL boleh ditambah selepas bayaran —
+      // memberi baki BUKAN sifar dengan jumlah tetap RM0. Syarat lama terlepas
+      // kes itu, menghantarnya ke terusHantar, yang menulis ganti payment_status
+      // 'paid' dengan 'not_required' dan memadam fakta bahawa wang pernah
+      // diterima. Pengesahan kemudian mustahil (K1 — SMK Tambun, Ogos 2026:
+      // RM510 dibayar, seorang Pemimpin tanpa yuran ditambah selepas ditolak).
+      if (dilindungi.has(badgeId) && amount <= 0) {
+        // Dilangkau supaya sekolah tidak dibil dua kali — tetapi DILAPORKAN,
+        // kerana program yang hilang dari bil tanpa penjelasan kelihatan seperti
+        // sistem tersilap kira.
         sudahDibayar.push({
           program: nama,
           dibayarUntuk: lindung.peserta + lindung.pemimpin + lindung.penolong + lindung.pembantu,
@@ -328,15 +348,12 @@ serve(async (req) => {
         continue;
       }
 
-      const amount =
-        (ps.fee_peserta  !== null ? baki.peserta  * Number(yuran?.fee_peserta  ?? ps.fee_peserta)  : 0) +
-        (ps.fee_pemimpin !== null ? baki.pemimpin * Number(yuran?.fee_pemimpin ?? ps.fee_pemimpin) : 0) +
-        (ps.fee_penolong !== null ? baki.penolong * Number(yuran?.fee_penolong ?? ps.fee_penolong) : 0) +
-        (ps.fee_pembantu !== null ? baki.pembantu * Number(yuran?.fee_pembantu ?? ps.fee_pembantu) : 0);
-
-      // RM0 bermakna tiada peranan yang didaftarkan dicaj. Bil RM0 akan
-      // menyekat sekolah pada skrin yang mustahil dilepasi.
-      if (amount <= 0) { terusHantar.push(badgeId); continue; }
+      // RM0 tanpa sebarang bayaran terdahulu: tiada peranan yang didaftarkan
+      // dicaj. Pendaftaran pegawai-sahaja pada siri berbayar adalah SAH, jadi
+      // ini dihantar dan bukan dilangkau — tetapi ia dinamakan dalam respons
+      // supaya guru nampak apa yang berlaku (K2). Bil RM0 akan menyekat sekolah
+      // pada skrin yang mustahil dilepasi.
+      if (amount <= 0) { terusHantar.push({ badgeId, nama }); continue; }
 
       // Tempat yang diminta = peranan DICAJ yang belum dilindungi, sama
       // seperti claim_siri_seats yang membaca snapshot bil ini sendiri.
@@ -409,12 +426,24 @@ serve(async (req) => {
     }
 
     // ── Program tanpa bayaran: hantar terus ───────────────────────────
-    for (const badgeId of terusHantar) {
-      await admin.from('school_badge_status').upsert({
-        school_id: schoolId, badge_id: badgeId, year, siri,
-        payment_status: 'not_required', status: 'submitted',
-        submitted_at: new Date().toISOString(),
-      }, { onConflict: 'school_id,badge_id,year,siri' });
+    for (const { badgeId } of terusHantar) {
+      // payment_status hanya ditetapkan bagi baris yang BELUM mempunyai rekod
+      // bayaran. Menulisnya tanpa syarat memadam 'paid' pada pendaftaran yang
+      // sudah dijelaskan (K1). Baris sedia ada hanya dikemas kini statusnya.
+      const sediaAda = statusBagiBadge.get(badgeId);
+      if (sediaAda) {
+        await admin.from('school_badge_status')
+          .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+          .eq('school_id', schoolId).eq('badge_id', badgeId)
+          .eq('year', year).eq('siri', siri)
+          .neq('status', 'approved');
+      } else {
+        await admin.from('school_badge_status').insert({
+          school_id: schoolId, badge_id: badgeId, year, siri,
+          payment_status: 'not_required', status: 'submitted',
+          submitted_at: new Date().toISOString(),
+        });
+      }
       const subIdsBadge = (subs || []).filter((s: any) => s.badge_id === badgeId).map((s: any) => s.id);
       if (subIdsBadge.length > 0) {
         await admin.from('submissions').update({ status: 'submitted' })
@@ -439,10 +468,16 @@ serve(async (req) => {
       }
     }
 
+    // Program yang dihantar tanpa yuran, dinamakan. Satu tekanan Hantar
+    // meliputi SEMUA program dalam siri, jadi guru boleh menghantar program
+    // yang mereka tidak sedar termasuk — dan mendapati ia berada dalam giliran
+    // pengesahan tanpa pernah diberitahu (K2).
+    const dihantarPercuma = terusHantar.map(t => t.nama);
+
     if (itemDibil.length === 0) {
       if (terusHantar.length > 0 || hantarSemula.length > 0) {
         return json({
-          status: 'success', skipped: true, dilangkau, sudahDibayar,
+          status: 'success', skipped: true, dilangkau, sudahDibayar, dihantarPercuma,
           message: hantarSemula.length > 0
             ? 'Program yang sudah dibayar dikembalikan ke giliran pengesahan.'
             : dilangkau.length > 0
@@ -452,7 +487,7 @@ serve(async (req) => {
       }
       if (sudahDibayar.length > 0) {
         return json({
-          status: 'success', skipped: true, dilangkau, sudahDibayar,
+          status: 'success', skipped: true, dilangkau, sudahDibayar, dihantarPercuma,
           message: 'Semua program dalam siri ini sudah dibayar.',
         });
       }
@@ -529,7 +564,7 @@ serve(async (req) => {
         paymentId: bil.id,
         amount, transactionFee: 0, totalAmount: total,
         expiresAt: luput.toISOString(),
-        pecahan, dilangkau, sudahDibayar,
+        pecahan, dilangkau, sudahDibayar, dihantarPercuma,
         message: 'Bil dijana. Sila buat bayaran dan muat naik bukti.',
       });
     }
@@ -609,7 +644,7 @@ serve(async (req) => {
       billUrl,
       amount, transactionFee: caj, totalAmount: total,
       expiresAt: luput.toISOString(),
-      pecahan, dilangkau, sudahDibayar,
+      pecahan, dilangkau, sudahDibayar, dihantarPercuma,
     });
   } catch (error: any) {
     console.error('create-payment-bill error:', error?.message);

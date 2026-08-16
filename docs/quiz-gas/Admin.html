@@ -216,8 +216,14 @@ function editQ(row){
     '<div class="row"><div><label>A</label><input id="s_A" value="'+f(q.A)+'"></div><div><label>B</label><input id="s_B" value="'+f(q.B)+'"></div></div>'+
     '<div class="row"><div><label>C</label><input id="s_C" value="'+f(q.C)+'"></div><div><label>D</label><input id="s_D" value="'+f(q.D)+'"></div></div>'+
     '<label>E (pilihan)</label><input id="s_E" value="'+f(q.E)+'">'+
-    '<div class="row"><div><label>Jawapan Betul</label><select id="s_jawapan">'+
-      ['A','B','C','D','E'].map(function(L){return opt(L,L,q.jawapan);}).join('')+'</select></div>'+
+    '<div class="row"><div><label>Jawapan Betul</label>'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 0">'+
+      ['A','B','C','D','E'].map(function(L){
+        var on = normKunci(q.jawapan).indexOf(L) >= 0;
+        return '<label style="display:flex;align-items:center;gap:5px;font-weight:600;cursor:pointer">'+
+               '<input type="checkbox" id="s_ans_'+L+'"'+(on?' checked':'')+'> '+L+'</label>';
+      }).join('')+
+      '</div><div class="muted">Tanda lebih daripada satu untuk soalan kotak semak.</div></div>'+
     '<div><label>Markah</label><input id="s_markah" value="'+f(q.markah||1)+'"></div>'+
     '<div><label>Aktif?</label><select id="s_aktif">'+opt('true','Ya',String(q.aktif))+opt('false','Tidak',String(q.aktif))+'</select></div></div>'+
     '<label>Gambar Soalan (pilihan)</label>'+
@@ -229,13 +235,29 @@ function editQ(row){
     '<div id="msg"></div>'+
     '<div class="row" style="margin-top:16px"><button onclick="saveQ()">Simpan</button><button class="ghost" onclick="showTab(\'soalan\')">Batal</button></div>';
 }
+/* Padanan klien kepada _normKunci di Quiz.gs — kekalkan kedua-duanya selari. */
+function normKunci(v){
+  var s=String(v==null?'':v).toUpperCase();
+  var toks=/[^A-E]/.test(s.trim())
+    ? s.split(/[^A-E]+/).filter(function(t){return t.length===1;})
+    : s.trim().split('');
+  var out=[],seen={};
+  toks.forEach(function(L){ if(L&&!seen[L]){seen[L]=true;out.push(L);} });
+  return out.sort();
+}
 function saveQ(){
   var g=function(id){var el=document.getElementById('s_'+id);return el?el.value:'';};
   var quizId=g('quizId')||curQuizRemembered();
+  var ans=['A','B','C','D','E'].filter(function(L){
+    var el=document.getElementById('s_ans_'+L); return el&&el.checked;
+  }).join(',');
   var q={quizId:quizId,soalan:g('soalan'),A:g('A'),B:g('B'),C:g('C'),D:g('D'),E:g('E'),
-    jawapan:g('jawapan'),markah:g('markah'),aktif:g('aktif')==='true',gambar:g('gambar'),row:g('row')?parseInt(g('row'),10):0};
+    jawapan:ans,markah:g('markah'),aktif:g('aktif')==='true',gambar:g('gambar'),row:g('row')?parseInt(g('row'),10):0};
   if(!String(quizId).trim()){ document.getElementById('msg').innerHTML='<div class="err">Sila pilih kuiz dahulu (kembali ke tab Soalan).</div>'; return; }
   if(!q.soalan.trim()){ document.getElementById('msg').innerHTML='<div class="err">Soalan diperlukan.</div>'; return; }
+  if(!ans){ document.getElementById('msg').innerHTML='<div class="err">Sila tanda sekurang-kurangnya satu jawapan betul.</div>'; return; }
+  var kosong=ans.split(',').filter(function(L){ return !String(g(L)||'').trim(); });
+  if(kosong.length){ document.getElementById('msg').innerHTML='<div class="err">Jawapan '+kosong.join(', ')+' ditanda betul tetapi teks pilihannya kosong.</div>'; return; }
   document.getElementById('msg').innerHTML='<div class="muted">Menyimpan…</div>';
   call('adminSaveQuestion',[TOKEN,q],function(){ showTab('soalan'); },function(e){ document.getElementById('msg').innerHTML='<div class="err">'+esc((e&&e.message)||'Gagal')+'</div>'; });
 }

@@ -172,6 +172,17 @@ export const PaymentScreen: React.FC<Props> = ({
           </div>
         )}
 
+        {dilangkauPenuh.dihantarPercuma && dilangkauPenuh.dihantarPercuma.length > 0 && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 mt-3">
+            <p className="text-[11px] font-bold text-emerald-800 mb-1">Dihantar tanpa yuran:</p>
+            <ul className="text-[11px] text-emerald-700 space-y-0.5">
+              {dilangkauPenuh.dihantarPercuma.map((nama) => (
+                <li key={nama}>· <strong>{nama}</strong></li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {dilangkauPenuh.dilangkau && dilangkauPenuh.dilangkau.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-3">
             <p className="text-[11px] font-bold text-amber-800 mb-1">Tidak dihantar:</p>
@@ -314,6 +325,25 @@ export const PaymentScreen: React.FC<Props> = ({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Program tanpa yuran yang SUDAH dihantar. Satu tekanan Hantar meliputi
+          semua program dalam siri ini, jadi program yang guru tidak sedar
+          termasuk boleh masuk ke giliran pengesahan tanpa mereka ketahui —
+          lalu ditolak admin, dan kitaran itu berulang. Ia mesti dinamakan di
+          sini, sebelum guru meneruskan bayaran. */}
+      {bil?.dihantarPercuma && bil.dihantarPercuma.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 mb-3">
+          <p className="text-[11px] font-bold text-emerald-800 mb-1">Dihantar tanpa yuran:</p>
+          <ul className="text-[11px] text-emerald-700 space-y-0.5">
+            {bil.dihantarPercuma.map((nama) => (
+              <li key={nama}>· <strong>{nama}</strong></li>
+            ))}
+          </ul>
+          <p className="text-[10px] text-emerald-600 mt-1.5">
+            Program ini tiada yuran dan telah dihantar terus untuk pengesahan.
+          </p>
         </div>
       )}
 

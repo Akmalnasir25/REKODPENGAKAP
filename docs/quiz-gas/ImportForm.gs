@@ -539,12 +539,71 @@ function _diagnosGambarForm(ref) {
       if (it.questionItem && it.questionItem.image && it.questionItem.image.contentUri) inline++;
     });
     L.push('  gambar INLINE dijumpai: ' + inline);
+
+    if (inline === 0) {
+      L.push('');
+      L.push('Forms API berfungsi, tetapi Form ini tiada gambar inline.');
+      L.push('Kalau gambar nampak di Form, ia BLOK IMEJ berasingan (' + blok + ' dijumpai)');
+      L.push('- itu memang sudah diimport tanpa apa-apa tetapan tambahan.');
+      return L.join('\n');
+    }
+
+    // ---- 4. Cuba betul-betul: muat turun satu gambar, dan simpan ke Drive ----
+    //
+    // Menjumpai gambar tidak sama dengan berjaya menyimpannya. contentUri ialah
+    // URL bertandatangan yang hidup sekejap sahaja, dan simpanan ke Drive boleh
+    // gagal atas sebabnya sendiri (kuota, sekatan perkongsian). Dua kegagalan
+    // itu memerlukan pembetulan yang sama sekali berbeza, jadi diagnos mesti
+    // membezakannya - bukan sekadar berkata "gagal disimpan".
+    var uji = '';
+    items.some(function (it) {
+      var im = it.questionItem && it.questionItem.image;
+      if (im && im.contentUri) { uji = im.contentUri; return true; }
+      return false;
+    });
+
     L.push('');
-    L.push(inline > 0
-      ? 'BAIK. Gambar inline akan masuk semasa import.'
-      : 'Forms API berfungsi, tetapi Form ini tiada gambar inline.\n' +
-        'Kalau gambar nampak di Form, ia BLOK IMEJ berasingan (' + blok + ' dijumpai)\n' +
-        '- itu memang sudah diimport tanpa apa-apa tetapan tambahan.');
+    L.push('UJI GAMBAR PERTAMA:');
+    var blob = null;
+    try {
+      var ir = UrlFetchApp.fetch(uji, { muteHttpExceptions: true });
+      var ikod = ir.getResponseCode();
+      L.push('  muat turun: HTTP ' + ikod);
+      if (ikod === 200) {
+        blob = ir.getBlob();
+        L.push('  jenis: ' + (blob.getContentType() || '?') +
+               ', saiz: ' + blob.getBytes().length + ' bait');
+      } else {
+        L.push('  ' + String(ir.getContentText() || '').slice(0, 200));
+        L.push('');
+        L.push('PUNCA: URL gambar ditolak. contentUri sudah luput atau');
+        L.push('memerlukan kebenaran. Cuba import semula - URL dijana baharu');
+        L.push('setiap kali Forms API dipanggil.');
+        return L.join('\n');
+      }
+    } catch (e) {
+      L.push('  muat turun GAGAL: ' + e.message);
+      return L.join('\n');
+    }
+
+    try {
+      var simpan = _saveImageBlob(blob, 'diagnos');
+      L.push('  simpan ke Drive: OK (' + simpan.fileId + ')');
+      try {
+        DriveApp.getFileById(simpan.fileId).setTrashed(true);
+        L.push('  fail ujian dibuang semula');
+      } catch (e2) {}
+      L.push('');
+      L.push('BAIK. Kedua-dua langkah berjaya - gambar inline sepatutnya masuk.');
+      L.push('Kalau import masih gagal, jalankan import sekali lagi: contentUri');
+      L.push('hidup sekejap sahaja dan boleh luput antara pratonton dan simpan.');
+    } catch (e) {
+      L.push('  simpan ke Drive: GAGAL - ' + e.message);
+      L.push('');
+      L.push('PUNCA: gambar berjaya dimuat turun tetapi Drive menolak simpanan.');
+      L.push('Biasanya storan Drive penuh, atau dasar organisasi menyekat');
+      L.push('perkongsian "sesiapa yang ada pautan".');
+    }
     return L.join('\n');
   }
 

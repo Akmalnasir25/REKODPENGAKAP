@@ -46,6 +46,34 @@
     .spin{width:22px;height:22px;border:3px solid var(--ring);border-top-color:var(--c);border-radius:50%;animation:s .8s linear infinite;display:inline-block;vertical-align:middle}
     @keyframes s{to{transform:rotate(360deg)}}
     .box{border:1px dashed var(--ring);border-radius:14px;padding:14px;margin-top:14px;background:#faf8ff}
+    /* ---- Pratonton import ---- */
+    .pbar{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.97);border:1px solid var(--line);
+      border-radius:14px;padding:11px 14px;margin:12px 0 4px;box-shadow:0 6px 18px rgba(76,29,149,.12)}
+    .pbar .cnt{font-size:.84rem;font-weight:700;color:var(--c2)}
+    .pbar .row{margin-top:9px}
+    .banner{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:12px 14px;
+      font-size:.85rem;color:#92400e;margin-top:12px;line-height:1.5}
+    .qcard{border:1px solid var(--line);border-left:4px solid var(--c3);border-radius:14px;
+      padding:14px;margin-top:12px;background:#fff}
+    .qcard.bad{border-left-color:var(--bad);background:#fcfcfd}
+    .qcard.bad .qt,.qcard.bad .opt{opacity:.72}
+    .qcard .qn{font-size:.72rem;color:var(--soft);font-weight:800;letter-spacing:.04em}
+    .qcard .qt{font-weight:700;margin:6px 0 10px;line-height:1.45}
+    .qcard img.qi{max-width:100%;border-radius:10px;margin:2px 0 10px;display:block}
+    .opt{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border:1.5px solid var(--ring);
+      border-radius:10px;margin-top:6px;font-size:.92rem;background:#fff}
+    .opt.right{border-color:#86efac;background:#f0fdf4}
+    .opt .bx{flex:0 0 auto;width:17px;height:17px;border:2px solid var(--ring);display:inline-block;margin-top:2px}
+    .opt .bx.sq{border-radius:5px}.opt .bx.ro{border-radius:50%}
+    .opt.right .bx{border-color:#16a34a;background:#16a34a}
+    .opt .lt{font-weight:800;color:var(--c2);flex:0 0 auto}
+    .opt .tick{margin-left:auto;color:#16a34a;font-weight:900}
+    .warn{font-size:.79rem;margin-top:8px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;
+      border-radius:9px;padding:7px 10px;line-height:1.45}
+    .warn.fatal{color:#991b1b;background:#fef2f2;border-color:#fecaca}
+    .pick{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);
+      font-weight:800;font-size:.85rem;cursor:pointer;color:var(--c2)}
+    .pick input{width:auto}
     .back{text-align:center;margin-top:12px;font-size:.82rem}
     .back a{color:var(--soft);text-decoration:none;font-weight:700}
     .back a:hover{color:var(--c2);text-decoration:underline}
@@ -180,10 +208,21 @@ function saveQuiz(){
 }
 
 // ================= TAB: SOALAN =================
+/* Mesej yang perlu bertahan melintasi satu lompatan skrin (cth selepas import
+   disimpan, kerana showTab melukis semula panel dari kosong). */
+var FLASH='';
+function flash(txt){ FLASH=txt; }
+function takeFlash(){ var f=FLASH; FLASH=''; return f?'<div class="ok">'+esc(f)+'</div>':''; }
+
 function tabSoalan(){
   if(!QUIZZES.length){ panel().innerHTML='<p class="muted">Sila tambah kuiz dahulu di tab Kuiz.</p>'; return; }
-  var sel='<select id="qz" onchange="loadQ()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>';
-  panel().innerHTML='<h3 class="ttl">Soalan</h3><label>Pilih Kuiz</label>'+sel+
+  // Kekalkan kuiz yang sedang dipilih. Tanpa ini, kembali dari pratonton
+  // melompat balik ke kuiz pertama sementara mesej berkata "5 soalan disimpan".
+  var sel='<select id="qz" onchange="loadQ()">'+QUIZZES.map(function(q){
+    var on=String(q.quizId)===String(_rememberedQuiz);
+    return '<option value="'+esc(q.quizId)+'"'+(on?' selected':'')+'>'+esc(q.namaProgram||q.quizId)+'</option>';
+  }).join('')+'</select>';
+  panel().innerHTML='<h3 class="ttl">Soalan</h3>'+takeFlash()+'<label>Pilih Kuiz</label>'+sel+
     '<div class="row" style="margin-top:12px"><button class="sm" onclick="editQ()">+ Tambah Soalan</button>'+
     '<button class="sm ghost" onclick="importForm()">⬇ Import dari Google Form</button></div>'+
     '<div id="importbox"></div>'+
@@ -277,22 +316,157 @@ function importForm(){
   var box=document.getElementById('importbox'); if(!box) return;
   box.innerHTML='<div class="box"><label>URL / ID Google Form (kuiz aneka pilihan)</label>'+
     '<input id="formurl" placeholder="https://docs.google.com/forms/d/…">'+
-    '<div id="impmsg" class="muted" style="margin-top:8px">Form mesti jenis <b>Kuiz</b> dengan kunci jawapan supaya jawapan betul terisi automatik.</div>'+
-    '<div class="row" style="margin-top:12px"><button class="sm" onclick="doImportForm()">Import</button>'+
+    '<div id="impmsg" class="muted" style="margin-top:8px">Form mesti jenis <b>Kuiz</b> dengan kunci jawapan supaya jawapan betul terisi automatik. Anda akan lihat pratonton sebelum apa-apa disimpan.</div>'+
+    '<div class="row" style="margin-top:12px"><button class="sm" onclick="doPreviewForm()">Pratonton</button>'+
     '<button class="sm ghost" onclick="document.getElementById(\'importbox\').innerHTML=\'\'">Batal</button></div></div>';
-  var el=document.getElementById('formurl'); if(el) el.focus();
+  var el=document.getElementById('formurl');
+  if(el){ el.focus(); el.addEventListener('keydown',function(e){ if(e.key==='Enter') doPreviewForm(); }); }
 }
-function doImportForm(){
+
+// ---------- Pratonton import (dry-run: tiada apa ditulis sehingga Simpan) ----------
+var PREV=null;   // { quizId, items:[…], ringkasan:{…} }
+
+function doPreviewForm(){
   var el=document.getElementById('formurl'); var url=el?el.value.trim():'';
   var msg=document.getElementById('impmsg');
   if(!url){ if(msg){msg.className='err';msg.textContent='Sila tampal URL/ID Google Form.';} return; }
-  if(msg){ msg.className='muted'; msg.innerHTML='<span class="spin"></span> Mengimport…'; }
-  call('adminImportFromForm',[TOKEN,url,_rememberedQuiz],function(r){
-    if(msg){ msg.className='ok'; msg.textContent='✔ '+r.imported+' soalan diimport.'; }
-    setTimeout(function(){ showTab('soalan'); }, 900);
+  if(!_rememberedQuiz){ if(msg){msg.className='err';msg.textContent='Sila pilih kuiz dahulu.';} return; }
+  if(msg){ msg.className='muted'; msg.innerHTML='<span class="spin"></span> Membaca Form… (gambar mengambil masa)'; }
+  call('adminPreviewFormImport',[TOKEN,url,_rememberedQuiz],function(res){
+    PREV=res; renderPreview();
   },function(e){
-    if(msg){ msg.className='err'; msg.textContent=(e&&e.message)||'Gagal import.'; }
+    if(msg){ msg.className='err'; msg.textContent=(e&&e.message)||'Gagal membaca Form.'; }
   });
+}
+
+/* Teks amaran. Kod amaran datang dari server (ImportForm.gs) — kekalkan selari. */
+var AMARAN_TEKS={
+  'dipotong': function(it){ return 'Form ada '+it.jumlahPilihanAsal+' pilihan — pilihan ke-6 dan seterusnya dibuang, kerana tab Soalan hanya ada lajur A–E.'; },
+  'kunci-dipotong': function(){ return 'Jawapan betulnya ialah pilihan ke-6 atau seterusnya, yang dibuang. Soalan ini masuk <b>tanpa kunci</b>.'; },
+  'tiada-kunci': function(){ return 'Tiada kunci jawapan — Form ini bukan jenis <b>Kuiz</b>.'; },
+  'kunci-separa': function(){ return 'Sebahagian jawapan betul jatuh pada pilihan yang dibuang. Kunci yang tersimpan <b>tidak lengkap</b>, jadi murid yang menjawab betul akan ditanda salah.'; },
+  'kunci-tanpa-teks': function(){ return 'Kunci jawapan menunjuk pilihan yang teksnya kosong.'; },
+  'pilihan-kurang': function(){ return 'Kurang daripada dua pilihan berteks.'; },
+  'duplikat': function(it){ return it.duplikatRow<0
+      ? 'Sama dengan soalan #'+(-it.duplikatRow)+' dalam import ini.'
+      : 'Soalan serupa sudah wujud dalam kuiz ini (baris '+it.duplikatRow+' di Sheet).'; },
+  'tiada-gambar': function(){ return 'Form ada gambar untuk soalan ini tetapi ia gagal disimpan.'; }
+};
+/* Amaran yang dipapar merah (soalan rosak, bukan sekadar diberi perhatian). */
+var AMARAN_MERAH=['kunci-dipotong','tiada-kunci','kunci-tanpa-teks','pilihan-kurang','kunci-separa'];
+/* Padanan AMARAN_MAUT di ImportForm.gs — kekalkan kedua-duanya selari. Ia
+   menentukan tanda LALAI, bukan apa yang dibenarkan disimpan. 'duplikat' ada di
+   sini walaupun soalannya boleh dijawab: menyimpannya menggandakan soalan. */
+var AMARAN_MAUT=AMARAN_MERAH.concat(['duplikat']);
+function tandaLalai(it){
+  return !(it.amaran||[]).some(function(a){ return AMARAN_MAUT.indexOf(a)>=0; });
+}
+
+function renderPreview(){
+  if(!PREV){ showTab('soalan'); return; }
+  var r=PREV.ringkasan||{};
+  var kad=(PREV.items||[]).map(previewCard).join('');
+  var sepanduk = r.semuaTiadaKunci
+    ? '<div class="banner">⚠ Form ini bukan jenis <b>Kuiz</b>, jadi tiada kunci jawapan langsung. '+
+      'Anda boleh tetap menyimpan soalan-soalan ini dan mengisi jawapan kemudian di tab Soalan — '+
+      'tetapi kuiz <b>tidak akan</b> memaparkan soalan tanpa jawapan kepada murid.</div>'
+    : '';
+  panel().innerHTML=
+    '<h3 class="ttl">Pratonton Import</h3>'+
+    '<p class="sub">Ke dalam kuiz <b>'+esc(PREV.quizId)+'</b>. Tiada apa-apa disimpan sehingga anda tekan Simpan.</p>'+
+    '<div class="pbar">'+
+      '<div class="cnt" id="pcnt"></div>'+
+      '<div class="row">'+
+        '<button class="sm ghost" onclick="markAll(true)">'+(r.semuaTiadaKunci?'Tanda semua':'Tanda yang selamat')+'</button>'+
+        '<button class="sm ghost" onclick="markAll(false)">Buang tanda</button>'+
+        '<button class="sm" id="pbtn" onclick="commitImport()"></button>'+
+        '<button class="sm ghost" onclick="discardPreview()">Batal</button>'+
+      '</div>'+
+      '<div id="pmsg"></div>'+
+    '</div>'+
+    sepanduk+
+    kad;
+  updateBar();
+}
+
+function previewCard(it,i){
+  var rosak = !it.boleh || it.amaran.indexOf('kunci-separa')>=0;
+  var opts=(it.options||[]).map(function(o){
+    var betul=(it.jawapan||[]).indexOf(o.key)>=0;
+    return '<div class="opt'+(betul?' right':'')+'">'+
+      '<span class="bx '+(it.multi?'sq':'ro')+'"></span>'+
+      '<span class="lt">'+esc(o.key)+'.</span><span>'+esc(o.text)+'</span>'+
+      (betul?'<span class="tick">✓</span>':'')+'</div>';
+  }).join('');
+  var amaran=(it.amaran||[]).map(function(kod){
+    var f=AMARAN_TEKS[kod]; if(!f) return '';
+    var merah=AMARAN_MERAH.indexOf(kod)>=0;
+    return '<div class="warn'+(merah?' fatal':'')+'">⚠ '+f(it)+'</div>';
+  }).join('');
+  var nota = !it.boleh
+    ? '<div class="warn fatal">Soalan ini <b>tidak akan keluar</b> dalam kuiz walaupun disimpan.</div>'
+    : '';
+  var gambar = it.gambarPapar
+    ? '<img class="qi" src="'+esc(it.gambarPapar)+'" onerror="this.style.display=\'none\'">' : '';
+  return '<div class="qcard'+(rosak?' bad':'')+'">'+
+    '<div class="qn">'+(i+1)+' / '+PREV.items.length+'</div>'+
+    gambar+
+    '<div class="qt">'+esc(it.soalan)+'</div>'+
+    opts+
+    amaran+nota+
+    '<label class="pick"><input type="checkbox" id="pk'+i+'" onchange="togglePick('+i+')"'+
+      (it.ambil?' checked':'')+'> Ambil soalan ini</label>'+
+  '</div>';
+}
+
+function togglePick(i){
+  var el=document.getElementById('pk'+i);
+  if(el&&PREV&&PREV.items[i]) PREV.items[i].ambil=el.checked;
+  updateBar();
+}
+function markAll(on){
+  if(!PREV) return;
+  var semua=PREV.ringkasan&&PREV.ringkasan.semuaTiadaKunci;
+  PREV.items.forEach(function(it){ it.ambil = on ? (semua ? true : tandaLalai(it)) : false; });
+  renderPreview();
+}
+function updateBar(){
+  if(!PREV) return;
+  var n=0,rosak=0;
+  PREV.items.forEach(function(it){ if(it.ambil) n++; if(!it.boleh) rosak++; });
+  var c=document.getElementById('pcnt');
+  if(c) c.innerHTML=n+' daripada '+PREV.items.length+' ditanda'+
+    (rosak?' &nbsp;·&nbsp; <span style="color:var(--bad)">'+rosak+' tidak boleh dijawab</span>':'')+
+    ((PREV.ringkasan&&PREV.ringkasan.bergambar)?' &nbsp;·&nbsp; '+PREV.ringkasan.bergambar+' bergambar':'');
+  var b=document.getElementById('pbtn');
+  if(b){ b.textContent=n?('Simpan '+n+' soalan'):'Tiada ditanda'; b.disabled=!n; b.style.opacity=n?'1':'.5'; }
+}
+function commitImport(){
+  if(!PREV) return;
+  var n=PREV.items.filter(function(it){ return it.ambil; }).length;
+  if(!n) return;
+  var msg=document.getElementById('pmsg');
+  if(msg){ msg.className='muted'; msg.innerHTML='<span class="spin"></span> Menyimpan…'; }
+  // gambarPapar (data URI) SENGAJA tidak dihantar balik — ia hanya untuk paparan
+  // dan boleh mencecah berpuluh MB.
+  var kirim=PREV.items.map(function(it){
+    return { soalan:it.soalan, options:it.options, jawapan:it.jawapan,
+             gambar:it.gambar, gambarFileId:it.gambarFileId, ambil:!!it.ambil };
+  });
+  call('adminCommitImport',[TOKEN,PREV.quizId,kirim],function(r){
+    var buang=r.gambarDibuang?(' '+r.gambarDibuang+' gambar tak terpakai dibuang.'):'';
+    PREV=null; flash('✔ '+r.ditulis+' soalan disimpan.'+buang); showTab('soalan');
+  },function(e){
+    if(msg){ msg.className='err'; msg.textContent=(e&&e.message)||'Gagal menyimpan.'; }
+  });
+}
+function discardPreview(){
+  var ids=((PREV&&PREV.items)||[]).map(function(it){ return it.gambarFileId; })
+                                  .filter(function(x){ return !!x; });
+  PREV=null;
+  if(ids.length) call('adminDiscardPreview',[TOKEN,ids],function(){},function(){});
+  flash('Import dibatalkan — tiada soalan disimpan.');
+  showTab('soalan');
 }
 
 // ================= TAB: KEPUTUSAN =================

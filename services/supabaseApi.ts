@@ -649,7 +649,14 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
 
     const targetYear = year || currentYear();
 
-    // Tukar semua submission draft → submitted untuk sekolah + badge + tahun ini
+    // Tukar semua submission draft → submitted untuk sekolah + badge + tahun ini.
+    //
+    // Sengaja TIDAK ditapis mengikut siri, walaupun baris status di bawah kini
+    // ditapis. Jadual submissions tiada lajur siri langsung — siri berada pada
+    // submission_people — jadi satu baris submissions boleh merangkumi beberapa
+    // siri dan statusnya tidak mungkin tepat per siri. school_badge_status
+    // ialah sumber kebenaran untuk penghantaran; submissions.status warisan
+    // (keputusan S4 dalam docs/rancangan-baiki-laluan-hantar.md).
     await supabase
       .from('submissions')
       .update({ status: 'submitted' })
@@ -658,11 +665,23 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
       .eq('submission_year', targetYear)
       .eq('status', 'draft');
 
-    // Siri mana yang perlu baris status? Diambil daripada PESERTA SEBENAR, bukan
-    // daripada penapis UI. Peserta boleh masuk melalui Import Naik atau "Set Siri"
-    // yang tidak melalui borang, jadi bergantung pada penapis akan menghasilkan
-    // baris status untuk siri yang salah — dan peserta siri sebenar hilang dari
-    // statistik tanpa sebarang ralat.
+    // SATU panggilan menghantar SATU siri — yang diminta pemanggil.
+    //
+    // Versi lama menerbitkan senarai siri daripada peserta sebenar dan
+    // MENGGANTIKAN parameter dengannya, jadi satu tekanan Hantar menghantar
+    // setiap siri yang mempunyai peserta. Fungsi ini hanya dipanggil pada
+    // laluan PERCUMA, jadi siri yang MEMERLUKAN bayaran turut masuk ke giliran
+    // pengesahan tanpa bil dan tanpa wang. Itulah SK Tanjong Rambutan: Keris
+    // Emas Siri 1 dan Siri 2 berkongsi submitted_at 07:35:50.994 (K3).
+    //
+    // Alasan asal — penapis UI boleh salah, jadi ambil siri daripada peserta
+    // sebenar — sudah tidak sah. handleFinalSubmit (UserDashboard.tsx:1040)
+    // kini menerbitkan siri sasaran daripada siriBelumHantar, iaitu peserta
+    // sebenar juga. Perlindungan itu dibuat dua kali, dan versi di sini
+    // terlalu luas.
+    //
+    // Peserta sebenar masih dibaca, tetapi hanya untuk MENGESAHKAN siri yang
+    // diminta benar-benar mempunyai orang — bukan untuk menggantikannya.
     const { data: allSubs, error: allSubsErr } = await supabase
       .from('submissions')
       .select('id')
@@ -672,7 +691,6 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
     if (allSubsErr) throw allSubsErr;
 
     const subIds = (allSubs || []).map((s: any) => s.id);
-    let siriList: number[] = [siri];
     if (subIds.length > 0) {
       const { data: people, error: peopleErr } = await supabase
         .from('submission_people')
@@ -680,9 +698,17 @@ export const lockSchoolBadge = async (_url: string, schoolCodeOrName: string, ba
         .in('submission_id', subIds)
         .eq('is_deleted', false);
       if (peopleErr) throw peopleErr;
-      const found = Array.from(new Set((people || []).map((p: any) => p.siri || 1)));
-      if (found.length > 0) siriList = found;
+
+      const adaOrang = (people || []).some((p: any) => (p.siri || 1) === siri);
+      if (!adaOrang) {
+        return {
+          status: 'error',
+          message: `Tiada peserta dalam Siri ${siri} bagi ${badgeName}. Sila semak penapis siri anda.`,
+        };
+      }
     }
+
+    const siriList: number[] = [siri];
 
     // Jangan tulis semula siri yang sudah dihantar atau disahkan — sekolah yang
     // menambah Siri 2 tidak sepatutnya menolak Siri 1 keluar daripada 'approved'.

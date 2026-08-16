@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Kuiz — Kinta Utara</title>
+  <style>
+    :root{--c:#6d28d9;--c2:#4c1d95;--c3:#8b5cf6;--ok:#15803d;--bad:#dc2626;--ink:#1f1937;--soft:#6b7280;--line:#ece8fb;--ring:#ddd6fe}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
+    body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);
+      background:radial-gradient(1200px 400px at 50% -120px,#ede9fe 0,rgba(237,233,254,0) 60%),linear-gradient(180deg,#faf9ff 0,#f3f0fd 100%);min-height:100vh}
+    .wrap{max-width:840px;margin:0 auto;padding:18px 16px 50px}
+    .brand{text-align:center;padding:6px 0 2px}
+    .brand img{width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(76,29,149,.25))}
+    .brand .org{margin-top:6px;font-weight:800;letter-spacing:.06em;font-size:.78rem;color:var(--c2)}
+    .brand .loc{font-size:.72rem;color:var(--soft);margin-top:2px}
+    .brand .tag{display:inline-block;margin-top:8px;background:#4c1d95;color:#fff;font-size:.7rem;font-weight:800;padding:3px 12px;border-radius:999px;letter-spacing:.08em}
+    .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 34px rgba(76,29,149,.10);padding:22px;margin-top:16px}
+    .ttl{font-size:1.1rem;margin:0 0 2px;color:var(--c2);font-weight:800}
+    .sub{color:var(--soft);font-size:.84rem;margin:.2rem 0 1rem}
+    label{display:block;font-weight:700;font-size:.78rem;margin:.8rem 0 .3rem;color:#3b3357}
+    input,select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--ring);border-radius:11px;font-size:.98rem;background:#fff;font-family:inherit}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--c);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+    textarea{min-height:64px;resize:vertical}
+    button{border:0;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;color:#fff;
+      background:linear-gradient(180deg,var(--c3),var(--c));box-shadow:0 8px 18px rgba(109,40,217,.26);padding:12px 16px;transition:transform .06s}
+    button:active{transform:translateY(1px)} button.block{width:100%;margin-top:16px}
+    button.ghost{background:#f4f1fe;color:var(--c2);box-shadow:none;border:1.5px solid var(--ring)}
+    button.sm{padding:7px 11px;font-size:.8rem;border-radius:9px}
+    button.danger{background:#fee2e2;color:#991b1b;box-shadow:none}
+    .row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}
+    .bar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-top:16px}
+    .who{font-size:.82rem}.who b{color:var(--c2)}
+    .tabs{display:flex;gap:8px;margin-top:14px}
+    .tab{flex:1;text-align:center;padding:10px;border-radius:11px;background:#f4f1fe;color:var(--c2);font-weight:800;font-size:.85rem;cursor:pointer;border:1.5px solid transparent}
+    .tab.on{background:linear-gradient(180deg,var(--c3),var(--c));color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.85rem}
+    th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+    th{color:var(--soft);font-size:.74rem;text-transform:uppercase;letter-spacing:.03em}
+    .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.7rem;font-weight:800}
+    .pill.ok{background:#dcfce7;color:#166534}.pill.no{background:#fee2e2;color:#991b1b}
+    .err{color:var(--bad);font-size:.84rem;margin-top:10px;font-weight:600}
+    .ok{color:var(--ok);font-size:.84rem;margin-top:10px;font-weight:700}
+    .muted{color:var(--soft);font-size:.84rem}
+    .spin{width:22px;height:22px;border:3px solid var(--ring);border-top-color:var(--c);border-radius:50%;animation:s .8s linear infinite;display:inline-block;vertical-align:middle}
+    @keyframes s{to{transform:rotate(360deg)}}
+    .box{border:1px dashed var(--ring);border-radius:14px;padding:14px;margin-top:14px;background:#faf8ff}
+    .back{text-align:center;margin-top:12px;font-size:.82rem}
+    .back a{color:var(--soft);text-decoration:none;font-weight:700}
+    .back a:hover{color:var(--c2);text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <? if (logoUrl) { ?><img src="<?= logoUrl ?>" onerror="this.style.display='none'"><? } ?>
+      <div class="org">PERSEKUTUAN PENGAKAP MALAYSIA</div>
+      <div class="loc">Negeri Perak · Daerah Kinta Utara</div>
+      <div class="tag">PANEL ADMIN</div>
+    </div>
+    <div class="back"><a href="<?= appUrl ?>">← Kembali ke Kuiz Pelajar</a></div>
+    <div id="app" class="card"><div style="text-align:center"><span class="spin"></span></div></div>
+  </div>
+
+<script>
+var TOKEN = sessionStorage.getItem('quizAdminToken') || '';
+var ADMIN = JSON.parse(sessionStorage.getItem('quizAdminInfo') || 'null');
+var TAB = 'tetapan';
+var QUIZZES = [];
+var app = document.getElementById('app');
+
+function call(fn,args,onOk,onErr){
+  var fail=function(e){
+    var msg=(e&&e.message)||String(e||'');
+    if(/Sesi/i.test(msg)){ // sesi tamat → balik ke log masuk (bukan kosong)
+      try{ sessionStorage.clear(); }catch(_){}
+      TOKEN=''; ADMIN=null; renderLogin('Sesi tamat. Sila log masuk semula.'); return;
+    }
+    if(onErr) onErr(e); else setHTML('<div class="err">⚠ '+esc(msg||'Ralat')+'</div>');
+  };
+  google.script.run.withSuccessHandler(onOk).withFailureHandler(fail)[fn].apply(google.script.run,args);
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function setHTML(h){ app.innerHTML=h; }
+function busy(m){ setHTML('<div style="text-align:center;padding:14px"><span class="spin"></span><div class="muted" style="margin-top:8px">'+(m||'Memuatkan…')+'</div></div>'); }
+
+// ================= LOGIN =================
+function renderLogin(msg){
+  setHTML('<h2 class="ttl">Log Masuk Admin</h2>'+
+    '<p class="sub">Guna ID & kata laluan admin daerah scoutnadi anda.</p>'+
+    '<label>Email</label><input id="em" type="email" placeholder="admin@contoh.com">'+
+    '<label>Kata Laluan</label><input id="pw" type="password" placeholder="••••••••">'+
+    (msg?'<div class="err">'+esc(msg)+'</div>':'')+
+    '<button class="block" id="btn" onclick="doLogin()">Log Masuk</button>');
+  var pw=document.getElementById('pw'); if(pw) pw.addEventListener('keydown',function(e){ if(e.key==='Enter') doLogin(); });
+}
+function doLogin(){
+  var em=document.getElementById('em').value.trim(), pw=document.getElementById('pw').value;
+  if(!em||!pw){ renderLogin('Sila isi email & kata laluan.'); return; }
+  document.getElementById('btn').textContent='Menyemak…';
+  call('adminLogin',[em,pw],function(res){
+    TOKEN=res.token; ADMIN=res; sessionStorage.setItem('quizAdminToken',TOKEN);
+    sessionStorage.setItem('quizAdminInfo',JSON.stringify(res)); boot();
+  },function(e){ renderLogin((e&&e.message)||'Log masuk gagal.'); });
+}
+function logout(){ TOKEN=''; ADMIN=null; sessionStorage.clear(); renderLogin(); }
+
+// ================= SHELL =================
+function boot(){
+  busy();
+  call('adminListQuizzes',[TOKEN],function(list){ QUIZZES=list||[]; renderShell(); },function(e){
+    if(String(e&&e.message).indexOf('Sesi')>=0){ logout(); } else { renderShell(e&&e.message); }
+  });
+}
+function renderShell(err){
+  var bar='<div class="bar"><div class="who">👤 <b>'+esc(ADMIN?ADMIN.name:'Admin')+'</b> · '+esc(ADMIN?ADMIN.role:'')+'</div>'+
+          '<button class="ghost sm" onclick="logout()">Log Keluar</button></div>'+
+    '<div class="tabs">'+
+    tabBtn('tetapan','⚙️ Kuiz')+tabBtn('soalan','📝 Soalan')+tabBtn('keputusan','📊 Keputusan')+tabBtn('ringkasan','🏫 Sekolah')+'</div>'+
+    '<div class="card" id="panel">'+(err?'<div class="err">'+esc(err)+'</div>':'')+'</div>';
+  app.outerHTML='<div class="card" style="background:transparent;border:0;box-shadow:none;padding:0" id="app">'+bar+'</div>';
+  app=document.getElementById('app');
+  showTab(TAB);
+}
+function tabBtn(id,label){ return '<div class="tab'+(TAB===id?' on':'')+'" onclick="showTab(\''+id+'\')">'+label+'</div>'; }
+function panel(){ return document.getElementById('panel'); }
+function showTab(id){
+  TAB=id;
+  document.querySelectorAll('.tab').forEach(function(t){ t.className='tab'; });
+  // tandai aktif
+  var idx={tetapan:0,soalan:1,keputusan:2,ringkasan:3}[id];
+  document.querySelectorAll('.tab')[idx].className='tab on';
+  if(id==='tetapan') tabTetapan();
+  else if(id==='soalan') tabSoalan();
+  else if(id==='keputusan') tabKeputusan();
+  else tabRingkasan();
+}
+
+// ================= TAB: TETAPAN =================
+function tabTetapan(){
+  var rows=QUIZZES.map(function(q){
+    return '<tr><td><b>'+esc(q.quizId)+'</b><br><span class="muted">'+esc(q.namaProgram)+'</span></td>'+
+      '<td>'+esc(q.badgeName)+'<br><span class="muted">'+esc(q.tahun)+'</span></td>'+
+      '<td>'+esc(q.ambangLulus)+'% · '+esc(q.bilSoalan)+' soalan</td>'+
+      '<td>'+(q.aktif?'<span class="pill ok">AKTIF</span>':'<span class="pill no">TIDAK</span>')+'</td>'+
+      '<td><button class="ghost sm" onclick="editQuiz(\''+esc(q.quizId)+'\')">Edit</button></td></tr>';
+  }).join('');
+  panel().innerHTML='<h3 class="ttl">Kuiz / Program</h3><p class="sub">Tetapkan program, ambang lulus & template slip.</p>'+
+    '<button class="sm" onclick="editQuiz()">+ Tambah Kuiz</button>'+
+    '<table><tr><th>Kuiz</th><th>Program</th><th>Tetapan</th><th>Status</th><th></th></tr>'+
+    (rows||'<tr><td colspan="5" class="muted">Belum ada kuiz.</td></tr>')+'</table>';
+}
+function editQuiz(quizId){
+  var q=QUIZZES.filter(function(x){return x.quizId===quizId;})[0]||{ambangLulus:80,bilSoalan:10,verifyMethod:'ic_last4',aktif:true};
+  var f=function(id,v){return esc(v==null?'':v);};
+  panel().innerHTML='<h3 class="ttl">'+(quizId?'Edit Kuiz':'Kuiz Baharu')+'</h3>'+
+    '<label>quizId (unik, cth: keris-perak-2026)</label><input id="f_quizId" '+(quizId?'disabled':'')+' value="'+f('',q.quizId)+'">'+
+    '<label>Nama Program</label><input id="f_namaProgram" value="'+f('',q.namaProgram)+'">'+
+    '<label>badgeName (sama dengan nama program di scoutnadi)</label><input id="f_badgeName" value="'+f('',q.badgeName)+'">'+
+    '<div class="row"><div><label>Tahun</label><input id="f_tahun" value="'+f('',q.tahun)+'"></div>'+
+    '<div><label>Ambang Lulus (%)</label><input id="f_ambangLulus" value="'+f('',q.ambangLulus)+'"></div>'+
+    '<div><label>Bil. Soalan</label><input id="f_bilSoalan" value="'+f('',q.bilSoalan)+'"></div></div>'+
+    '<div class="row"><div><label>Kaedah Sahkan</label><select id="f_verifyMethod">'+
+      opt('ic_last4','4 digit akhir IC',q.verifyMethod)+opt('membership','No. Keahlian',q.verifyMethod)+opt('ic_full','IC penuh',q.verifyMethod)+'</select></div>'+
+    '<div><label>Aktif?</label><select id="f_aktif">'+opt('true','Ya',String(q.aktif))+opt('false','Tidak',String(q.aktif))+'</select></div></div>'+
+    '<label>ID Template Slip (Google Docs/Slides)</label><input id="f_slidesTemplateId" value="'+f('',q.slidesTemplateId)+'">'+
+    '<div id="msg"></div>'+
+    '<div class="row" style="margin-top:16px"><button onclick="saveQuiz()">Simpan</button>'+
+    '<button class="ghost" onclick="showTab(\'tetapan\')">Batal</button></div>';
+}
+function saveQuiz(){
+  var g=function(id){var el=document.getElementById('f_'+id);return el?el.value:'';};
+  var q={quizId:g('quizId'),namaProgram:g('namaProgram'),badgeName:g('badgeName'),tahun:g('tahun'),
+    ambangLulus:g('ambangLulus'),bilSoalan:g('bilSoalan'),verifyMethod:g('verifyMethod'),
+    slidesTemplateId:g('slidesTemplateId'),aktif:g('aktif')==='true'};
+  if(!q.quizId){ document.getElementById('msg').innerHTML='<div class="err">quizId diperlukan.</div>'; return; }
+  document.getElementById('msg').innerHTML='<div class="muted">Menyimpan…</div>';
+  call('adminSaveQuiz',[TOKEN,q],function(){ boot(); },function(e){ document.getElementById('msg').innerHTML='<div class="err">'+esc((e&&e.message)||'Gagal')+'</div>'; });
+}
+
+// ================= TAB: SOALAN =================
+function tabSoalan(){
+  if(!QUIZZES.length){ panel().innerHTML='<p class="muted">Sila tambah kuiz dahulu di tab Kuiz.</p>'; return; }
+  var sel='<select id="qz" onchange="loadQ()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>';
+  panel().innerHTML='<h3 class="ttl">Soalan</h3><label>Pilih Kuiz</label>'+sel+
+    '<div class="row" style="margin-top:12px"><button class="sm" onclick="editQ()">+ Tambah Soalan</button>'+
+    '<button class="sm ghost" onclick="importForm()">⬇ Import dari Google Form</button></div>'+
+    '<div id="importbox"></div>'+
+    '<div id="qlist"><div class="muted" style="margin-top:12px">Memuatkan…</div></div>';
+  loadQ();
+}
+function curQuiz(){ var s=document.getElementById('qz'); return s?s.value:''; }
+function loadQ(){
+  var quizId=curQuiz();
+  document.getElementById('qlist').innerHTML='<div class="muted" style="margin-top:12px">Memuatkan…</div>';
+  call('adminListQuestions',[TOKEN,quizId],function(list){
+    var rows=(list||[]).map(function(q,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+esc(q.soalan)+'<br><span class="muted">Jwp: '+esc(q.jawapan)+' · '+esc(q.markah)+' mkh</span></td>'+
+        '<td>'+(q.aktif?'<span class="pill ok">ON</span>':'<span class="pill no">OFF</span>')+'</td>'+
+        '<td><button class="ghost sm" onclick="editQ('+q.row+')">Edit</button> '+
+        '<button class="danger sm" onclick="delQ('+q.row+',this)">Padam</button></td></tr>';
+    }).join('');
+    window._Q=list||[];
+    document.getElementById('qlist').innerHTML='<table><tr><th>#</th><th>Soalan</th><th></th><th></th></tr>'+
+      (rows||'<tr><td colspan="4" class="muted">Belum ada soalan.</td></tr>')+'</table>';
+  });
+}
+function editQ(row){
+  var quizId=curQuizRemembered(); // tangkap SEBELUM panel #qz hilang
+  var q=(window._Q||[]).filter(function(x){return x.row===row;})[0]||{markah:1,aktif:true,jawapan:'A'};
+  var f=function(v){return esc(v==null?'':v);};
+  panel().innerHTML='<h3 class="ttl">'+(row?'Edit Soalan':'Soalan Baharu')+'</h3>'+
+    '<input type="hidden" id="s_quizId" value="'+f(quizId)+'">'+
+    '<label>Soalan</label><textarea id="s_soalan">'+f(q.soalan)+'</textarea>'+
+    '<div class="row"><div><label>A</label><input id="s_A" value="'+f(q.A)+'"></div><div><label>B</label><input id="s_B" value="'+f(q.B)+'"></div></div>'+
+    '<div class="row"><div><label>C</label><input id="s_C" value="'+f(q.C)+'"></div><div><label>D</label><input id="s_D" value="'+f(q.D)+'"></div></div>'+
+    '<label>E (pilihan)</label><input id="s_E" value="'+f(q.E)+'">'+
+    '<div class="row"><div><label>Jawapan Betul</label><select id="s_jawapan">'+
+      ['A','B','C','D','E'].map(function(L){return opt(L,L,q.jawapan);}).join('')+'</select></div>'+
+    '<div><label>Markah</label><input id="s_markah" value="'+f(q.markah||1)+'"></div>'+
+    '<div><label>Aktif?</label><select id="s_aktif">'+opt('true','Ya',String(q.aktif))+opt('false','Tidak',String(q.aktif))+'</select></div></div>'+
+    '<label>Gambar Soalan (pilihan)</label>'+
+    '<input type="file" id="s_imgfile" accept="image/*" onchange="uploadImg(this)">'+
+    '<div id="s_imgmsg" class="muted" style="margin-top:6px">Muat naik imej (PNG/JPG, max 3MB) — disimpan ke Drive automatik.</div>'+
+    '<input id="s_gambar" value="'+f(q.gambar)+'" placeholder="URL imej (auto-isi selepas upload)" style="margin-top:8px">'+
+    '<div id="s_imgprev">'+(q.gambar?'<img src="'+f(q.gambar)+'" style="max-width:100%;border-radius:10px;margin-top:8px" onerror="this.style.display=\'none\'">':'')+'</div>'+
+    '<input type="hidden" id="s_row" value="'+(row||'')+'">'+
+    '<div id="msg"></div>'+
+    '<div class="row" style="margin-top:16px"><button onclick="saveQ()">Simpan</button><button class="ghost" onclick="showTab(\'soalan\')">Batal</button></div>';
+}
+function saveQ(){
+  var g=function(id){var el=document.getElementById('s_'+id);return el?el.value:'';};
+  var quizId=g('quizId')||curQuizRemembered();
+  var q={quizId:quizId,soalan:g('soalan'),A:g('A'),B:g('B'),C:g('C'),D:g('D'),E:g('E'),
+    jawapan:g('jawapan'),markah:g('markah'),aktif:g('aktif')==='true',gambar:g('gambar'),row:g('row')?parseInt(g('row'),10):0};
+  if(!String(quizId).trim()){ document.getElementById('msg').innerHTML='<div class="err">Sila pilih kuiz dahulu (kembali ke tab Soalan).</div>'; return; }
+  if(!q.soalan.trim()){ document.getElementById('msg').innerHTML='<div class="err">Soalan diperlukan.</div>'; return; }
+  document.getElementById('msg').innerHTML='<div class="muted">Menyimpan…</div>';
+  call('adminSaveQuestion',[TOKEN,q],function(){ showTab('soalan'); },function(e){ document.getElementById('msg').innerHTML='<div class="err">'+esc((e&&e.message)||'Gagal')+'</div>'; });
+}
+var _rememberedQuiz='';
+function curQuizRemembered(){ var s=document.getElementById('qz'); if(s){_rememberedQuiz=s.value;} return _rememberedQuiz; }
+function delQ(row, btn){
+  // Pengesahan dua-klik (elak confirm() yang disekat sandbox GAS)
+  if(btn && btn.getAttribute('data-armed')!=='1'){
+    btn.setAttribute('data-armed','1'); btn.textContent='Sah padam?';
+    setTimeout(function(){ if(btn){ btn.removeAttribute('data-armed'); btn.textContent='Padam'; } }, 3000);
+    return;
+  }
+  call('adminDeleteQuestion',[TOKEN,row],function(){ loadQ(); });
+}
+function importForm(){
+  curQuizRemembered();
+  var box=document.getElementById('importbox'); if(!box) return;
+  box.innerHTML='<div class="box"><label>URL / ID Google Form (kuiz aneka pilihan)</label>'+
+    '<input id="formurl" placeholder="https://docs.google.com/forms/d/…">'+
+    '<div id="impmsg" class="muted" style="margin-top:8px">Form mesti jenis <b>Kuiz</b> dengan kunci jawapan supaya jawapan betul terisi automatik.</div>'+
+    '<div class="row" style="margin-top:12px"><button class="sm" onclick="doImportForm()">Import</button>'+
+    '<button class="sm ghost" onclick="document.getElementById(\'importbox\').innerHTML=\'\'">Batal</button></div></div>';
+  var el=document.getElementById('formurl'); if(el) el.focus();
+}
+function doImportForm(){
+  var el=document.getElementById('formurl'); var url=el?el.value.trim():'';
+  var msg=document.getElementById('impmsg');
+  if(!url){ if(msg){msg.className='err';msg.textContent='Sila tampal URL/ID Google Form.';} return; }
+  if(msg){ msg.className='muted'; msg.innerHTML='<span class="spin"></span> Mengimport…'; }
+  call('adminImportFromForm',[TOKEN,url,_rememberedQuiz],function(r){
+    if(msg){ msg.className='ok'; msg.textContent='✔ '+r.imported+' soalan diimport.'; }
+    setTimeout(function(){ showTab('soalan'); }, 900);
+  },function(e){
+    if(msg){ msg.className='err'; msg.textContent=(e&&e.message)||'Gagal import.'; }
+  });
+}
+
+// ================= TAB: KEPUTUSAN =================
+function tabKeputusan(){
+  if(!QUIZZES.length){ panel().innerHTML='<p class="muted">Belum ada kuiz.</p>'; return; }
+  var sel='<select id="rqz" onchange="loadR()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>';
+  panel().innerHTML='<h3 class="ttl">Keputusan Peserta</h3><label>Pilih Kuiz</label>'+sel+'<div id="rlist"><div class="muted" style="margin-top:12px">Memuatkan…</div></div>';
+  loadR();
+}
+function loadR(){
+  var quizId=document.getElementById('rqz').value;
+  document.getElementById('rlist').innerHTML='<div class="muted" style="margin-top:12px">Memuatkan…</div>';
+  call('adminGetResults',[TOKEN,quizId],function(list){
+    var rows=(list||[]).map(function(r){
+      return '<tr><td>'+esc(r.nama)+'<br><span class="muted">'+esc(r.schoolCode)+'</span></td>'+
+        '<td>'+esc(r.bestScore)+'/'+esc(r.total)+'</td><td>'+esc(r.attempts)+'</td>'+
+        '<td>'+(r.passed?'<span class="pill ok">LULUS</span>':'<span class="pill no">BELUM</span>')+'</td>'+
+        '<td>'+esc(r.certNo||'')+(r.claimedAt?'<br><span class="muted">diclaim</span>':'')+'</td></tr>';
+    }).join('');
+    document.getElementById('rlist').innerHTML='<table><tr><th>Nama</th><th>Markah</th><th>Cubaan</th><th>Status</th><th>Slip</th></tr>'+
+      (rows||'<tr><td colspan="5" class="muted">Belum ada keputusan.</td></tr>')+'</table>'+
+      '<div class="muted" style="margin-top:8px">Jumlah: '+(list?list.length:0)+' peserta</div>';
+  }, function(e){
+    document.getElementById('rlist').innerHTML='<div class="err">⚠ '+esc((e&&e.message)||'Gagal memuat keputusan.')+'</div>';
+  });
+}
+
+// ================= TAB: RINGKASAN SEKOLAH =================
+function tabRingkasan(){
+  if(!QUIZZES.length){ panel().innerHTML='<p class="muted">Belum ada kuiz.</p>'; return; }
+  var sel='<select id="sqz" onchange="loadSummary()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>';
+  panel().innerHTML='<h3 class="ttl">Ringkasan Sekolah</h3>'+
+    '<p class="sub">Sekolah mana sudah jawab, berapa orang jawab & lulus.</p>'+
+    '<label>Pilih Kuiz</label>'+sel+
+    '<div id="slist"><div class="muted" style="margin-top:12px">Memuatkan…</div></div>';
+  loadSummary();
+}
+function loadSummary(){
+  var quizId=document.getElementById('sqz').value;
+  document.getElementById('slist').innerHTML='<div class="muted" style="margin-top:12px"><span class="spin"></span> Memuatkan…</div>';
+  call('adminGetSchoolSummary',[TOKEN,quizId],function(res){
+    window._SUM=res||{}; renderSummary();
+  }, function(e){
+    document.getElementById('slist').innerHTML='<div class="err">⚠ '+esc((e&&e.message)||'Gagal memuat ringkasan.')+'</div>';
+  });
+}
+function renderSummary(){
+  var res=window._SUM||{}, rows=res.rows||[], t=res.totals||{}, hasReg=t.hasRegistered;
+  var totalBelum=0;
+  var body=rows.map(function(r,i){
+    var reg=(r.registered==null)?'—':r.registered;
+    var pct=(r.answered>0 && r.registered)?' <span class="muted">('+Math.round(r.answered/r.registered*100)+'%)</span>':'';
+    // Belum ambil = berdaftar − jawab (hanya jika ada data berdaftar)
+    var belum=(typeof r.registered==='number')?Math.max(0, r.registered - r.answered):null;
+    if(belum!=null) totalBelum+=belum;
+    var belumCell = (belum==null) ? '—'
+      : (belum===0 ? '<span class="pill ok">✓ 0</span>'
+                   : '<b style="color:var(--bad)">'+belum+'</b>');
+    return '<tr><td>'+(i+1)+'</td><td>'+esc(r.schoolName)+'<br><span class="muted">'+esc(r.schoolCode)+'</span></td>'+
+      (hasReg?'<td>'+esc(reg)+'</td>':'')+
+      '<td>'+esc(r.answered)+pct+'</td>'+
+      (hasReg?'<td>'+belumCell+'</td>':'')+
+      '<td><b style="color:var(--ok)">'+esc(r.passed)+'</b></td>'+
+      '<td>'+(belum===0 ? '<span class="pill ok">✓ SEMUA</span>'
+                        : (r.answered>0?'<span class="pill ok">✓ MULA</span>':'<span class="pill no">BELUM</span>'))+'</td>'+
+      '<td><button class="ghost sm" onclick="showSchoolStudents(\''+esc(String(r.schoolCode).replace(/'/g,"\\'"))+'\')">Lihat murid</button></td></tr>';
+  }).join('');
+  var ringkas='<div class="muted" style="margin:10px 0;font-weight:600">'+
+    '🏫 '+(t.schools||0)+' sekolah &nbsp;·&nbsp; ✓ '+(t.answeredSchools||0)+' sudah mula &nbsp;·&nbsp; ✍️ '+(t.answered||0)+' jawab &nbsp;·&nbsp; 🏅 '+(t.passed||0)+' lulus'+
+    (hasReg?' &nbsp;·&nbsp; 👥 '+(t.registered||0)+' berdaftar &nbsp;·&nbsp; ⏳ '+totalBelum+' belum ambil':'')+'</div>';
+  document.getElementById('slist').innerHTML=ringkas+
+    '<table><tr><th>#</th><th>Sekolah</th>'+(hasReg?'<th>Daftar</th>':'')+'<th>Jawab</th>'+(hasReg?'<th>Belum Ambil</th>':'')+'<th>Lulus</th><th>Status</th><th></th></tr>'+
+    (body||'<tr><td colspan="8" class="muted">Tiada data.</td></tr>')+'</table>'+
+    (hasReg?'':'<div class="muted" style="margin-top:8px;font-size:.78rem">💡 Lajur "Daftar" & "Belum Ambil" muncul selepas endpoint Supabase dikemas kini (lihat arahan).</div>')+
+    '<div id="schooldetail"></div>';
+}
+function showSchoolStudents(code){
+  var row=((window._SUM&&window._SUM.rows)||[]).filter(function(r){ return String(r.schoolCode).trim()===String(code).trim(); })[0];
+  var list=(row&&row.students)||[];
+  var rows=list.map(function(r){
+    return '<tr><td>'+esc(r.nama)+'</td><td>'+esc(r.bestScore)+'/'+esc(r.total)+'</td><td>'+esc(r.attempts)+'</td>'+
+      '<td>'+(r.passed?'<span class="pill ok">LULUS</span>':'<span class="pill no">BELUM</span>')+'</td>'+
+      '<td>'+esc(r.certNo||'')+(r.claimedAt?'<br><span class="muted">dah cetak</span>':'')+'</td></tr>';
+  }).join('');
+  var d=document.getElementById('schooldetail');
+  d.innerHTML='<div class="box"><b>Murid dah jawab · '+esc((row&&row.schoolName)||code)+' ('+esc(code)+')</b>'+
+    '<table><tr><th>Nama</th><th>Markah</th><th>Cubaan</th><th>Status</th><th>Slip</th></tr>'+
+    (rows||'<tr><td colspan="5" class="muted">Belum ada murid dari sekolah ini menjawab.</td></tr>')+'</table></div>';
+  d.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+// ---- Muat naik imej soalan ----
+function uploadImg(input){
+  var file = input.files && input.files[0]; if(!file) return;
+  if(file.size > 3*1024*1024){ imgMsg('Imej terlalu besar (max 3MB).','err'); input.value=''; return; }
+  imgMsg('<span class="spin"></span> Memuat naik…','muted');
+  var reader = new FileReader();
+  reader.onload = function(){
+    var b64 = String(reader.result).split(',')[1];
+    call('adminUploadImage',[TOKEN, b64, file.type, file.name], function(res){
+      var g=document.getElementById('s_gambar'); if(g) g.value=res.url;
+      var p=document.getElementById('s_imgprev'); if(p) p.innerHTML='<img src="'+esc(res.url)+'" style="max-width:100%;border-radius:10px;margin-top:8px">';
+      imgMsg('✔ Imej dimuat naik & disimpan ke Drive.','ok');
+    }, function(e){ imgMsg((e&&e.message)||'Gagal muat naik.','err'); });
+  };
+  reader.readAsDataURL(file);
+}
+function imgMsg(html,cls){ var m=document.getElementById('s_imgmsg'); if(m){ m.className=cls||'muted'; m.innerHTML=html; } }
+
+// ================= util =================
+function opt(v,label,cur){ return '<option value="'+esc(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'+esc(label)+'</option>'; }
+
+// mula
+if(TOKEN && ADMIN) boot(); else renderLogin();
+</script>
+</body>
+</html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Semakan Guru — PRATONTON</title>
+  <style>
+    :root{--c:#6d28d9;--c2:#4c1d95;--c3:#8b5cf6;--ok:#15803d;--bad:#dc2626;--ink:#1f1937;--soft:#6b7280;--line:#ece8fb;--ring:#ddd6fe}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
+    body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);
+      background:radial-gradient(1200px 400px at 50% -120px,#ede9fe 0,rgba(237,233,254,0) 60%),linear-gradient(180deg,#faf9ff 0,#f3f0fd 100%);min-height:100vh}
+    .wrap{max-width:820px;margin:0 auto;padding:18px 16px 50px}
+    .brand{text-align:center;padding:6px 0 2px}
+    .brand img{width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(76,29,149,.25))}
+    .brand .org{margin-top:6px;font-weight:800;letter-spacing:.06em;font-size:.78rem;color:var(--c2)}
+    .brand .loc{font-size:.72rem;color:var(--soft);margin-top:2px}
+    .brand .tag{display:inline-block;margin-top:8px;background:#0f766e;color:#fff;font-size:.7rem;font-weight:800;padding:3px 12px;border-radius:999px;letter-spacing:.08em}
+    .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 34px rgba(76,29,149,.10);padding:22px;margin-top:16px}
+    .ttl{font-size:1.1rem;margin:0 0 2px;color:var(--c2);font-weight:800}
+    .sub{color:var(--soft);font-size:.84rem;margin:.2rem 0 1rem}
+    label{display:block;font-weight:700;font-size:.78rem;margin:.8rem 0 .3rem;color:#3b3357}
+    input,select{width:100%;padding:11px 13px;border:1.5px solid var(--ring);border-radius:11px;font-size:.98rem;background:#fff;font-family:inherit}
+    input:focus,select:focus{outline:none;border-color:var(--c);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+    button{border:0;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;color:#fff;
+      background:linear-gradient(180deg,var(--c3),var(--c));box-shadow:0 8px 18px rgba(109,40,217,.26);padding:12px 16px;transition:transform .06s}
+    button:active{transform:translateY(1px)} button.block{width:100%;margin-top:16px}
+    button.ghost{background:#f4f1fe;color:var(--c2);box-shadow:none;border:1.5px solid var(--ring)}
+    button.sm{padding:7px 11px;font-size:.8rem;border-radius:9px}
+    button.green{background:linear-gradient(180deg,#22c55e,#15803d);box-shadow:0 8px 18px rgba(21,128,61,.25)}
+    .bar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-top:16px}
+    .who{font-size:.82rem}.who b{color:var(--c2)}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.85rem}
+    th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+    th{color:var(--soft);font-size:.74rem;text-transform:uppercase;letter-spacing:.03em}
+    .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.7rem;font-weight:800}
+    .pill.ok{background:#dcfce7;color:#166534}.pill.no{background:#fee2e2;color:#991b1b}
+    .err{color:var(--bad);font-size:.84rem;margin-top:10px;font-weight:600}
+    .muted{color:var(--soft);font-size:.84rem}
+    .stat{display:flex;gap:10px;margin:6px 0 2px;flex-wrap:wrap}
+    .stat .b{flex:1;min-width:90px;background:#f7f4ff;border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+    .stat .b .n{font-size:1.3rem;font-weight:900;color:var(--c2)}.stat .b .l{font-size:.7rem;color:var(--soft)}
+    .spin{width:22px;height:22px;border:3px solid var(--ring);border-top-color:var(--c);border-radius:50%;animation:s .8s linear infinite;display:inline-block;vertical-align:middle}
+    @keyframes s{to{transform:rotate(360deg)}}
+    .demo{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:14px;padding:12px 14px;margin-top:14px;font-size:.8rem;line-height:1.55}
+    .demo b{color:#7c2d12}.demo code{background:#ffedd5;padding:1px 6px;border-radius:6px;font-weight:800}
+    .back{text-align:center;margin-top:12px;font-size:.82rem}
+    .back a{color:var(--soft);text-decoration:none;font-weight:700}
+    .back a:hover{color:var(--c2);text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="logo-kinta-utara.png" onerror="this.style.display='none'">
+      <div class="org">PERSEKUTUAN PENGAKAP MALAYSIA</div>
+      <div class="loc">Negeri Perak · Daerah Kinta Utara</div>
+      <div class="tag">SEMAKAN GURU</div>
+    </div>
+    <div class="demo"><b>⚠️ MOD PRATONTON</b> — data palsu. Log masuk demo: email apa-apa,
+      kata laluan <code>guru</code>. (Versi sebenar guna akaun sekolah scoutnadi; murid auto-ditapis ikut sekolah anda.)</div>
+    <div class="back"><a href="preview.html">← Kembali ke Kuiz Pelajar</a></div>
+    <div id="app" class="card"><div style="text-align:center"><span class="spin"></span></div></div>
+  </div>
+
+<!-- ============ MOCK ============ -->
+<script>
+var DEMO_STUDENTS = {
+  'keris-perak-2026':[
+    {quizId:'keris-perak-2026',participantId:'p1',nama:'Ahmad bin Ali',bestScore:9,total:10,passed:true,attempts:2,certNo:'KERIS-PERAK-2026-260620-1234',claimedAt:'2026-06-20'},
+    {quizId:'keris-perak-2026',participantId:'p2',nama:'Siti Nurhaliza binti Hassan',bestScore:8,total:10,passed:true,attempts:1,certNo:'KERIS-PERAK-2026-260621-5678',claimedAt:''},
+    {quizId:'keris-perak-2026',participantId:'p3',nama:'Kumaravel a/l Raju',bestScore:5,total:10,passed:false,attempts:3,certNo:'',claimedAt:''}
+  ],
+  'keris-gangsa-2026':[]
+};
+var MOCK = {
+  teacherLogin:function(email,password){
+    if(String(password)!=='guru') throw new Error('Email atau kata laluan salah. (demo: kata laluan "guru")');
+    return {token:'demo',name:'Akaun Sekolah (DEMO)',schoolCode:'ABC1234',schoolName:'SK Pakatan Jaya (DEMO)'};
+  },
+  teacherListQuizzes:function(){ return [{quizId:'keris-perak-2026',namaProgram:'Keris Perak 2026'},{quizId:'keris-gangsa-2026',namaProgram:'Keris Gangsa 2026'}]; },
+  teacherListStudents:function(token,quizId){ return (DEMO_STUDENTS[quizId]||[]).map(function(r){return Object.assign({},r);}); },
+  teacherReprintCertificate:function(token,quizId,participantId){
+    var s=(DEMO_STUDENTS[quizId]||[]).filter(function(x){return x.participantId===participantId;})[0];
+    if(s) s.claimedAt='2026-06-28';
+    return {_demo:true};
+  }
+};
+window.google={script:{run:(function(){
+  var s=null,f=null;
+  var h={withSuccessHandler:function(fn){s=fn;return h;},withFailureHandler:function(fn){f=fn;return h;}};
+  Object.keys(MOCK).forEach(function(name){ h[name]=function(){ var a=Array.prototype.slice.call(arguments),ok=s,err=f;
+    setTimeout(function(){ try{var r=MOCK[name].apply(null,a); if(ok)ok(r);}catch(e){ if(err)err(e);} },300); return h; }; });
+  return h;
+})()}};
+</script>
+
+<!-- ============ UI (sama dengan Guru.html sebenar) ============ -->
+<script>
+var TOKEN = sessionStorage.getItem('quizTeacherToken') || '';
+var INFO = JSON.parse(sessionStorage.getItem('quizTeacherInfo') || 'null');
+var QUIZZES = [];
+var app = document.getElementById('app');
+
+function call(fn,args,onOk,onErr){
+  google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr||function(e){ alert((e&&e.message)||e); })[fn].apply(google.script.run,args);
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function setHTML(h){ app.innerHTML=h; }
+function busy(m){ setHTML('<div style="text-align:center;padding:14px"><span class="spin"></span><div class="muted" style="margin-top:8px">'+(m||'Memuatkan…')+'</div></div>'); }
+
+function renderLogin(msg){
+  setHTML('<h2 class="ttl">Semakan Guru</h2>'+
+    '<p class="sub">Log masuk guna akaun <b>sekolah</b> scoutnadi anda untuk lihat & cetak semula sijil murid.</p>'+
+    '<label>Email Sekolah</label><input id="em" type="email" placeholder="sekolah@contoh.com">'+
+    '<label>Kata Laluan</label><input id="pw" type="password" placeholder="••••••••">'+
+    (msg?'<div class="err">'+esc(msg)+'</div>':'')+
+    '<button class="block" id="btn" onclick="doLogin()">Log Masuk</button>');
+  var pw=document.getElementById('pw'); if(pw) pw.addEventListener('keydown',function(e){ if(e.key==='Enter') doLogin(); });
+}
+function doLogin(){
+  var em=document.getElementById('em').value.trim(), pw=document.getElementById('pw').value;
+  if(!em||!pw){ renderLogin('Sila isi email & kata laluan.'); return; }
+  document.getElementById('btn').textContent='Menyemak…';
+  call('teacherLogin',[em,pw],function(res){
+    TOKEN=res.token; INFO=res; sessionStorage.setItem('quizTeacherToken',TOKEN);
+    sessionStorage.setItem('quizTeacherInfo',JSON.stringify(res)); boot();
+  },function(e){ renderLogin((e&&e.message)||'Log masuk gagal.'); });
+}
+function logout(){ TOKEN=''; INFO=null; sessionStorage.clear(); location.reload(); }
+
+function boot(){
+  busy();
+  call('teacherListQuizzes',[TOKEN],function(list){ QUIZZES=list||[]; renderShell(); },function(e){
+    if(String(e&&e.message).indexOf('Sesi')>=0){ logout(); } else { renderShell(e&&e.message); }
+  });
+}
+function renderShell(err){
+  var sel=QUIZZES.length? '<select id="qz" onchange="loadStudents()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>' : '';
+  app.outerHTML='<div style="padding:0" id="app">'+
+    '<div class="bar"><div class="who">🏫 <b>'+esc(INFO?INFO.schoolName:'Sekolah')+'</b></div>'+
+    '<button class="ghost sm" onclick="logout()">Log Keluar</button></div>'+
+    '<div class="card">'+(err?'<div class="err">'+esc(err)+'</div>':'')+
+    '<h3 class="ttl">Senarai Murid & Sijil</h3>'+
+    '<p class="sub">Cetak semula sijil murid yang telah lulus.</p>'+
+    (sel?('<label>Pilih Kuiz / Program</label>'+sel):'<p class="muted">Tiada kuiz tersedia.</p>')+
+    '<div id="list"></div></div></div>';
+  app=document.getElementById('app');
+  if(QUIZZES.length) loadStudents();
+}
+function loadStudents(){
+  var quizId=document.getElementById('qz').value;
+  document.getElementById('list').innerHTML='<div class="muted" style="margin-top:12px">Memuatkan…</div>';
+  call('teacherListStudents',[TOKEN,quizId],function(list){
+    list=list||[];
+    var lulus=list.filter(function(r){return r.passed;}).length;
+    var rows=list.map(function(r){
+      var act = r.passed
+        ? '<button class="green sm" onclick="reprint(\''+esc(r.quizId)+'\',\''+esc(r.participantId)+'\',this)">🖨️ Cetak Sijil</button>'
+        : '<span class="muted">—</span>';
+      return '<tr><td>'+esc(r.nama)+'</td><td>'+esc(r.bestScore)+'/'+esc(r.total)+'</td>'+
+        '<td>'+esc(r.attempts)+'</td>'+
+        '<td>'+(r.passed?'<span class="pill ok">LULUS</span>':'<span class="pill no">BELUM</span>')+'</td>'+
+        '<td>'+(r.claimedAt?'<span class="muted">sudah cetak</span>':(r.passed?'<span class="muted">belum cetak</span>':''))+'</td>'+
+        '<td>'+act+'</td></tr>';
+    }).join('');
+    document.getElementById('list').innerHTML=
+      '<div class="stat"><div class="b"><div class="n">'+list.length+'</div><div class="l">Jumlah murid</div></div>'+
+      '<div class="b"><div class="n" style="color:var(--ok)">'+lulus+'</div><div class="l">Lulus</div></div>'+
+      '<div class="b"><div class="n" style="color:var(--bad)">'+(list.length-lulus)+'</div><div class="l">Belum lulus</div></div></div>'+
+      '<table><tr><th>Nama</th><th>Markah</th><th>Cubaan</th><th>Status</th><th>Sijil</th><th></th></tr>'+
+      (rows||'<tr><td colspan="6" class="muted">Tiada murid sekolah anda untuk kuiz ini.</td></tr>')+'</table>';
+  });
+}
+function reprint(quizId, participantId, btn){
+  if(btn){ btn.textContent='Menjana…'; btn.disabled=true; }
+  call('teacherReprintCertificate',[TOKEN,quizId,participantId],function(c){
+    // MOD PRATONTON: tidak muat turun PDF sebenar
+    alert('Sijil murid dijana (mod pratonton).\nDalam versi sebenar, PDF dari template Google Slides akan dimuat turun di sini.');
+    if(btn){ btn.textContent='🖨️ Cetak Sijil'; btn.disabled=false; }
+    loadStudents();
+  },function(e){ alert((e&&e.message)||'Gagal jana sijil'); if(btn){ btn.textContent='🖨️ Cetak Sijil'; btn.disabled=false; } });
+}
+
+if(TOKEN && INFO) boot(); else renderLogin();
+</script>
+</body>
+</html>

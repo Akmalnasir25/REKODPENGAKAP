@@ -1,0 +1,198 @@
+/**
+ * Quiz.gs — pemilihan soalan, penilaian (di server), dan rekod
+ * Cubaan/Keputusan dengan LockService (selamat untuk pengguna serentak).
+ */
+
+/**
+ * Pilih N soalan rawak aktif bagi quizId.
+ * Pulang: { questions: [{ id, soalan, options:[{key,text}] }],
+ *           answerKey: { id -> 'A'.. }, total }
+ * (answerKey TIDAK dihantar ke klien — disimpan dalam cache cubaan.)
+ */
+function pickQuestions(cfg) {
+  const all = _readObjects(SHEET_SOALAN).filter(function (r) {
+    return String(r.quizId).trim() === cfg.quizId && _truthy(r.aktif) && String(r.soalan).trim() !== '';
+  });
+  if (all.length === 0) throw new Error('Tiada soalan aktif untuk kuiz ini.');
+
+  // Kocok betul-betul rawak (Fisher-Yates) — susunan berbeza bagi setiap murid/cubaan,
+  // kemudian ambil bilSoalan pertama.
+  const shuffled = _shuffle(all);
+  const chosen = shuffled.slice(0, Math.min(cfg.bilSoalan, shuffled.length));
+
+  const questions = [];
+  const answerKey = {};
+  chosen.forEach(function (r) {
+    const qid = 'q' + r._row;
+    const options = [];
+    LETTERS.forEach(function (L) {
+      const text = String(r[L] == null ? '' : r[L]).trim();
+      if (text !== '') options.push({ key: L, text: text });
+    });
+    if (options.length < 2) return; // langkau soalan tak lengkap
+    answerKey[qid] = String(r.jawapan).trim().toUpperCase();
+    questions.push({
+      id: qid,
+      soalan: String(r.soalan).trim(),
+      gambar: _imageForClient(_gambarCell(r)),
+      options: options,
+    });
+  });
+
+  if (questions.length === 0) throw new Error('Soalan tidak lengkap (perlu sekurang-kurangnya 2 pilihan).');
+  return { questions: questions, answerKey: answerKey, total: questions.length };
+}
+
+/** Kocok array (Fisher-Yates) — pulang salinan baharu, tak ubah asal */
+function _shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/**
+ * Baca nilai gambar untuk satu baris soalan secara TEGUH:
+ *  1) cuba ikut header 'gambar'
+ *  2) jika kosong, baca terus lajur K (11) ikut KEDUDUKAN — elak isu header
+ *     K1 yang hilang/tersalah nama.
+ */
+function _gambarCell(r) {
+  var v = String(r.gambar == null ? '' : r.gambar).trim();
+  if (v) return v;
+  try {
+    var cell = _sheet(SHEET_SOALAN).getRange(r._row, 11).getValue(); // lajur K = gambar
+    return String(cell == null ? '' : cell).trim();
+  } catch (e) { return ''; }
+}
+
+
+/**
+ * Tukar nilai `gambar` (URL Drive) → data URI base64 supaya imej dibenamkan
+ * terus dalam soalan. Ini elak sepenuhnya isu perkongsian/CDN Drive.
+ * Guna cache (per fileId) untuk elak baca berulang. Kalau gagal / bukan fail
+ * Drive, pulang nilai asal (biar klien cuba URL).
+ */
+function _imageForClient(gambar) {
+  gambar = String(gambar || '').trim();
+  if (!gambar) return '';
+  if (gambar.indexOf('data:') === 0) return gambar;         // sudah data URI
+  var m = gambar.match(/[-\w]{25,}/);                        // ID fail Drive
+  if (!m) return gambar;                                     // URL luar biasa
+  var id = m[0];
+  var cache = CacheService.getScriptCache();
+  var key = 'img:' + id;
+  try {
+    var hit = cache.get(key);
+    if (hit) return hit;
+  } catch (e) {}
+  try {
+    var blob = DriveApp.getFileById(id).getBlob();
+    var uri = 'data:' + (blob.getContentType() || 'image/png') + ';base64,' +
+              Utilities.base64Encode(blob.getBytes());
+    try { if (uri.length < 95000) cache.put(key, uri, 21600); } catch (e2) {} // <100KB sahaja
+    return uri;
+  } catch (e3) {
+    return gambar; // fallback: biar klien cuba URL asal
+  }
+}
+
+/** Rekod cubaan + kemas kini ringkasan Keputusan (LockService) */
+function recordAttempt(a, score, total, passed) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    // 1) Log Cubaan
+    _sheet(SHEET_CUBAAN).appendRow([
+      new Date(), a.quizId, a.schoolCode, a.participantId, a.nama, score, total, passed,
+    ]);
+
+    // 2) Upsert Keputusan
+    const sh = _sheet(SHEET_KEPUTUSAN);
+    const rows = _readObjects(SHEET_KEPUTUSAN);
+    const existing = rows.filter(function (r) {
+      return String(r.quizId).trim() === a.quizId &&
+             String(r.participantId).trim() === String(a.participantId).trim();
+    })[0];
+
+    const now = new Date();
+    if (!existing) {
+      const certNo = passed ? _newCertNo(a.quizId) : '';
+      sh.appendRow([
+        a.quizId, a.participantId, a.nama, a.schoolCode, score, total, passed,
+        1, passed ? now : '', certNo, '',
+      ]);
+    } else {
+      const row = existing._row;
+      const attempts = (parseInt(String(existing.attempts), 10) || 0) + 1;
+      const bestScore = Math.max(parseInt(String(existing.bestScore), 10) || 0, score);
+      const wasPassed = _truthy(existing.passed);
+      const nowPassed = wasPassed || passed;
+      const firstPassedAt = existing.firstPassedAt || (passed ? now : '');
+      let certNo = existing.certNo;
+      if (!certNo && nowPassed) certNo = _newCertNo(a.quizId);
+      // Tetapan lajur: quizId|participantId|nama|schoolCode|bestScore|total|passed|attempts|firstPassedAt|certNo|claimedAt
+      sh.getRange(row, 5, 1, 7).setValues([[
+        bestScore, total, nowPassed, attempts, firstPassedAt, certNo, existing.claimedAt || '',
+      ]]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Nombor siri sijil ikut nama kuiz: <PREFIX>/<TAHUN>/<NNNN>
+ *   cth "Keris Emas 2026" → KE/2026/0001, KE/2026/0002, …
+ * - PREFIX = huruf awal setiap perkataan nama program (buang perkataan nombor).
+ * - TAHUN  = lajur `tahun` di Tetapan (atau tahun semasa jika kosong).
+ * - Kaunter BERASINGAN setiap kuiz (Script Property `CERT_SERIAL::<quizId>`).
+ * Diperuntukkan sekali per peserta yang lulus; cetak semula kekalkan nombor.
+ * Dipanggil dari dalam kunci recordAttempt, jadi tak perlu kunci tambahan.
+ */
+function _newCertNo(quizId) {
+  var cfg;
+  try { cfg = getQuizConfig(quizId); } catch (e) { cfg = {}; }
+  var prefix = _certPrefix(cfg.namaProgram || quizId);
+  var yr = String(cfg.tahun == null ? '' : cfg.tahun).trim() ||
+           Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+8', 'yyyy');
+  var props = PropertiesService.getScriptProperties();
+  var key = 'CERT_SERIAL::' + String(quizId).trim();
+  var n = (parseInt(props.getProperty(key), 10) || 0) + 1;
+  props.setProperty(key, String(n));
+  var pad = ('0000' + n).slice(-4); // 4 digit
+  return prefix + '/' + yr + '/' + pad;
+}
+
+/** Singkatan dari nama program: huruf awal setiap perkataan (abaikan nombor) */
+function _certPrefix(name) {
+  var words = String(name || '').trim().split(/\s+/).filter(function (w) {
+    return w && !/^\d+$/.test(w); // buang perkataan nombor (cth tahun)
+  });
+  var p = words.map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+  return p || 'SIJIL';
+}
+
+/** Cari ringkasan keputusan untuk seorang peserta */
+function findResult(quizId, participantId) {
+  return _readObjects(SHEET_KEPUTUSAN).filter(function (r) {
+    return String(r.quizId).trim() === String(quizId).trim() &&
+           String(r.participantId).trim() === String(participantId).trim();
+  })[0] || null;
+}
+
+/** Tanda sijil telah di-claim (timestamp) */
+function markClaimed(quizId, participantId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const r = findResult(quizId, participantId);
+    if (r && !r.claimedAt) {
+      _sheet(SHEET_KEPUTUSAN).getRange(r._row, 11).setValue(new Date());
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Kuiz — PRATONTON</title>
+  <style>
+    :root{--c:#6d28d9;--c2:#4c1d95;--c3:#8b5cf6;--ok:#15803d;--bad:#dc2626;--ink:#1f1937;--soft:#6b7280;--line:#ece8fb;--ring:#ddd6fe}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0}
+    body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);
+      background:radial-gradient(1200px 400px at 50% -120px,#ede9fe 0,rgba(237,233,254,0) 60%),linear-gradient(180deg,#faf9ff 0,#f3f0fd 100%);min-height:100vh}
+    .wrap{max-width:840px;margin:0 auto;padding:18px 16px 50px}
+    .brand{text-align:center;padding:6px 0 2px}
+    .brand img{width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(76,29,149,.25))}
+    .brand .org{margin-top:6px;font-weight:800;letter-spacing:.06em;font-size:.78rem;color:var(--c2)}
+    .brand .loc{font-size:.72rem;color:var(--soft);margin-top:2px}
+    .brand .tag{display:inline-block;margin-top:8px;background:#4c1d95;color:#fff;font-size:.7rem;font-weight:800;padding:3px 12px;border-radius:999px;letter-spacing:.08em}
+    .card{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 12px 34px rgba(76,29,149,.10);padding:22px;margin-top:16px}
+    .ttl{font-size:1.1rem;margin:0 0 2px;color:var(--c2);font-weight:800}
+    .sub{color:var(--soft);font-size:.84rem;margin:.2rem 0 1rem}
+    label{display:block;font-weight:700;font-size:.78rem;margin:.8rem 0 .3rem;color:#3b3357}
+    input,select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--ring);border-radius:11px;font-size:.98rem;background:#fff;font-family:inherit}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:var(--c);box-shadow:0 0 0 4px rgba(124,58,237,.12)}
+    textarea{min-height:64px;resize:vertical}
+    button{border:0;border-radius:12px;font-weight:800;font-size:.95rem;cursor:pointer;color:#fff;
+      background:linear-gradient(180deg,var(--c3),var(--c));box-shadow:0 8px 18px rgba(109,40,217,.26);padding:12px 16px;transition:transform .06s}
+    button:active{transform:translateY(1px)} button.block{width:100%;margin-top:16px}
+    button.ghost{background:#f4f1fe;color:var(--c2);box-shadow:none;border:1.5px solid var(--ring)}
+    button.sm{padding:7px 11px;font-size:.8rem;border-radius:9px}
+    button.danger{background:#fee2e2;color:#991b1b;box-shadow:none}
+    .row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}
+    .bar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-top:16px}
+    .who{font-size:.82rem}.who b{color:var(--c2)}
+    .tabs{display:flex;gap:8px;margin-top:14px}
+    .tab{flex:1;text-align:center;padding:10px;border-radius:11px;background:#f4f1fe;color:var(--c2);font-weight:800;font-size:.85rem;cursor:pointer;border:1.5px solid transparent}
+    .tab.on{background:linear-gradient(180deg,var(--c3),var(--c));color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:10px;font-size:.85rem}
+    th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+    th{color:var(--soft);font-size:.74rem;text-transform:uppercase;letter-spacing:.03em}
+    .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.7rem;font-weight:800}
+    .pill.ok{background:#dcfce7;color:#166534}.pill.no{background:#fee2e2;color:#991b1b}
+    .err{color:var(--bad);font-size:.84rem;margin-top:10px;font-weight:600}
+    .muted{color:var(--soft);font-size:.84rem}
+    .spin{width:22px;height:22px;border:3px solid var(--ring);border-top-color:var(--c);border-radius:50%;animation:s .8s linear infinite;display:inline-block;vertical-align:middle}
+    @keyframes s{to{transform:rotate(360deg)}}
+    .demo{background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:14px;padding:12px 14px;margin-top:14px;font-size:.8rem;line-height:1.55}
+    .demo b{color:#7c2d12}.demo code{background:#ffedd5;padding:1px 6px;border-radius:6px;font-weight:800}
+    .back{text-align:center;margin-top:12px;font-size:.82rem}
+    .back a{color:var(--soft);text-decoration:none;font-weight:700}
+    .back a:hover{color:var(--c2);text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <img src="logo-kinta-utara.png" onerror="this.style.display='none'">
+      <div class="org">PERSEKUTUAN PENGAKAP MALAYSIA</div>
+      <div class="loc">Negeri Perak · Daerah Kinta Utara</div>
+      <div class="tag">PANEL ADMIN</div>
+    </div>
+    <div class="demo"><b>⚠️ MOD PRATONTON</b> — data palsu. Log masuk demo: email apa-apa,
+      kata laluan <code>admin</code>. (Versi sebenar guna ID & kata laluan admin daerah scoutnadi.)</div>
+    <div class="back"><a href="preview.html">← Kembali ke Kuiz Pelajar</a></div>
+    <div id="app" class="card"><div style="text-align:center"><span class="spin"></span></div></div>
+  </div>
+
+<!-- ============ MOCK google.script.run ============ -->
+<script>
+var DEMO_QUIZZES = [
+  {quizId:'keris-perak-2026',namaProgram:'Keris Perak 2026',badgeName:'Keris Perak',tahun:2026,ambangLulus:80,bilSoalan:10,verifyMethod:'ic_last4',slidesTemplateId:'',aktif:true,_row:2},
+  {quizId:'keris-gangsa-2026',namaProgram:'Keris Gangsa 2026',badgeName:'Keris Gangsa',tahun:2026,ambangLulus:70,bilSoalan:8,verifyMethod:'membership',slidesTemplateId:'',aktif:false,_row:3}
+];
+var DEMO_QUESTIONS = {
+  'keris-perak-2026':[
+    {row:2,quizId:'keris-perak-2026',soalan:'Berapakah bilangan Undang-Undang Pengakap?',A:'7',B:'9',C:'10',D:'12',E:'',jawapan:'C',markah:1,aktif:true},
+    {row:3,quizId:'keris-perak-2026',soalan:'Pengasas gerakan Pengakap sedunia ialah?',A:'Edison',B:'Bell',C:'Robert Baden-Powell',D:'Churchill',E:'',jawapan:'C',markah:1,aktif:true}
+  ],
+  'keris-gangsa-2026':[]
+};
+var DEMO_RESULTS = {
+  'keris-perak-2026':[
+    {nama:'Ahmad bin Ali',schoolCode:'ABC1234',bestScore:9,total:10,passed:true,attempts:2,firstPassedAt:'2026-06-20',certNo:'KERIS-PERAK-2026-260620-1234',claimedAt:'2026-06-20'},
+    {nama:'Siti Nurhaliza binti Hassan',schoolCode:'ABC1234',bestScore:6,total:10,passed:false,attempts:3,firstPassedAt:'',certNo:'',claimedAt:''}
+  ],
+  'keris-gangsa-2026':[]
+};
+
+var MOCK = {
+  adminLogin:function(email,password){
+    if(String(password)!=='admin') throw new Error('Email atau kata laluan salah. (demo: kata laluan "admin")');
+    return {token:'demo-token',name:'Cikgu Akmal (DEMO)',role:'daerah_admin',negeriCode:'PRK',daerahCode:'KU'};
+  },
+  adminListQuizzes:function(){ return DEMO_QUIZZES.map(function(q){return Object.assign({},q);}); },
+  adminSaveQuiz:function(token,q){
+    var ex=DEMO_QUIZZES.filter(function(x){return x.quizId===q.quizId;})[0];
+    if(ex){ for(var k in q) ex[k]=q[k]; } else { q._row=DEMO_QUIZZES.length+2; DEMO_QUIZZES.push(Object.assign({},q)); if(!DEMO_QUESTIONS[q.quizId])DEMO_QUESTIONS[q.quizId]=[]; }
+    return {ok:true};
+  },
+  adminListQuestions:function(token,quizId){ return (DEMO_QUESTIONS[quizId]||[]).map(function(q){return Object.assign({},q);}); },
+  adminSaveQuestion:function(token,q){
+    var arr=DEMO_QUESTIONS[q.quizId]||(DEMO_QUESTIONS[q.quizId]=[]);
+    if(q.row){ var ex=arr.filter(function(x){return x.row===q.row;})[0]; if(ex){for(var k in q)ex[k]=q[k];} else {arr.push(Object.assign({},q));} }
+    else { q.row=Date.now(); arr.push(Object.assign({},q)); }
+    return {ok:true};
+  },
+  adminDeleteQuestion:function(token,row){
+    Object.keys(DEMO_QUESTIONS).forEach(function(k){ DEMO_QUESTIONS[k]=DEMO_QUESTIONS[k].filter(function(x){return x.row!==row;}); });
+    return {ok:true};
+  },
+  adminGetResults:function(token,quizId){ return (DEMO_RESULTS[quizId]||[]).map(function(r){return Object.assign({},r);}); },
+  adminImportFromForm:function(token,url,quizId){
+    var arr=DEMO_QUESTIONS[quizId]||(DEMO_QUESTIONS[quizId]=[]);
+    for(var i=1;i<=3;i++) arr.push({row:Date.now()+i,quizId:quizId,soalan:'(Demo import) Soalan contoh '+i,A:'Pilihan A',B:'Pilihan B',C:'Pilihan C',D:'Pilihan D',E:'',jawapan:'A',markah:1,aktif:true});
+    return {ok:true,imported:3};
+  }
+};
+window.google={script:{run:(function(){
+  var s=null,f=null;
+  var h={withSuccessHandler:function(fn){s=fn;return h;},withFailureHandler:function(fn){f=fn;return h;}};
+  Object.keys(MOCK).forEach(function(name){ h[name]=function(){ var a=Array.prototype.slice.call(arguments),ok=s,err=f;
+    setTimeout(function(){ try{var r=MOCK[name].apply(null,a); if(ok)ok(r);}catch(e){ if(err)err(e);} },300); return h; }; });
+  return h;
+})()}};
+</script>
+
+<!-- ============ UI (sama dengan Admin.html sebenar) ============ -->
+<script>
+var TOKEN = sessionStorage.getItem('quizAdminToken') || '';
+var ADMIN = JSON.parse(sessionStorage.getItem('quizAdminInfo') || 'null');
+var TAB = 'tetapan';
+var QUIZZES = [];
+var app = document.getElementById('app');
+
+function call(fn,args,onOk,onErr){
+  google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr||function(e){ alert((e&&e.message)||e); })[fn].apply(google.script.run,args);
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function setHTML(h){ app.innerHTML=h; }
+function busy(m){ setHTML('<div style="text-align:center;padding:14px"><span class="spin"></span><div class="muted" style="margin-top:8px">'+(m||'Memuatkan…')+'</div></div>'); }
+
+function renderLogin(msg){
+  setHTML('<h2 class="ttl">Log Masuk Admin</h2>'+
+    '<p class="sub">Guna ID & kata laluan admin daerah scoutnadi anda.</p>'+
+    '<label>Email</label><input id="em" type="email" placeholder="admin@contoh.com">'+
+    '<label>Kata Laluan</label><input id="pw" type="password" placeholder="••••••••">'+
+    (msg?'<div class="err">'+esc(msg)+'</div>':'')+
+    '<button class="block" id="btn" onclick="doLogin()">Log Masuk</button>');
+  var pw=document.getElementById('pw'); if(pw) pw.addEventListener('keydown',function(e){ if(e.key==='Enter') doLogin(); });
+}
+function doLogin(){
+  var em=document.getElementById('em').value.trim(), pw=document.getElementById('pw').value;
+  if(!em||!pw){ renderLogin('Sila isi email & kata laluan.'); return; }
+  document.getElementById('btn').textContent='Menyemak…';
+  call('adminLogin',[em,pw],function(res){
+    TOKEN=res.token; ADMIN=res; sessionStorage.setItem('quizAdminToken',TOKEN);
+    sessionStorage.setItem('quizAdminInfo',JSON.stringify(res)); boot();
+  },function(e){ renderLogin((e&&e.message)||'Log masuk gagal.'); });
+}
+function logout(){ TOKEN=''; ADMIN=null; sessionStorage.clear(); location.reload(); }
+
+function boot(){
+  busy();
+  call('adminListQuizzes',[TOKEN],function(list){ QUIZZES=list||[]; renderShell(); },function(e){
+    if(String(e&&e.message).indexOf('Sesi')>=0){ logout(); } else { renderShell(e&&e.message); }
+  });
+}
+function renderShell(err){
+  var bar='<div class="bar"><div class="who">👤 <b>'+esc(ADMIN?ADMIN.name:'Admin')+'</b> · '+esc(ADMIN?ADMIN.role:'')+'</div>'+
+          '<button class="ghost sm" onclick="logout()">Log Keluar</button></div>'+
+    '<div class="tabs">'+tabBtn('tetapan','⚙️ Kuiz')+tabBtn('soalan','📝 Soalan')+tabBtn('keputusan','📊 Keputusan')+'</div>'+
+    '<div class="card" id="panel">'+(err?'<div class="err">'+esc(err)+'</div>':'')+'</div>';
+  app.outerHTML='<div style="padding:0" id="app">'+bar+'</div>';
+  app=document.getElementById('app');
+  showTab(TAB);
+}
+function tabBtn(id,label){ return '<div class="tab'+(TAB===id?' on':'')+'" onclick="showTab(\''+id+'\')">'+label+'</div>'; }
+function panel(){ return document.getElementById('panel'); }
+function showTab(id){
+  TAB=id;
+  var tabs=document.querySelectorAll('.tab'); tabs.forEach(function(t){ t.className='tab'; });
+  var idx={tetapan:0,soalan:1,keputusan:2}[id]; if(tabs[idx]) tabs[idx].className='tab on';
+  if(id==='tetapan') tabTetapan(); else if(id==='soalan') tabSoalan(); else tabKeputusan();
+}
+
+function tabTetapan(){
+  var rows=QUIZZES.map(function(q){
+    return '<tr><td><b>'+esc(q.quizId)+'</b><br><span class="muted">'+esc(q.namaProgram)+'</span></td>'+
+      '<td>'+esc(q.badgeName)+'<br><span class="muted">'+esc(q.tahun)+'</span></td>'+
+      '<td>'+esc(q.ambangLulus)+'% · '+esc(q.bilSoalan)+' soalan</td>'+
+      '<td>'+(q.aktif?'<span class="pill ok">AKTIF</span>':'<span class="pill no">TIDAK</span>')+'</td>'+
+      '<td><button class="ghost sm" onclick="editQuiz(\''+esc(q.quizId)+'\')">Edit</button></td></tr>';
+  }).join('');
+  panel().innerHTML='<h3 class="ttl">Kuiz / Program</h3><p class="sub">Tetapkan program, ambang lulus & template sijil.</p>'+
+    '<button class="sm" onclick="editQuiz()">+ Tambah Kuiz</button>'+
+    '<table><tr><th>Kuiz</th><th>Program</th><th>Tetapan</th><th>Status</th><th></th></tr>'+
+    (rows||'<tr><td colspan="5" class="muted">Belum ada kuiz.</td></tr>')+'</table>';
+}
+function editQuiz(quizId){
+  var q=QUIZZES.filter(function(x){return x.quizId===quizId;})[0]||{ambangLulus:80,bilSoalan:10,verifyMethod:'ic_last4',aktif:true};
+  var f=function(v){return esc(v==null?'':v);};
+  panel().innerHTML='<h3 class="ttl">'+(quizId?'Edit Kuiz':'Kuiz Baharu')+'</h3>'+
+    '<label>quizId (unik, cth: keris-perak-2026)</label><input id="f_quizId" '+(quizId?'disabled':'')+' value="'+f(q.quizId)+'">'+
+    '<label>Nama Program</label><input id="f_namaProgram" value="'+f(q.namaProgram)+'">'+
+    '<label>badgeName (sama dengan nama program di scoutnadi)</label><input id="f_badgeName" value="'+f(q.badgeName)+'">'+
+    '<div class="row"><div><label>Tahun</label><input id="f_tahun" value="'+f(q.tahun)+'"></div>'+
+    '<div><label>Ambang Lulus (%)</label><input id="f_ambangLulus" value="'+f(q.ambangLulus)+'"></div>'+
+    '<div><label>Bil. Soalan</label><input id="f_bilSoalan" value="'+f(q.bilSoalan)+'"></div></div>'+
+    '<div class="row"><div><label>Kaedah Sahkan</label><select id="f_verifyMethod">'+
+      opt('ic_last4','4 digit akhir IC',q.verifyMethod)+opt('membership','No. Keahlian',q.verifyMethod)+opt('ic_full','IC penuh',q.verifyMethod)+'</select></div>'+
+    '<div><label>Aktif?</label><select id="f_aktif">'+opt('true','Ya',String(q.aktif))+opt('false','Tidak',String(q.aktif))+'</select></div></div>'+
+    '<label>ID Template Sijil (Google Slides)</label><input id="f_slidesTemplateId" value="'+f(q.slidesTemplateId)+'">'+
+    '<div id="msg"></div>'+
+    '<div class="row" style="margin-top:16px"><button onclick="saveQuiz()">Simpan</button>'+
+    '<button class="ghost" onclick="showTab(\'tetapan\')">Batal</button></div>';
+}
+function saveQuiz(){
+  var g=function(id){var el=document.getElementById('f_'+id);return el?el.value:'';};
+  var q={quizId:g('quizId'),namaProgram:g('namaProgram'),badgeName:g('badgeName'),tahun:g('tahun'),
+    ambangLulus:g('ambangLulus'),bilSoalan:g('bilSoalan'),verifyMethod:g('verifyMethod'),
+    slidesTemplateId:g('slidesTemplateId'),aktif:g('aktif')==='true'};
+  if(!q.quizId){ document.getElementById('msg').innerHTML='<div class="err">quizId diperlukan.</div>'; return; }
+  document.getElementById('msg').innerHTML='<div class="muted">Menyimpan…</div>';
+  call('adminSaveQuiz',[TOKEN,q],function(){ boot(); },function(e){ document.getElementById('msg').innerHTML='<div class="err">'+esc((e&&e.message)||'Gagal')+'</div>'; });
+}
+
+function tabSoalan(){
+  if(!QUIZZES.length){ panel().innerHTML='<p class="muted">Sila tambah kuiz dahulu di tab Kuiz.</p>'; return; }
+  var sel='<select id="qz" onchange="loadQ()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>';
+  panel().innerHTML='<h3 class="ttl">Soalan</h3><label>Pilih Kuiz</label>'+sel+
+    '<div class="row" style="margin-top:12px"><button class="sm" onclick="editQ()">+ Tambah Soalan</button>'+
+    '<button class="sm ghost" onclick="importForm()">⬇ Import dari Google Form</button></div>'+
+    '<div id="importbox"></div>'+
+    '<div id="qlist"><div class="muted" style="margin-top:12px">Memuatkan…</div></div>';
+  loadQ();
+}
+function curQuizRemembered(){ var s=document.getElementById('qz'); if(s){_rememberedQuiz=s.value;} return _rememberedQuiz; }
+var _rememberedQuiz='';
+function loadQ(){
+  var quizId=curQuizRemembered();
+  document.getElementById('qlist').innerHTML='<div class="muted" style="margin-top:12px">Memuatkan…</div>';
+  call('adminListQuestions',[TOKEN,quizId],function(list){
+    var rows=(list||[]).map(function(q,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+esc(q.soalan)+'<br><span class="muted">Jwp: '+esc(q.jawapan)+' · '+esc(q.markah)+' mkh</span></td>'+
+        '<td>'+(q.aktif?'<span class="pill ok">ON</span>':'<span class="pill no">OFF</span>')+'</td>'+
+        '<td><button class="ghost sm" onclick="editQ('+q.row+')">Edit</button> '+
+        '<button class="danger sm" onclick="delQ('+q.row+',this)">Padam</button></td></tr>';
+    }).join('');
+    window._Q=list||[];
+    document.getElementById('qlist').innerHTML='<table><tr><th>#</th><th>Soalan</th><th></th><th></th></tr>'+
+      (rows||'<tr><td colspan="4" class="muted">Belum ada soalan.</td></tr>')+'</table>';
+  });
+}
+function editQ(row){
+  var q=(window._Q||[]).filter(function(x){return x.row===row;})[0]||{markah:1,aktif:true,jawapan:'A'};
+  var f=function(v){return esc(v==null?'':v);};
+  panel().innerHTML='<h3 class="ttl">'+(row?'Edit Soalan':'Soalan Baharu')+'</h3>'+
+    '<label>Soalan</label><textarea id="s_soalan">'+f(q.soalan)+'</textarea>'+
+    '<div class="row"><div><label>A</label><input id="s_A" value="'+f(q.A)+'"></div><div><label>B</label><input id="s_B" value="'+f(q.B)+'"></div></div>'+
+    '<div class="row"><div><label>C</label><input id="s_C" value="'+f(q.C)+'"></div><div><label>D</label><input id="s_D" value="'+f(q.D)+'"></div></div>'+
+    '<label>E (pilihan)</label><input id="s_E" value="'+f(q.E)+'">'+
+    '<div class="row"><div><label>Jawapan Betul</label><select id="s_jawapan">'+
+      ['A','B','C','D','E'].map(function(L){return opt(L,L,q.jawapan);}).join('')+'</select></div>'+
+    '<div><label>Markah</label><input id="s_markah" value="'+f(q.markah||1)+'"></div>'+
+    '<div><label>Aktif?</label><select id="s_aktif">'+opt('true','Ya',String(q.aktif))+opt('false','Tidak',String(q.aktif))+'</select></div></div>'+
+    '<input type="hidden" id="s_row" value="'+(row||'')+'">'+
+    '<div id="msg"></div>'+
+    '<div class="row" style="margin-top:16px"><button onclick="saveQ()">Simpan</button><button class="ghost" onclick="showTab(\'soalan\')">Batal</button></div>';
+}
+function saveQ(){
+  var g=function(id){var el=document.getElementById('s_'+id);return el?el.value:'';};
+  var q={quizId:_rememberedQuiz,soalan:g('soalan'),A:g('A'),B:g('B'),C:g('C'),D:g('D'),E:g('E'),
+    jawapan:g('jawapan'),markah:g('markah'),aktif:g('aktif')==='true',row:g('row')?parseInt(g('row'),10):0};
+  if(!q.soalan.trim()){ document.getElementById('msg').innerHTML='<div class="err">Soalan diperlukan.</div>'; return; }
+  document.getElementById('msg').innerHTML='<div class="muted">Menyimpan…</div>';
+  call('adminSaveQuestion',[TOKEN,q],function(){ showTab('soalan'); },function(e){ document.getElementById('msg').innerHTML='<div class="err">'+esc((e&&e.message)||'Gagal')+'</div>'; });
+}
+function delQ(row, btn){
+  if(btn && btn.getAttribute('data-armed')!=='1'){
+    btn.setAttribute('data-armed','1'); btn.textContent='Sah padam?';
+    setTimeout(function(){ if(btn){ btn.removeAttribute('data-armed'); btn.textContent='Padam'; } }, 3000);
+    return;
+  }
+  call('adminDeleteQuestion',[TOKEN,row],function(){ loadQ(); });
+}
+function importForm(){
+  curQuizRemembered();
+  var box=document.getElementById('importbox'); if(!box) return;
+  box.innerHTML='<div class="box" style="border:1px dashed var(--ring);border-radius:14px;padding:14px;margin-top:14px;background:#faf8ff">'+
+    '<label>URL / ID Google Form (kuiz aneka pilihan)</label>'+
+    '<input id="formurl" placeholder="https://docs.google.com/forms/d/…">'+
+    '<div id="impmsg" class="muted" style="margin-top:8px">Form mesti jenis <b>Kuiz</b> dengan kunci jawapan.</div>'+
+    '<div class="row" style="margin-top:12px"><button class="sm" onclick="doImportForm()">Import</button>'+
+    '<button class="sm ghost" onclick="document.getElementById(\'importbox\').innerHTML=\'\'">Batal</button></div></div>';
+  var el=document.getElementById('formurl'); if(el) el.focus();
+}
+function doImportForm(){
+  var el=document.getElementById('formurl'); var url=el?el.value.trim():'';
+  var msg=document.getElementById('impmsg');
+  if(!url){ if(msg){msg.className='err';msg.textContent='Sila tampal URL/ID Google Form.';} return; }
+  if(msg){ msg.className='muted'; msg.innerHTML='<span class="spin"></span> Mengimport…'; }
+  call('adminImportFromForm',[TOKEN,url,_rememberedQuiz],function(r){
+    if(msg){ msg.className='ok'; msg.textContent='✔ '+r.imported+' soalan diimport.'; }
+    setTimeout(function(){ showTab('soalan'); }, 900);
+  },function(e){ if(msg){ msg.className='err'; msg.textContent=(e&&e.message)||'Gagal import.'; } });
+}
+
+function tabKeputusan(){
+  if(!QUIZZES.length){ panel().innerHTML='<p class="muted">Belum ada kuiz.</p>'; return; }
+  var sel='<select id="rqz" onchange="loadR()">'+QUIZZES.map(function(q){return '<option value="'+esc(q.quizId)+'">'+esc(q.namaProgram||q.quizId)+'</option>';}).join('')+'</select>';
+  panel().innerHTML='<h3 class="ttl">Keputusan Peserta</h3><label>Pilih Kuiz</label>'+sel+'<div id="rlist"><div class="muted" style="margin-top:12px">Memuatkan…</div></div>';
+  loadR();
+}
+function loadR(){
+  var quizId=document.getElementById('rqz').value;
+  document.getElementById('rlist').innerHTML='<div class="muted" style="margin-top:12px">Memuatkan…</div>';
+  call('adminGetResults',[TOKEN,quizId],function(list){
+    var rows=(list||[]).map(function(r){
+      return '<tr><td>'+esc(r.nama)+'<br><span class="muted">'+esc(r.schoolCode)+'</span></td>'+
+        '<td>'+esc(r.bestScore)+'/'+esc(r.total)+'</td><td>'+esc(r.attempts)+'</td>'+
+        '<td>'+(r.passed?'<span class="pill ok">LULUS</span>':'<span class="pill no">BELUM</span>')+'</td>'+
+        '<td>'+esc(r.certNo||'')+(r.claimedAt?'<br><span class="muted">diclaim</span>':'')+'</td></tr>';
+    }).join('');
+    document.getElementById('rlist').innerHTML='<table><tr><th>Nama</th><th>Markah</th><th>Cubaan</th><th>Status</th><th>Sijil</th></tr>'+
+      (rows||'<tr><td colspan="5" class="muted">Belum ada keputusan.</td></tr>')+'</table>'+
+      '<div class="muted" style="margin-top:8px">Jumlah: '+(list?list.length:0)+' peserta</div>';
+  });
+}
+
+function opt(v,label,cur){ return '<option value="'+esc(v)+'"'+(String(cur)===String(v)?' selected':'')+'>'+esc(label)+'</option>'; }
+
+if(TOKEN && ADMIN) boot(); else renderLogin();
+</script>
+</body>
+</html>

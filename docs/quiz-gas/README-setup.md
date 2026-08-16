@@ -67,24 +67,51 @@ Rujukan medan (untuk pengetahuan):
    keempat-empat tab automatik.
 3. **Advanced Drive Service** (untuk import Word sahaja): Services ▸ tambah **Drive API**.
 
-### Gambar inline (pilihan — hanya jika soalan ada gambar lekat pada soalan)
+### Gambar inline (hanya jika gambar dilekat DI DALAM kotak soalan)
+
 Tanpa langkah ini, import tetap berfungsi; cuma gambar **inline** tidak masuk.
+Blok imej berasingan tidak terjejas langsung.
 
-1. Apps Script ▸ **Project Settings** ▸ tandakan
-   *"Show appsscript.json manifest file in editor"*.
-2. Buka `appsscript.json`, tambah skop ini ke dalam `oauthScopes`
-   (kekalkan skop sedia ada — jangan padam):
-   ```json
-   "https://www.googleapis.com/auth/forms.body.readonly"
-   ```
-3. Apps Script ▸ **Project Settings** ▸ *Google Cloud Platform (GCP) Project* —
-   buka projek GCP tersebut, kemudian **APIs & Services ▸ Enable APIs** ▸
-   aktifkan **Google Forms API**.
-4. Jalankan import sekali; Google akan minta kebenaran baharu. Terima.
+> **Skop OAuth tidak perlu diubah.** Versi awal dokumen ini mendakwa
+> `forms.body.readonly` wajib ditambah. Itu **salah** — Forms API v1 `forms.get`
+> menerima skop `drive`, yang `DriveApp` sudah minta secara automatik. Disahkan
+> dengan **Kuiz ▸ Diagnos gambar Form** pada projek sebenar: skop lulus, yang
+> gagal ialah API. Jangan tambah `oauthScopes` secara manual — sebaik ia wujud,
+> inferens automatik Apps Script MATI, dan senarai yang tak lengkap akan
+> memecahkan Drive, Slides atau Docs di tempat lain.
 
-> Kalau langkah ini dilangkau, `_inlineImagesFromApi` gagal **secara senyap**
-> dan import diteruskan dengan blok imej berasingan sahaja. Itu memang
-> disengajakan — gambar inline ialah tambahan, bukan syarat.
+Yang sebenarnya perlu: **projek GCP standard** dengan Forms API diaktifkan.
+Projek GCP **lalai** tidak boleh digunakan — ia diurus Google dan tiada sesiapa,
+termasuk pemilik skrip, boleh membuka konsolnya (`resourcemanager.projects.get`
+sentiasa ditolak).
+
+1. `console.cloud.google.com` ▸ pilih projek sedia ada, **atau** cipta baharu.
+   (Projek sedia ada memadai — tiada keperluan untuk projek khusus, dan ini
+   mengelak had kuota projek.)
+2. **APIs & Services ▸ Library** ▸ **Google Forms API** ▸ **Enable**.
+3. **APIs & Services ▸ OAuth consent screen** ▸ isi nama app + emel sokongan.
+4. ⚠ Tekan **PUBLISH APP** supaya status menjadi **In production**.
+   Dalam mod *Testing*, token luput setiap **7 hari** dan kuiz mati seminggu
+   sekali sehingga di-authorize semula.
+5. Salin **Project number** ▸ Apps Script ▸ **Project Settings ▸ Google Cloud
+   Platform (GCP) Project ▸ Change project** ▸ tampal ▸ Set project.
+6. Jalankan **Kuiz ▸ Diagnos gambar Form…** sekali; Google minta kebenaran
+   baharu. Terima (skrin "Google hasn't verified this app" ▸ **Advanced ▸
+   Go to …** — normal untuk app sendiri).
+
+Sahkan dengan **Kuiz ▸ Diagnos gambar Form…**:
+
+```
+FORMS API: HTTP 200
+  gambar INLINE dijumpai: 5
+```
+
+`HTTP 403` + `SERVICE_DISABLED` bermakna langkah 2 atau 5 belum selesai.
+
+> Bila Forms API tidak menjawab, `_inlineImagesFromApi` tidak lagi gagal secara
+> senyap: pratonton import memaparkan sepanduk yang menamakan puncanya. Sebelum
+> ini kad keluar tanpa gambar dan tiada apa membezakannya daripada Form yang
+> memang tiada gambar.
 4. **Set Script Properties**: Project Settings ▸ Script Properties, tambah:
    - `SUPABASE_FN_URL` = function URL (langkah A3)
    - `SUPABASE_ANON_KEY` = anon key (langkah A3)

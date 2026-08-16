@@ -299,7 +299,7 @@ function adminPreviewFormImport(token, formUrlOrId, quizId) {
     if (it.amaran.indexOf('tiada-kunci') < 0) r.semuaTiadaKunci = false;
   });
 
-  return { quizId: quizId, items: p.items, ringkasan: r };
+  return { quizId: quizId, items: p.items, ringkasan: r, formsApi: p.formsApi };
 }
 
 /**

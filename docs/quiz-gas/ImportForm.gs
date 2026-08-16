@@ -82,7 +82,8 @@ function _parseFormQuestions(formRef, quizId, opts) {
     throw new Error('Gagal buka Form (guna akaun sama & URL EDIT): ' + e.message);
   }
 
-  var inlineImg = _inlineImagesFromApi(formId, quizId);
+  var api = _inlineImagesFromApi(formId, quizId);
+  var inlineImg = api.peta;
   var sediaAda = _petaSoalanSediaAda(quizId);   // teks dinormal -> baris Sheet
   var dalamBatch = {};                          // teks dinormal -> nombor kad
 
@@ -199,7 +200,10 @@ function _parseFormQuestions(formRef, quizId, opts) {
     pendingGagal = false;
   });
 
-  return { items: items, withImage: withImage, dipotong: dipotong };
+  return {
+    items: items, withImage: withImage, dipotong: dipotong,
+    formsApi: { ok: api.ok, kod: api.kod, sebab: api.sebab },
+  };
 }
 
 /** Bajet data URI bagi satu pratonton (~2 MB) sebelum jatuh ke URL Drive */
@@ -328,7 +332,8 @@ function _soalanDariPilihan(item, multi) {
  * kerana yang kedua patut memberi amaran kepada admin.
  */
 function _inlineImagesFromApi(formId, quizId) {
-  var peta = {};
+  var hasil = { peta: {}, ok: false, kod: 0, sebab: '' };
+  var peta = hasil.peta;
   var data;
   try {
     var resp = UrlFetchApp.fetch(
@@ -336,10 +341,22 @@ function _inlineImagesFromApi(formId, quizId) {
         headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
         muteHttpExceptions: true,
       });
-    if (resp.getResponseCode() !== 200) return peta;   // API/skop tiada — senyap
-    data = JSON.parse(resp.getContentText() || '{}');
+    hasil.kod = resp.getResponseCode();
+    var badan = resp.getContentText() || '';
+    if (hasil.kod !== 200) {
+      // Dahulu ia pulang senyap di sini, dan pratonton memaparkan kad tanpa
+      // gambar seolah-olah Form itu memang tiada gambar. Sebabnya kini dibawa
+      // keluar supaya skrin boleh berkata apa yang sebenarnya berlaku.
+      hasil.sebab = /SERVICE_DISABLED|has not been used in project|is disabled/i.test(badan)
+        ? 'api-tidak-aktif'
+        : (hasil.kod === 401 || hasil.kod === 403 ? 'ditolak' : 'gagal');
+      return hasil;
+    }
+    data = JSON.parse(badan || '{}');
+    hasil.ok = true;
   } catch (e) {
-    return peta;
+    hasil.sebab = 'ralat';
+    return hasil;
   }
 
   var items = (data && data.items) || [];
@@ -354,7 +371,7 @@ function _inlineImagesFromApi(formId, quizId) {
     var tajuk = String(it.title || '').trim();
     if (tajuk) peta['T:' + tajuk] = nilai;
   });
-  return peta;
+  return hasil;
 }
 
 /** Muat turun imej dari URL (contentUri Forms API) → Drive → { url, fileId } atau null */

@@ -458,6 +458,7 @@ function renderPreview(){
       'Anda boleh tetap menyimpan soalan-soalan ini dan mengisi jawapan kemudian di tab Soalan — '+
       'tetapi kuiz <b>tidak akan</b> memaparkan soalan tanpa jawapan kepada murid.</div>'
     : '';
+  sepanduk += bannerFormsApi(PREV.formsApi);
   panel().innerHTML=
     '<h3 class="ttl">Pratonton Import</h3>'+
     '<p class="sub">Ke dalam kuiz <b>'+esc(PREV.quizId)+'</b>. Tiada apa-apa disimpan sehingga anda tekan Simpan.</p>'+
@@ -474,6 +475,43 @@ function renderPreview(){
     sepanduk+
     kad;
   updateBar();
+}
+
+/* Gambar INLINE (dilekat dalam kotak soalan) hanya boleh diambil melalui Forms
+   REST API. Bila API itu tidak menjawab, kad keluar tanpa gambar dan dahulu
+   TIADA apa-apa memberitahu kenapa — nampak sama seperti Form yang memang
+   tiada gambar. Sepanduk ini menghapuskan kekeliruan itu. */
+function bannerFormsApi(api){
+  if(!api || api.ok) return '';
+  var kenapa, tindakan;
+  if(api.sebab==='api-tidak-aktif'){
+    kenapa='<b>Google Forms API belum diaktifkan</b> untuk projek Cloud skrip ini.';
+    tindakan='Lampirkan projek GCP standard (Apps Script ▸ Project Settings ▸ '+
+             'Google Cloud Platform (GCP) Project), aktifkan Google Forms API padanya, '+
+             'kemudian tetapkan OAuth consent screen ke <b>In production</b>.';
+  } else if(api.sebab==='ditolak'){
+    kenapa='Forms API menolak permintaan (HTTP '+esc(api.kod)+') — skop tidak mencukupi.';
+    tindakan='Jalankan sekali dari editor Apps Script untuk memberi kebenaran semula.';
+  } else {
+    kenapa='Forms API tidak dapat dihubungi'+(api.kod?' (HTTP '+esc(api.kod)+')':'')+'.';
+    tindakan='Cuba lagi sebentar nanti. Jalankan Kuiz ▸ Diagnos gambar Form untuk butiran.';
+  }
+  return '<div class="banner">⚠ '+kenapa+'<br><br>'+
+    'Maksudnya <b>gambar yang dilekat di dalam soalan tidak diimport</b>. '+
+    'Blok imej berasingan tetap masuk seperti biasa. Kalau Form ini memang '+
+    'tiada gambar inline, abaikan mesej ini.<br><br>'+tindakan+'</div>';
+}
+
+/* Jangan sembunyikan imej yang gagal dipapar. Dahulu onerror menyorokkannya,
+   jadi "gambar tak diambil" dan "gambar diambil tetapi tak boleh dipapar"
+   kelihatan serupa — dan kedua-duanya perlu pembetulan yang berbeza. */
+function imgGagal(img){
+  img.style.display='none';
+  var d=document.createElement('div');
+  d.className='warn fatal';
+  d.innerHTML='⚠ Gambar diambil tetapi tidak dapat dipaparkan di sini. '+
+              'URL tetap disimpan bersama soalan — semak ia boleh dibuka.';
+  if(img.parentNode) img.parentNode.insertBefore(d, img.nextSibling);
 }
 
 function previewCard(it,i){
@@ -494,7 +532,7 @@ function previewCard(it,i){
     ? '<div class="warn fatal">Soalan ini <b>tidak akan keluar</b> dalam kuiz walaupun disimpan.</div>'
     : '';
   var gambar = it.gambarPapar
-    ? '<img class="qi" src="'+esc(it.gambarPapar)+'" onerror="this.style.display=\'none\'">' : '';
+    ? '<img class="qi" src="'+esc(it.gambarPapar)+'" onerror="imgGagal(this)">' : '';
   return '<div class="qcard'+(rosak?' bad':'')+'">'+
     '<div class="qn">'+(i+1)+' / '+PREV.items.length+'</div>'+
     gambar+

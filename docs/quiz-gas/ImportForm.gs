@@ -23,7 +23,29 @@ function resolveFormId(ref) {
 }
 
 /**
- * Import soalan dari Google Form ke tab Soalan.
+ * Import soalan dari Google Form ke tab Soalan — TERUS TULIS, tanpa pratonton.
+ *
+ * Ini jalan menu Sheet. Panel admin menggunakan pratonton dua langkah
+ * (adminPreviewFormImport → adminCommitImport di AdminServer.gs); dialog
+ * `ui.prompt` tidak boleh memapar kad soalan, jadi menu kekal terus-tulis.
+ *
+ * Tandatangan dan nilai pulangan dikekalkan: { imported, withImage, dipotong }.
+ */
+function importFormToSheet(formRef, quizId) {
+  quizId = String(quizId || '').trim();
+  var p = _parseFormQuestions(formRef, quizId);
+  if (p.items.length === 0) {
+    throw new Error('Tiada soalan berpilihan dijumpai dalam Form ' +
+                    '(aneka pilihan, kotak semak, atau menu jatuh).');
+  }
+  var rows = p.items.map(function (it) { return _itemKeRow(it, quizId); });
+  _writeQuestionRows(rows);
+  return { imported: rows.length, withImage: p.withImage, dipotong: p.dipotong };
+}
+
+/**
+ * Baca Google Form → senarai soalan bersama amarannya. TIDAK menulis apa-apa
+ * ke tab Soalan.
  *
  * JENIS SOALAN yang dibaca:
  *   MULTIPLE_CHOICE (bulatan)  -> satu jawapan     'C'
@@ -37,9 +59,18 @@ function resolveFormId(ref) {
  *      langsung, jadi ia diambil melalui Forms REST API bila tersedia
  *      (lihat _inlineImagesFromApi). Gambar inline mengatasi blok yang menunggu.
  *
- * Pulang { imported, withImage, dipotong }.
+ * Gambar disimpan ke Drive DI SINI, bukan semasa simpan. Ia bukan pilihan:
+ * blob FormApp dan contentUri Forms API kedua-duanya memerlukan token OAuth
+ * server, jadi klien tidak boleh mengambilnya sendiri kemudian. Setiap item
+ * membawa `gambarFileId` supaya pemanggil boleh membuang fail yang ditolak
+ * (lihat _buangFailDrive).
+ *
+ * opts.papar = true menambah `gambarPapar` (data URI) untuk skrin pratonton.
+ *
+ * Pulang { items:[…], withImage, dipotong }.
  */
-function importFormToSheet(formRef, quizId) {
+function _parseFormQuestions(formRef, quizId, opts) {
+  opts = opts || {};
   quizId = String(quizId || '').trim();
   if (!quizId) throw new Error('quizId diperlukan.');
   var formId = resolveFormId(formRef);
@@ -52,19 +83,28 @@ function importFormToSheet(formRef, quizId) {
   }
 
   var inlineImg = _inlineImagesFromApi(formId, quizId);
+  var sediaAda = _petaSoalanSediaAda(quizId);   // teks dinormal -> baris Sheet
+  var dalamBatch = {};                          // teks dinormal -> nombor kad
 
-  var items = form.getItems();
-  var rows = [];
-  var pendingImg = '';     // gambar blok berasingan untuk soalan seterusnya
+  var formItems = form.getItems();
+  var items = [];
+  var pendingImg = null;      // gambar blok berasingan untuk soalan seterusnya
+  var pendingGagal = false;   // blok imej wujud tetapi gagal disimpan
   var withImage = 0;
   var dipotong = 0;
+  var belanjaPapar = 0;       // jumlah bait data URI yang sudah dikeluarkan
 
-  items.forEach(function (it, idx) {
+  formItems.forEach(function (it, idx) {
     var type = it.getType();
 
     if (type === FormApp.ItemType.IMAGE) {
-      try { pendingImg = _saveImageBlob(it.asImageItem().getImage(), quizId); }
-      catch (e) { pendingImg = ''; }
+      try {
+        pendingImg = _saveImageBlob(it.asImageItem().getImage(), quizId);
+        pendingGagal = false;
+      } catch (e) {
+        pendingImg = null;
+        pendingGagal = true;
+      }
       return;
     }
 
@@ -84,42 +124,159 @@ function importFormToSheet(formRef, quizId) {
 
     var tajuk = String(it.getTitle() || '').trim();
     // Gambar inline soalan ini mengatasi blok imej yang sedang menunggu.
-    var gambar = inlineImg[String(idx)] || inlineImg['T:' + tajuk] || pendingImg || '';
+    var img = inlineImg[String(idx)] || inlineImg['T:' + tajuk] || pendingImg || null;
+    var imgGagal = pendingGagal;
+    if (img && img.gagal) { imgGagal = true; img = null; }
 
-    // quizId|soalan|A|B|C|D|E|jawapan|markah|aktif|gambar
-    var row = [quizId, tajuk, '', '', '', '', '', soalan.jawapan, 1, true, gambar];
-    for (var i = 0; i < soalan.pilihan.length && i < 5; i++) row[2 + i] = soalan.pilihan[i];
+    var options = [];
+    soalan.pilihan.forEach(function (t, i) {
+      var text = String(t == null ? '' : t).trim();
+      if (text !== '') options.push({ key: LETTERS[i], text: text });
+    });
+    var kunci = _normKunci(soalan.jawapan);
 
-    if (gambar) withImage++;
+    var amaran = [];
+    if (soalan.dipotong) amaran.push('dipotong');
+    if (kunci.length === 0 && soalan.betulDipotong > 0) amaran.push('kunci-dipotong');
+    else if (kunci.length === 0) amaran.push('tiada-kunci');
+    // Sebahagian jawapan betul muat dalam A–E, sebahagian lagi tidak. Soalan ini
+    // BOLEH dijawab tetapi kuncinya salah — murid yang menanda betul-betul ikut
+    // Form asal akan ditanda salah. Lebih bahaya daripada soalan yang dibuang.
+    if (kunci.length > 0 && soalan.betulDipotong > 0) amaran.push('kunci-separa');
+
+    var bd = _soalanBolehDijawab(options, kunci);
+    if (!bd.boleh && bd.sebab !== 'tiada-kunci') amaran.push(bd.sebab);
+    if (imgGagal) amaran.push('tiada-gambar');
+
+    // Duplikat: teks yang sama dalam quizId yang SAMA sahaja. Dua kuiz memang
+    // boleh berkongsi soalan, jadi kuiz lain tidak dikira.
+    var kunciTeks = _normTeksSoalan(tajuk);
+    var duplikatRow = 0;
+    if (kunciTeks && dalamBatch[kunciTeks]) duplikatRow = -dalamBatch[kunciTeks]; // negatif = dalam import ini
+    else if (kunciTeks && sediaAda[kunciTeks]) duplikatRow = sediaAda[kunciTeks];
+    if (duplikatRow) amaran.push('duplikat');
+    if (kunciTeks && !dalamBatch[kunciTeks]) dalamBatch[kunciTeks] = items.length + 1;
+
+    var item = {
+      idx: idx,
+      soalan: tajuk,
+      options: options,
+      jawapan: kunci,
+      multi: kunci.length > 1,
+      gambar: img ? img.url : '',
+      gambarFileId: img ? img.fileId : '',
+      jumlahPilihanAsal: soalan.jumlahPilihanAsal,
+      duplikatRow: duplikatRow,
+      amaran: amaran,
+      boleh: bd.boleh,
+      ambil: !_adaAmaranMaut(amaran),
+    };
+
+    if (opts.papar && item.gambar) {
+      // Data URI mengelak isu perkongsian/CDN Drive (lihat _imageForClient),
+      // tetapi 45 soalan bergambar boleh menjadi payload berpuluh MB. Selepas
+      // bajet habis, kad selebihnya jatuh kepada URL thumbnail biasa — fail
+      // sudah anyone-with-link, jadi ia biasanya tetap terpapar.
+      if (belanjaPapar < PAPAR_BUDGET_BAIT) {
+        var uri = _imageForClient(item.gambar);
+        belanjaPapar += uri.length;
+        item.gambarPapar = uri;
+      } else {
+        item.gambarPapar = item.gambar;
+        item.paparRingkas = true;
+      }
+    }
+
+    if (item.gambar) withImage++;
     if (soalan.dipotong) dipotong++;
-    rows.push(row);
+    items.push(item);
 
-    // Dikosongkan HANYA selepas satu baris soalan benar-benar ditulis.
-    // Sebelum ini pengosongan berlaku dalam cawangan MULTIPLE_CHOICE sahaja,
-    // jadi gambar sebelum soalan kotak semak (yang dahulunya dilangkau)
-    // melimpah dan melekat pada soalan berikutnya yang salah.
-    pendingImg = '';
+    // Dikosongkan HANYA selepas satu soalan benar-benar diambil. Sebelum ini
+    // pengosongan berlaku dalam cawangan MULTIPLE_CHOICE sahaja, jadi gambar
+    // sebelum soalan kotak semak (yang dahulunya dilangkau) melimpah dan
+    // melekat pada soalan berikutnya yang salah.
+    pendingImg = null;
+    pendingGagal = false;
   });
 
-  if (rows.length === 0) {
-    throw new Error('Tiada soalan berpilihan dijumpai dalam Form ' +
-                    '(aneka pilihan, kotak semak, atau menu jatuh).');
-  }
+  return { items: items, withImage: withImage, dipotong: dipotong };
+}
 
+/** Bajet data URI bagi satu pratonton (~2 MB) sebelum jatuh ke URL Drive */
+var PAPAR_BUDGET_BAIT = 2 * 1024 * 1024;
+
+/**
+ * Amaran yang bermakna soalan itu TIDAK sepatutnya disimpan tanpa disemak dahulu.
+ * Ia menentukan tanda LALAI pada kad pratonton sahaja — admin tetap boleh
+ * menandanya sendiri dan menyimpannya (lihat rancangan §4.3).
+ */
+var AMARAN_MAUT = ['kunci-dipotong', 'tiada-kunci', 'kunci-tanpa-teks',
+                   'pilihan-kurang', 'kunci-separa', 'duplikat'];
+
+function _adaAmaranMaut(amaran) {
+  return (amaran || []).some(function (a) { return AMARAN_MAUT.indexOf(a) >= 0; });
+}
+
+/** Satu item pratonton → baris tab Soalan (quizId|soalan|A..E|jawapan|markah|aktif|gambar) */
+function _itemKeRow(it, quizId) {
+  var row = [String(quizId).trim(), String(it.soalan == null ? '' : it.soalan).trim(),
+             '', '', '', '', '', _normKunci(it.jawapan).join(','), 1, true,
+             String(it.gambar || '').trim()];
+  (it.options || []).forEach(function (o) {
+    var i = LETTERS.indexOf(o.key);
+    if (i >= 0) row[2 + i] = String(o.text == null ? '' : o.text);
+  });
+  return row;
+}
+
+/** Tulis baris soalan ke hujung tab Soalan dalam satu operasi berkunci */
+function _writeQuestionRows(rows) {
+  if (!rows || rows.length === 0) return 0;
   var lock = LockService.getScriptLock(); lock.waitLock(15000);
   try {
     var sh = _sheet(SHEET_SOALAN);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-    return { imported: rows.length, withImage: withImage, dipotong: dipotong };
+    return rows.length;
   } finally { lock.releaseLock(); }
 }
 
 /**
- * Baca satu item berpilihan → { pilihan:[teks…], jawapan:'A,C', dipotong }.
+ * Teks soalan dinormalkan untuk perbandingan duplikat: huruf kecil, ruang
+ * dimampatkan, tanda baca hujung dibuang. "Apakah simpulan ini?" dan
+ * "apakah  simpulan ini" dikira sama.
+ */
+function _normTeksSoalan(s) {
+  return String(s == null ? '' : s)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[?!.:;,]+$/, '');
+}
+
+/** Peta teks-soalan-dinormal → nombor baris, bagi satu quizId sahaja */
+function _petaSoalanSediaAda(quizId) {
+  var peta = {};
+  var target = String(quizId).trim();
+  _readObjects(SHEET_SOALAN).forEach(function (r) {
+    if (String(r.quizId).trim() !== target) return;
+    var k = _normTeksSoalan(r.soalan);
+    if (k && !peta[k]) peta[k] = r._row;
+  });
+  return peta;
+}
+
+/**
+ * Baca satu item berpilihan → { pilihan:[teks…], jawapan:'A,C',
+ * jumlahPilihanAsal, dipotong, betulDipotong }.
  * Pulang null kalau item itu bukan soalan yang boleh digunakan.
  *
  * `multi` menentukan sama ada semua jawapan betul dikumpul (kotak semak) atau
  * hanya yang pertama (bulatan / menu jatuh).
+ *
+ * `betulDipotong` mengira jawapan betul yang jatuh pada pilihan ke-6 dan
+ * seterusnya. Tanpanya, Form 7 pilihan yang jawapannya pilihan ke-7 menghasilkan
+ * soalan berkunci KOSONG dan tiada siapa tahu kenapa — kunci itu dibuang senyap
+ * oleh had lajur A–E, bukan kerana Form itu bukan kuiz.
  */
 function _soalanDariPilihan(item, multi) {
   var choices;
@@ -128,11 +285,15 @@ function _soalanDariPilihan(item, multi) {
 
   var pilihan = [];
   var betul = [];
+  var betulDipotong = 0;
   choices.forEach(function (c, i) {
-    if (i < 5) pilihan.push(_stripChoiceLabel(c.getValue(), i));
-    try {
-      if (c.isCorrectAnswer() && i < LETTERS.length) betul.push(LETTERS[i]);
-    } catch (e) {}   // Form bukan jenis Kuiz — tiada kunci jawapan
+    if (i < LETTERS.length) pilihan.push(_stripChoiceLabel(c.getValue(), i));
+    var betulKah = false;
+    try { betulKah = c.isCorrectAnswer(); }
+    catch (e) { return; }   // Form bukan jenis Kuiz — tiada kunci jawapan
+    if (!betulKah) return;
+    if (i < LETTERS.length) betul.push(LETTERS[i]);
+    else betulDipotong++;
   });
 
   if (!multi && betul.length > 1) betul = [betul[0]];
@@ -140,7 +301,9 @@ function _soalanDariPilihan(item, multi) {
   return {
     pilihan: pilihan,
     jawapan: _normKunci(betul).join(','),
-    dipotong: choices.length > 5,   // tab Soalan hanya ada lajur A–E
+    jumlahPilihanAsal: choices.length,
+    dipotong: choices.length > LETTERS.length,   // tab Soalan hanya ada lajur A–E
+    betulDipotong: betulDipotong,
   };
 }
 
@@ -158,8 +321,11 @@ function _soalanDariPilihan(item, multi) {
  * seperti biasa dengan blok imej berasingan sahaja. Sengaja tidak membaling
  * ralat: gambar inline ialah tambahan, bukan syarat untuk import berfungsi.
  *
- * Pulang peta { '<index item>': url, 'T:<tajuk>': url } — dipadan ikut
- * kedudukan dahulu, kemudian tajuk sebagai sandaran.
+ * Pulang peta { '<index item>': nilai, 'T:<tajuk>': nilai } — dipadan ikut
+ * kedudukan dahulu, kemudian tajuk sebagai sandaran. `nilai` ialah
+ * { url, fileId } bagi gambar yang berjaya disimpan, atau { gagal:true } bagi
+ * gambar yang WUJUD dalam Form tetapi gagal diambil — dua keadaan yang berbeza,
+ * kerana yang kedua patut memberi amaran kepada admin.
  */
 function _inlineImagesFromApi(formId, quizId) {
   var peta = {};
@@ -181,20 +347,20 @@ function _inlineImagesFromApi(formId, quizId) {
     var img = it.questionItem && it.questionItem.image;
     var uri = img && img.contentUri;
     if (!uri) return;
-    var url;
-    try { url = _saveImageFromUrl(uri, quizId); } catch (e) { return; }
-    if (!url) return;
-    peta[String(idx)] = url;
+    var simpan = null;
+    try { simpan = _saveImageFromUrl(uri, quizId); } catch (e) { simpan = null; }
+    var nilai = simpan || { gagal: true };
+    peta[String(idx)] = nilai;
     var tajuk = String(it.title || '').trim();
-    if (tajuk) peta['T:' + tajuk] = url;
+    if (tajuk) peta['T:' + tajuk] = nilai;
   });
   return peta;
 }
 
-/** Muat turun imej dari URL (contentUri Forms API) → Drive → pulang URL papar */
+/** Muat turun imej dari URL (contentUri Forms API) → Drive → { url, fileId } atau null */
 function _saveImageFromUrl(url, quizId) {
   var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  if (resp.getResponseCode() !== 200) return '';
+  if (resp.getResponseCode() !== 200) return null;
   return _saveImageBlob(resp.getBlob(), quizId);
 }
 
@@ -211,12 +377,34 @@ function _stripChoiceLabel(val, idx) {
   return val;
 }
 
-/** Simpan blob imej ke folder Drive (anyone-with-link), pulang URL imej terus */
+/**
+ * Simpan blob imej ke folder Drive (anyone-with-link) → { url, fileId }.
+ * `fileId` dipulangkan supaya pratonton boleh membuang gambar yang akhirnya
+ * TIDAK jadi disimpan — tanpanya, setiap import yang dibatalkan meninggalkan
+ * fail yatim dalam folder.
+ */
 function _saveImageBlob(blob, quizId) {
   var file = _quizImageFolder().createFile(blob);
   file.setName('soalan-' + quizId + '-' + new Date().getTime());
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
-  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1000';
+  return {
+    url: 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1000',
+    fileId: file.getId(),
+  };
+}
+
+/**
+ * Buang fail Drive (masuk sampah, bukan padam kekal) — gambar pratonton yang
+ * ditolak. Ralat per fail ditelan: fail yang sudah tiada bukan kegagalan.
+ * Pulang bilangan yang berjaya dibuang.
+ */
+function _buangFailDrive(ids) {
+  var n = 0;
+  (ids || []).forEach(function (id) {
+    if (!id) return;
+    try { DriveApp.getFileById(String(id)).setTrashed(true); n++; } catch (e) {}
+  });
+  return n;
 }
 
 function _quizImageFolder() {

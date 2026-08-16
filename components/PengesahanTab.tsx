@@ -410,10 +410,16 @@ export const PengesahanTab: React.FC<PengesahanTabProps> = ({ daerahCode, negeri
                           statusBayar === 'paid' ? 'bg-green-100 text-green-700'
                           : statusBayar === 'pending_review' ? 'bg-amber-100 text-amber-700'
                           : statusBayar === 'rejected' ? 'bg-red-100 text-red-700'
+                          : statusBayar === 'expired' ? 'bg-orange-100 text-orange-700'
                           : 'bg-slate-100 text-slate-600'}`}>
+                          {/* 'expired' berbeza daripada 'Belum bayar': sekolah
+                              PERNAH memulakan bayaran, tetapi bilnya mati
+                              sebelum selesai. Mereka perlu menekan Hantar
+                              semula untuk menjana bil baharu (migrasi 055). */}
                           {statusBayar === 'paid' ? 'Dibayar'
                             : statusBayar === 'pending_review' ? 'Bukti dihantar'
                             : statusBayar === 'rejected' ? 'Bukti ditolak'
+                            : statusBayar === 'expired' ? 'Bil luput'
                             : 'Belum bayar'}
                         </span>
                       )}

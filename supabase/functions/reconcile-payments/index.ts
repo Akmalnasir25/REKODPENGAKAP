@@ -53,7 +53,11 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const ringkasan = { disemak: 0, disahkan: 0, dibatalkan: 0, gagal: 0, tergantung: 0 };
+  const ringkasan = {
+    disemak: 0, disahkan: 0, dibatalkan: 0, gagal: 0, tergantung: 0,
+    // Pendaftaran yang ditanda 'expired' kerana setiap bilnya sudah mati.
+    ditanda_luput: 0,
+  };
 
   try {
     const ambang = new Date(Date.now() - USIA_MINIMUM_MINIT * 60 * 1000).toISOString();
@@ -173,6 +177,22 @@ serve(async (req) => {
       } catch (e: any) {
         console.error('reconcile item error', bayaran.id, e?.message);
       }
+    }
+
+    // Bil yang mati tidak memadamkan hutang, tetapi ia tidak boleh dibiarkan
+    // kelihatan seperti bayaran yang sedang berjalan. Sekali bil terakhir bagi
+    // satu siri luput atau dibatalkan, pendaftarannya ditanda 'expired' —
+    // hutang masih ada, tiada bil aktif (migrasi 055, K5).
+    //
+    // Dipanggil di sini dan bukan di dalam gelung: satu siri boleh mempunyai
+    // beberapa bil, dan hanya selepas SEMUANYA diproses kita tahu tiada yang
+    // tinggal hidup. Fungsi itu idempoten, jadi larian yang tidak menjumpai
+    // apa-apa tidak melakukan apa-apa.
+    try {
+      const { data: bilLuput } = await admin.rpc('tandai_bayaran_luput');
+      ringkasan.ditanda_luput = Number(bilLuput ?? 0);
+    } catch (e: any) {
+      console.error('tandai_bayaran_luput error:', e?.message);
     }
 
     await admin.from('audit_logs').insert({

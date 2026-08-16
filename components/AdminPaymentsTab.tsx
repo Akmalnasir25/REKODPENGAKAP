@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { RefreshCw, Wallet, Download, Search, Paperclip } from 'lucide-react';
 import { getRumusanBayaran, BarisRumusanBayaran, urlBukti } from '../services/paymentService';
 import { formatRM } from '../services/programSummary';
@@ -52,6 +52,23 @@ export const AdminPaymentsTab: React.FC = () => {
   const [fProgram, setFProgram] = useState('');
   const [fSiri, setFSiri] = useState('');
   const [fStatus, setFStatus] = useState('paid');
+
+  // Skrin ini dibuka pada KERJA YANG MENUNGGU bila ada, bukan pada kutipan.
+  //
+  // Lalai 'paid' menyembunyikan tepat perkara yang admin datang ke sini untuk
+  // buat: menyemak bukti bayaran. SK Pakatan Jaya menghantar bukti pada 07:58
+  // dan ia tidak kelihatan langsung — sekolah menunggu tanpa sesiapa tahu.
+  //
+  // Tetapi lalai 'pending_review' tanpa syarat membuka tab KOSONG bila tiada
+  // apa menunggu, yang kelihatan rosak. Jadi ia ditukar hanya apabila ada
+  // sesuatu untuk disemak, dan hanya sekali — selepas itu penapis milik
+  // pengguna, dan memuat semula data tidak boleh merampasnya kembali.
+  const lalaiDitetapkan = useRef(false);
+  useEffect(() => {
+    if (lalaiDitetapkan.current || baris.length === 0) return;
+    lalaiDitetapkan.current = true;
+    if (baris.some(r => r.status === 'pending_review')) setFStatus('pending_review');
+  }, [baris]);
   const [fKaedah, setFKaedah] = useState('');
   const [membukaBukti, setMembukaBukti] = useState<string | null>(null);
 
@@ -118,10 +135,10 @@ export const AdminPaymentsTab: React.FC = () => {
     const jumlahDibayar = ditapis.reduce((n, r) => n + r.totalAmount, 0);
     const caj = ditapis.reduce((n, r) => n + r.transactionFee, 0);
     const sekolah = new Set(ditapis.map(r => r.schoolName)).size;
-    // PESERTA sahaja. Pemimpin, penolong dan pembantu dicaj juga, tetapi
+    // PESERTA sahaja. Pemimpin, penolong dan pembantu boleh dicaj juga, tetapi
     // angka yang diperlukan untuk logistik kem — makan, khemah, kumpulan —
-    // ialah bilangan peserta. Pecahan penuh kekal dalam lajur Bil. Orang
-    // setiap baris dan dalam CSV.
+    // ialah bilangan peserta. Pecahan penuh kekal dalam lajur Peserta setiap
+    // baris dan dalam CSV.
     const orang = ditapis.reduce((n, r) => n + r.bilPeserta, 0);
     const ikutKaedah = ditapis.reduce((acc: Record<string, { bil: number; jumlah: number }>, r) => {
       const k = r.method;
@@ -253,7 +270,7 @@ export const AdminPaymentsTab: React.FC = () => {
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500">
               <tr>
-                {['Sekolah', 'Program', 'Siri', 'Bil. Orang', 'Yuran', 'Caj', 'Jumlah', 'Kaedah', 'Status', 'Tarikh', 'Rujukan', 'Bukti'].map(h => (
+                {['Sekolah', 'Program', 'Siri', 'Peserta', 'Yuran', 'Caj', 'Jumlah', 'Kaedah', 'Status', 'Tarikh', 'Rujukan', 'Bukti'].map(h => (
                   <th key={h} className="text-left font-bold uppercase text-[9px] px-2.5 py-2 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -280,13 +297,25 @@ export const AdminPaymentsTab: React.FC = () => {
                     ))}
                   </td>
                   <td className="px-2.5 py-2 text-center">{r.siri}</td>
-                  {/* Satu angka: berapa ORANG yang dicaj dalam bil ini.
-                      Versi lama memaparkan "13 · 1 · 0" tanpa label, yang dibaca
-                      sebagai satu nombor bersiri dan bukan tiga kiraan. Pecahannya
-                      kekal dalam tooltip dan dalam CSV, di mana ia berlajur. */}
-                  <td className="px-2.5 py-2 text-center whitespace-nowrap font-semibold text-slate-700"
+                  {/* PESERTA ialah angka utama, bukan jumlah semua peranan.
+                      Yuran pegawai selalunya NULL, jadi jumlah kasar membuat
+                      bil kelihatan salah harga: SK Raja Chulan membayar RM83
+                      bagi SEORANG peserta, tetapi lajur ini pernah memaparkan
+                      "9" kerana lapan pegawai tanpa yuran dicampur ke dalamnya.
+                      Ia juga bercanggah dengan jubin ringkasan, yang mengira
+                      peserta sahaja.
+
+                      Pegawai tidak disembunyikan — ia ditunjukkan berasingan,
+                      supaya jelas mereka hadir tetapi tidak menggerakkan harga.
+                      Pecahan penuh kekal dalam tooltip dan dalam CSV. */}
+                  <td className="px-2.5 py-2 text-center whitespace-nowrap"
                       title={`Peserta ${r.bilPeserta} · Pemimpin ${r.bilPemimpin} · Penolong ${r.bilPenolong} · Pembantu ${r.bilPembantu}`}>
-                    {r.bilPeserta + r.bilPemimpin + r.bilPenolong + r.bilPembantu}
+                    <span className="font-semibold text-slate-700">{r.bilPeserta}</span>
+                    {(r.bilPemimpin + r.bilPenolong + r.bilPembantu) > 0 && (
+                      <span className="text-slate-400 ml-1">
+                        +{r.bilPemimpin + r.bilPenolong + r.bilPembantu} pegawai
+                      </span>
+                    )}
                   </td>
                   <td className="px-2.5 py-2 whitespace-nowrap">{formatRM(r.amount)}</td>
                   <td className="px-2.5 py-2 whitespace-nowrap text-slate-400">

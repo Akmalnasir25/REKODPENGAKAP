@@ -194,8 +194,80 @@ function adminGetSchoolSummary(token, quizId) {
 }
 
 // ---- Import dari Google Form (melalui panel) — guna Forms API + gambar ----
+
+/**
+ * Import terus tanpa pratonton. Dikekalkan sebagai jalan pintas; panel admin
+ * kini menggunakan adminPreviewFormImport → adminCommitImport.
+ * `dipotong` disertakan — sebelum ini ia dikira oleh server tetapi dibuang di
+ * sini, jadi panel tidak pernah memberi amaran yang menu Sheet sudah beri.
+ */
 function adminImportFromForm(token, formUrlOrId, quizId) {
   _requireAdmin(token);
   var r = importFormToSheet(formUrlOrId, quizId); // dikongsi dengan menu Sheet
-  return { ok: true, imported: r.imported };
+  return { ok: true, imported: r.imported, withImage: r.withImage, dipotong: r.dipotong };
+}
+
+/**
+ * LANGKAH 1 — baca Form dan pulangkan soalan untuk disemak. Tiada apa-apa
+ * ditulis ke tab Soalan.
+ *
+ * Gambar SUDAH disimpan ke Drive pada tahap ini (tiada pilihan lain — lihat
+ * _parseFormQuestions), jadi pemanggil WAJIB menghabiskan pratonton dengan
+ * adminCommitImport atau adminDiscardPreview supaya gambar yang ditolak
+ * dibuang.
+ */
+function adminPreviewFormImport(token, formUrlOrId, quizId) {
+  _requireAdmin(token);
+  quizId = String(quizId || '').trim();
+  if (!quizId) throw new Error('Sila pilih kuiz dahulu sebelum mengimport.');
+
+  var p = _parseFormQuestions(formUrlOrId, quizId, { papar: true });
+  if (p.items.length === 0) {
+    throw new Error('Tiada soalan berpilihan dijumpai dalam Form ' +
+                    '(aneka pilihan, kotak semak, atau menu jatuh).');
+  }
+
+  var r = { jumlah: p.items.length, boleh: 0, adaAmaran: 0, ditanda: 0,
+            bergambar: p.withImage, dipotong: p.dipotong, semuaTiadaKunci: true };
+  p.items.forEach(function (it) {
+    if (it.boleh) r.boleh++;
+    if (it.amaran.length) r.adaAmaran++;
+    if (it.ambil) r.ditanda++;
+    if (it.amaran.indexOf('tiada-kunci') < 0) r.semuaTiadaKunci = false;
+  });
+
+  return { quizId: quizId, items: p.items, ringkasan: r };
+}
+
+/**
+ * LANGKAH 2 — tulis soalan yang ditanda; buang gambar Drive bagi yang tidak.
+ *
+ * Token disahkan SEMULA di sini, bukan dipercayai daripada langkah pratonton.
+ * Medan `amaran`/`boleh` daripada klien diabaikan sepenuhnya — ia hanya untuk
+ * paparan. Yang dibaca ialah teks, pilihan, kunci, gambar, dan tanda `ambil`.
+ * (Klien boleh mengarang kandungan ini, tetapi admin yang sama sudah boleh
+ * menulis apa-apa melalui adminSaveQuestion — bukan lubang baharu.)
+ */
+function adminCommitImport(token, quizId, items) {
+  _requireAdmin(token);
+  quizId = String(quizId || '').trim();
+  if (!quizId) throw new Error('quizId diperlukan.');
+
+  var ambil = [], buang = [];
+  (items || []).forEach(function (it) {
+    if (!it) return;
+    if (it.ambil && String(it.soalan || '').trim()) ambil.push(it);
+    else if (it.gambarFileId) buang.push(it.gambarFileId);
+  });
+  if (ambil.length === 0) throw new Error('Tiada soalan ditanda untuk disimpan.');
+
+  var rows = ambil.map(function (it) { return _itemKeRow(it, quizId); });
+  var ditulis = _writeQuestionRows(rows);
+  return { ok: true, ditulis: ditulis, gambarDibuang: _buangFailDrive(buang) };
+}
+
+/** Batal pratonton — buang semua gambar yang sempat disimpan ke Drive */
+function adminDiscardPreview(token, fileIds) {
+  _requireAdmin(token);
+  return { ok: true, dibuang: _buangFailDrive(fileIds || []) };
 }

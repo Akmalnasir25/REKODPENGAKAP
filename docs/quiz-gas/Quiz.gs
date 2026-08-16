@@ -64,23 +64,9 @@ function pickQuestions(cfg) {
   const answerKey = {};
   chosen.forEach(function (r) {
     const qid = 'q' + r._row;
-    const options = [];
-    LETTERS.forEach(function (L) {
-      const text = String(r[L] == null ? '' : r[L]).trim();
-      if (text !== '') options.push({ key: L, text: text });
-    });
-    if (options.length < 2) return; // langkau soalan tak lengkap
-
+    const options = _optionsDariBaris(r);
     const kunci = _normKunci(r.jawapan);
-    if (kunci.length === 0) return; // tiada kunci — soalan mustahil dinilai
-
-    // Setiap huruf kunci mesti ada teks pilihan. Kunci 'E' pada soalan yang
-    // lajur E-nya kosong bermakna soalan itu tidak boleh dijawab betul oleh
-    // sesiapa; lebih baik dilangkau daripada menjatuhkan markah murid senyap.
-    const adaTeks = {};
-    options.forEach(function (o) { adaTeks[o.key] = true; });
-    const kunciSah = kunci.every(function (L) { return adaTeks[L] === true; });
-    if (!kunciSah) return;
+    if (!_soalanBolehDijawab(options, kunci).boleh) return; // langkau soalan tak lengkap
 
     answerKey[qid] = kunci;
     questions.push({
@@ -97,6 +83,46 @@ function pickQuestions(cfg) {
                     'dan kunci jawapan yang menunjuk kepada pilihan yang ada.');
   }
   return { questions: questions, answerKey: answerKey, total: questions.length };
+}
+
+/**
+ * Baris Soalan → senarai pilihan berteks, KEKAL pada hurufnya.
+ * Lajur B kosong dengan lajur C berisi menghasilkan [A, C], bukan [A, B] —
+ * kunci jawapan menunjuk kepada huruf, jadi huruf tidak boleh dianjak.
+ */
+function _optionsDariBaris(r) {
+  var options = [];
+  LETTERS.forEach(function (L) {
+    var text = String(r[L] == null ? '' : r[L]).trim();
+    if (text !== '') options.push({ key: L, text: text });
+  });
+  return options;
+}
+
+/**
+ * Adakah soalan ini boleh dijawab dalam kuiz sebenar?
+ *
+ * SATU-SATUNYA takrif "boleh dijawab" dalam sistem. `pickQuestions` menggunakannya
+ * untuk melangkau soalan rosak, dan pratonton import menggunakannya untuk memberi
+ * amaran SEBELUM soalan itu ditulis. Kalau dua tempat menilainya secara berasingan,
+ * pratonton akan menjanjikan soalan yang kuiz kemudian buang senyap.
+ *
+ * Pulang { boleh, sebab } — `sebab` ialah kod amaran, sama dengan yang dipapar
+ * oleh skrin pratonton (lihat docs/rancangan-pratonton-import-soalan.md §3.3).
+ */
+function _soalanBolehDijawab(options, kunci) {
+  if (!options || options.length < 2) return { boleh: false, sebab: 'pilihan-kurang' };
+  if (!kunci || kunci.length === 0) return { boleh: false, sebab: 'tiada-kunci' };
+
+  // Setiap huruf kunci mesti ada teks pilihan. Kunci 'E' pada soalan yang lajur
+  // E-nya kosong bermakna soalan itu tidak boleh dijawab betul oleh sesiapa;
+  // lebih baik dilangkau daripada menjatuhkan markah murid secara senyap.
+  var adaTeks = {};
+  options.forEach(function (o) { adaTeks[o.key] = true; });
+  var sah = kunci.every(function (L) { return adaTeks[L] === true; });
+  if (!sah) return { boleh: false, sebab: 'kunci-tanpa-teks' };
+
+  return { boleh: true, sebab: '' };
 }
 
 /** Kocok array (Fisher-Yates) — pulang salinan baharu, tak ubah asal */

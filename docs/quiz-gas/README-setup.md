@@ -86,9 +86,29 @@ termasuk pemilik skrip, boleh membuka konsolnya (`resourcemanager.projects.get`
 sentiasa ditolak).
 
 1. `console.cloud.google.com` ▸ pilih projek sedia ada, **atau** cipta baharu.
-   (Projek sedia ada memadai — tiada keperluan untuk projek khusus, dan ini
-   mengelak had kuota projek.)
-2. **APIs & Services ▸ Library** ▸ **Google Forms API** ▸ **Enable**.
+   Akaun mesti **Owner** pada projek itu — peranan Editor tidak cukup untuk
+   mengaktifkan API, dan kegagalannya muncul jauh kemudian sebagai
+   *"Permission denied while enabling APIs"*.
+2. **APIs & Services ▸ Library** ▸ aktifkan **SEMUA** yang berikut:
+
+   | API | Diperlukan oleh |
+   |---|---|
+   | **Google Drive API** | `DriveApp` — simpan gambar soalan & sijil |
+   | **Google Sheets API** | `SpreadsheetApp` — semua tab kuiz |
+   | **Google Forms API** | import soalan + gambar inline |
+   | **Google Docs API** | `DocumentApp` — template sijil & import Word |
+   | **Google Slides API** | `SlidesApp` — template sijil |
+
+   > ⚠ **Ini bahagian yang paling mudah tersilap.** Projek GCP **lalai** datang
+   > dengan semua API ini sudah aktif, jadi ia tidak pernah menjadi isu sebelum
+   > ini. Sebaik projek standard dilampirkan, tiada satu pun aktif secara
+   > automatik — dan Apps Script **tidak** memberitahu semasa Akmal menukar
+   > projek. Ia gagal kemudian, semasa kod menyentuh perkhidmatan itu:
+   > *"Permission denied while enabling APIs: drive for GCP project …"*
+   >
+   > Mengaktifkan Forms API sahaja membetulkan pengesanan gambar tetapi
+   > memecahkan **penyimpanan** gambar — dan mesej ralatnya tidak langsung
+   > menyebut Google Cloud, jadi ia kelihatan seperti masalah Drive penuh.
 3. **APIs & Services ▸ OAuth consent screen** ▸ isi nama app + emel sokongan.
 4. ⚠ Tekan **PUBLISH APP** supaya status menjadi **In production**.
    Dalam mod *Testing*, token luput setiap **7 hari** dan kuiz mati seminggu

@@ -600,9 +600,30 @@ function _diagnosGambarForm(ref) {
     } catch (e) {
       L.push('  simpan ke Drive: GAGAL - ' + e.message);
       L.push('');
-      L.push('PUNCA: gambar berjaya dimuat turun tetapi Drive menolak simpanan.');
-      L.push('Biasanya storan Drive penuh, atau dasar organisasi menyekat');
-      L.push('perkongsian "sesiapa yang ada pautan".');
+      if (/enabling APIs|has not been used|SERVICE_DISABLED|Permission denied/i.test(e.message)) {
+        // Projek GCP standard bermula dengan SEMUA API dimatikan. Projek lalai
+        // datang dengan semuanya hidup, jadi ini hanya menggigit selepas projek
+        // ditukar - dan mesej Google tidak menyebut langkah yang tertinggal.
+        var m = String(e.message).match(/project\s+(\d+)/i);
+        L.push('PUNCA: API Google belum diaktifkan pada projek GCP skrip ini.');
+        L.push('Projek GCP standard bermula dengan SEMUA API dimatikan.');
+        L.push('Mengaktifkan Forms API sahaja tidak mencukupi.');
+        L.push('');
+        L.push('Aktifkan SEMUA ini di console.cloud.google.com');
+        if (m) L.push('(projek ' + m[1] + ') > APIs & Services > Library:');
+        else L.push('> APIs & Services > Library:');
+        L.push('  - Google Drive API      (simpan gambar & sijil)');
+        L.push('  - Google Sheets API     (tab kuiz)');
+        L.push('  - Google Forms API      (import soalan)');
+        L.push('  - Google Docs API       (sijil, import Word)');
+        L.push('  - Google Slides API     (sijil)');
+        L.push('');
+        L.push('Akaun mesti OWNER pada projek itu - Editor tidak mencukupi.');
+      } else {
+        L.push('PUNCA: gambar berjaya dimuat turun tetapi Drive menolak simpanan.');
+        L.push('Biasanya storan Drive penuh, atau dasar organisasi menyekat');
+        L.push('perkongsian "sesiapa yang ada pautan".');
+      }
     }
     return L.join('\n');
   }

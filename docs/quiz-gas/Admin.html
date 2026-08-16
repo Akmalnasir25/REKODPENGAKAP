@@ -234,16 +234,103 @@ function loadQ(){
   var quizId=curQuiz();
   document.getElementById('qlist').innerHTML='<div class="muted" style="margin-top:12px">Memuatkan…</div>';
   call('adminListQuestions',[TOKEN,quizId],function(list){
-    var rows=(list||[]).map(function(q,i){
-      return '<tr><td>'+(i+1)+'</td><td>'+esc(q.soalan)+'<br><span class="muted">Jwp: '+esc(q.jawapan)+' · '+esc(q.markah)+' mkh</span></td>'+
-        '<td>'+(q.aktif?'<span class="pill ok">ON</span>':'<span class="pill no">OFF</span>')+'</td>'+
-        '<td><button class="ghost sm" onclick="editQ('+q.row+')">Edit</button> '+
-        '<button class="danger sm" onclick="delQ('+q.row+',this)">Padam</button></td></tr>';
-    }).join('');
     window._Q=list||[];
-    document.getElementById('qlist').innerHTML='<table><tr><th>#</th><th>Soalan</th><th></th><th></th></tr>'+
-      (rows||'<tr><td colspan="4" class="muted">Belum ada soalan.</td></tr>')+'</table>';
+    window._SEL={};          // pilihan dilupakan setiap kali senarai dimuat semula
+    renderQList();
   });
+}
+
+/* Senarai soalan + pilihan pukal. Dipisahkan daripada loadQ supaya menanda
+   kotak semak melukis semula tanpa memanggil server. */
+function renderQList(){
+  var list=window._Q||[], sel=window._SEL||{};
+  var rows=list.map(function(q,i){
+    return '<tr'+(sel[q.row]?' style="background:#faf5ff"':'')+'>'+
+      '<td><input type="checkbox" style="width:auto" id="qs'+q.row+'" onchange="selQ('+q.row+')"'+(sel[q.row]?' checked':'')+'></td>'+
+      '<td>'+(i+1)+'</td><td>'+esc(q.soalan)+'<br><span class="muted">Jwp: '+esc(q.jawapan)+' · '+esc(q.markah)+' mkh</span></td>'+
+      '<td>'+(q.aktif?'<span class="pill ok">ON</span>':'<span class="pill no">OFF</span>')+'</td>'+
+      '<td><button class="ghost sm" onclick="editQ('+q.row+')">Edit</button> '+
+      '<button class="danger sm" onclick="delQ('+q.row+',this)">Padam</button></td></tr>';
+  }).join('');
+  var bil=list.filter(function(q){ return sel[q.row]; }).length;
+  var semua=list.length>0 && bil===list.length;
+  document.getElementById('qlist').innerHTML=
+    '<div id="qbulk">'+bulkBar(bil,list.length)+'</div>'+
+    '<table><tr>'+
+      '<th><input type="checkbox" style="width:auto" id="qsall" onchange="selAll(this.checked)"'+(semua?' checked':'')+'></th>'+
+      '<th>#</th><th>Soalan</th><th></th><th></th></tr>'+
+    (rows||'<tr><td colspan="5" class="muted">Belum ada soalan.</td></tr>')+'</table>';
+}
+function bulkBar(bil,jumlah){
+  if(!bil) return jumlah
+    ? '<div class="muted" style="margin-top:10px;font-size:.8rem">Tanda kotak untuk memadam beberapa soalan sekali gus.</div>'
+    : '';
+  return '<div class="pbar" style="margin:10px 0 0">'+
+    '<div class="cnt">'+bil+' daripada '+jumlah+' soalan dipilih</div>'+
+    '<div class="row">'+
+      '<button class="danger sm" id="qdelbtn" onclick="delSelected(this)">Padam '+bil+' soalan</button>'+
+      '<button class="ghost sm" onclick="selAll(false)">Batal pilihan</button>'+
+    '</div><div id="qdelmsg"></div></div>';
+}
+/* Kemas kini setempat sahaja — melukis semula seluruh jadual pada setiap ketukan
+   memusnahkan kotak semak yang baru ditekan dan terasa tersekat pada 60 baris. */
+function selQ(row){
+  var el=document.getElementById('qs'+row);
+  if(!el) return;
+  if(el.checked) window._SEL[row]=true; else delete window._SEL[row];
+  var tr=el.parentNode&&el.parentNode.parentNode;
+  if(tr&&tr.style) tr.style.background=el.checked?'#faf5ff':'';
+  updateBulk();
+}
+function updateBulk(){
+  var list=window._Q||[], sel=window._SEL||{};
+  var bil=list.filter(function(q){ return sel[q.row]; }).length;
+  var box=document.getElementById('qbulk');
+  if(box) box.innerHTML=bulkBar(bil,list.length);
+  var all=document.getElementById('qsall');
+  if(all) all.checked=(list.length>0&&bil===list.length);
+}
+function selAll(on){
+  window._SEL={};
+  if(on) (window._Q||[]).forEach(function(q){ window._SEL[q.row]=true; });
+  renderQList();
+}
+function delSelected(btn){
+  var sel=window._SEL||{};
+  var pilih=(window._Q||[]).filter(function(q){ return sel[q.row]; });
+  if(!pilih.length) return;
+  // Pengesahan dua-klik — confirm() disekat dalam sandbox GAS. Tempoh lebih
+  // panjang daripada padam tunggal (4s): memadam 30 soalan patut diberi masa
+  // untuk berfikir, bukan dilepasi dengan dua ketukan pantas.
+  if(btn.getAttribute('data-armed')!=='1'){
+    btn.setAttribute('data-armed','1');
+    btn.textContent='Sah padam '+pilih.length+' soalan?';
+    setTimeout(function(){
+      if(btn&&btn.parentNode){ btn.removeAttribute('data-armed'); btn.textContent='Padam '+pilih.length+' soalan'; }
+    },4000);
+    return;
+  }
+  var msg=document.getElementById('qdelmsg');
+  if(msg){ msg.className='muted'; msg.innerHTML='<span class="spin"></span> Memadam…'; }
+  btn.disabled=true;
+  // Teks dihantar bersama nombor baris supaya server boleh menolak senarai yang
+  // sudah lapuk, dan bukan memadam soalan yang salah.
+  var kirim=pilih.map(function(q){ return { row:q.row, soalan:q.soalan }; });
+  call('adminDeleteQuestions',[TOKEN,kirim],function(r){
+    flashQ('✔ '+r.dipadam+' soalan dipadam.');
+    window._SEL={}; loadQ();
+  },function(e){
+    if(msg){ msg.className='err'; msg.textContent=(e&&e.message)||'Gagal memadam.'; }
+    btn.disabled=false; btn.removeAttribute('data-armed'); btn.textContent='Padam '+pilih.length+' soalan';
+  });
+}
+/* Mesej ringkas di atas senarai — tidak melalui FLASH kerana kita kekal di tab
+   yang sama dan loadQ tidak melukis semula tajuk. */
+function flashQ(txt){
+  var box=document.getElementById('importbox');
+  if(!box) return;
+  box.innerHTML='<div class="ok">'+esc(txt)+'</div>';
+  setTimeout(function(){ if(box) box.innerHTML=''; },5000);
 }
 function editQ(row){
   var quizId=curQuizRemembered(); // tangkap SEBELUM panel #qz hilang

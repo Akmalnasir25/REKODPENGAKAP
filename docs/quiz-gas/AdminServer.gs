@@ -110,6 +110,69 @@ function adminDeleteQuestion(token, row) {
   finally { lock.releaseLock(); }
 }
 
+/**
+ * Padam beberapa soalan sekali gus.
+ *
+ * `items` = [{ row, soalan }] — teks disertakan DENGAN SENGAJA. Nombor baris
+ * ialah rujukan yang rapuh: satu padaman dari sesi lain (atau dari Sheet yang
+ * dibuka serentak) menganjakkan setiap baris di bawahnya, dan senarai di skrin
+ * admin menjadi lapuk tanpa sebarang tanda. Padam SATU baris yang teranjak
+ * memusnahkan satu soalan yang salah; padam pukal yang teranjak memusnahkan
+ * dua puluh. Jadi setiap baris disemak semula terhadap teksnya sebelum apa-apa
+ * dipadam, dan operasi dibatalkan SEPENUHNYA jika mana-mana tidak sepadan.
+ *
+ * Padaman dibuat MENURUN (baris terbesar dahulu) supaya nombor baris yang belum
+ * dipadam tidak beranjak di tengah operasi, dan dalam larian bersebelahan
+ * (deleteRows) supaya 40 soalan tidak menjadi 40 panggilan Sheet.
+ */
+function adminDeleteQuestions(token, items) {
+  _requireAdmin(token);
+
+  // Buang pendua, tolak baris tak sah, susun MENURUN
+  var seen = {}, senarai = [];
+  (items || []).forEach(function (it) {
+    var row = parseInt(it && it.row, 10);
+    if (!(row >= 2) || seen[row]) return;
+    seen[row] = true;
+    senarai.push({ row: row, soalan: String((it && it.soalan) || '').trim() });
+  });
+  if (senarai.length === 0) throw new Error('Tiada soalan dipilih untuk dipadam.');
+  senarai.sort(function (a, b) { return b.row - a.row; });
+
+  var lock = LockService.getScriptLock(); lock.waitLock(15000);
+  try {
+    var sh = _sheet(SHEET_SOALAN);
+    var nilai = sh.getDataRange().getValues();
+
+    // Semak kesegaran SEBELUM memadam apa-apa
+    var lapuk = 0;
+    senarai.forEach(function (it) {
+      var baris = nilai[it.row - 1];   // getValues 0-indeks, nombor baris 1-indeks
+      var sekarang = baris ? String(baris[1] == null ? '' : baris[1]).trim() : '';
+      if (sekarang !== it.soalan) lapuk++;
+    });
+    if (lapuk > 0) {
+      throw new Error('Senarai soalan sudah berubah sejak ia dimuatkan (' + lapuk +
+                      ' baris tidak sepadan) — mungkin sesi lain memadam atau menyunting ' +
+                      'soalan. Tiada apa-apa dipadam. Muat semula senarai dan cuba lagi.');
+    }
+
+    // Padam dalam larian bersebelahan, dari bawah ke atas
+    var dipadam = 0, i = 0;
+    while (i < senarai.length) {
+      var hujung = senarai[i].row;                  // baris TERBESAR dalam larian
+      var j = i;
+      while (j + 1 < senarai.length && senarai[j + 1].row === senarai[j].row - 1) j++;
+      var mula = senarai[j].row;                    // baris TERKECIL
+      var bil = hujung - mula + 1;
+      sh.deleteRows(mula, bil);
+      dipadam += bil;
+      i = j + 1;
+    }
+    return { ok: true, dipadam: dipadam };
+  } finally { lock.releaseLock(); }
+}
+
 /** Normalize quizId untuk perbandingan teguh (abaikan beza ruang/nbsp) */
 function _normId(s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
 

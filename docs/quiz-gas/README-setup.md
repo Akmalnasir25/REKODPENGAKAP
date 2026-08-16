@@ -218,6 +218,15 @@ soalan yang ditolak dibuang.
   template sijil, aktif/tidak.
 - Tab **Soalan**: tambah/edit/padam soalan, atau **Import dari Google Form** dengan
   pratonton (lihat §E).
+  - **Padam pukal**: tanda kotak di sebelah kiri setiap soalan (atau kotak di kepala
+    jadual untuk memilih semua), kemudian **Padam N soalan**. Butang perlu ditekan
+    **dua kali** untuk mengesahkan — tekanan pertama menukarnya kepada *"Sah padam N
+    soalan?"* selama 4 saat.
+  - Kalau senarai di skrin sudah lapuk (sesi lain memadam atau menyunting soalan
+    dalam masa yang sama), padaman **dibatalkan sepenuhnya** dan tiada apa-apa
+    dipadam. Muat semula senarai dan cuba lagi. Ini disengajakan: nombor baris
+    beranjak apabila baris dipadam, dan padam pukal yang teranjak memusnahkan
+    puluhan soalan yang salah, bukan satu.
 - Tab **Keputusan**: lihat markah/lulus/sijil setiap peserta.
 - Pengubahan tetap menulis ke tab Sheet yang sama — jadi tuan boleh guna panel **atau**
   edit Sheet terus, ikut keselesaan.

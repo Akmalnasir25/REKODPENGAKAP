@@ -77,14 +77,45 @@ try {
   }
 
   # 2) Salin fail yang berubah ke atas klon
+  #
+  #    clasp menyimpan fail Apps Script (.gs) sebagai .js di tempatan. Menyalin
+  #    Quiz.gs ke sebelah Quiz.js yang diklon menghasilkan DUA fail tempatan
+  #    yang memetakan ke satu fail jauh, dan push gagal dengan "Conflicting
+  #    files found". Jadi sasaran mesti mengikut sambungan yang klon gunakan,
+  #    bukan sambungan fail sumber.
   Write-Host ''
   Write-Host '[2/3] Menyalin fail...' -ForegroundColor Yellow
+  $adaBaharu = $false
   foreach ($f in $Fail) {
     $dari = Join-Path $Sumber $f
-    $ke   = Join-Path $Kerja  $f
-    if (Test-Path $ke) { $tanda = 'ganti ' } else { $tanda = 'BAHARU' }
+    $nama = [System.IO.Path]::GetFileNameWithoutExtension($f)
+    $ext  = [System.IO.Path]::GetExtension($f)
+
+    if ($ext -eq '.gs') {
+      # Ikut apa yang ada di klon: .js (biasa) atau .gs
+      if (Test-Path (Join-Path $Kerja ($nama + '.js')))      { $sasaran = $nama + '.js' }
+      elseif (Test-Path (Join-Path $Kerja ($nama + '.gs')))  { $sasaran = $nama + '.gs' }
+      else                                                   { $sasaran = $nama + '.js' }
+    } else {
+      $sasaran = $f
+    }
+
+    $ke = Join-Path $Kerja $sasaran
+    if (Test-Path $ke) {
+      $tanda = 'ganti '
+    } else {
+      $tanda = 'BAHARU'
+      $adaBaharu = $true
+    }
     Copy-Item $dari $ke -Force
-    Write-Host ("   [$tanda] $f")
+    if ($f -eq $sasaran) { Write-Host ("   [$tanda] $f") }
+    else                 { Write-Host ("   [$tanda] $f  ->  $sasaran") }
+  }
+
+  if ($adaBaharu) {
+    Write-Host ''
+    Write-Host 'AMARAN: ada fail yang tiada di projek jauh. Kalau itu tidak' -ForegroundColor Yellow
+    Write-Host 'dijangka, batalkan sekarang dan semak nama fail.' -ForegroundColor Yellow
   }
 
   # 3) Sahkan sebelum menulis ke projek langsung

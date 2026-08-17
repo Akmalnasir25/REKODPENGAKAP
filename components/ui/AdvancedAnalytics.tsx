@@ -37,6 +37,46 @@ const gayaTooltip = {
 };
 
 /**
+ * Tick paksi-Y yang membalut kepada dua baris.
+ *
+ * Recharts tidak membalut teks tick; ia membiarkannya melimpah atau terpotong.
+ * Nama sekolah penuh tidak muat pada satu baris, dan memotongnya bermakna
+ * pembaca perlukan tooltip untuk mengetahui sekolah mana — itu menjadikan
+ * tooltip pintu masuk wajib, bukan tambahan.
+ *
+ * Dua baris ialah had; nama yang lebih panjang daripada itu berakhir dengan
+ * elipsis pada baris kedua sahaja, jadi permulaannya sentiasa terbaca.
+ */
+const TickBalut = ({ x, y, payload }: any) => {
+  const teks = String(payload?.value ?? '');
+  const HAD = 18;                     // aksara sebaris pada 10px dalam lebar 150px
+  const baris: string[] = [];
+  let semasa = '';
+  for (const perkataan of teks.split(' ')) {
+    if (!semasa) { semasa = perkataan; continue; }
+    if ((semasa + ' ' + perkataan).length <= HAD) semasa += ' ' + perkataan;
+    else { baris.push(semasa); semasa = perkataan; }
+  }
+  if (semasa) baris.push(semasa);
+
+  const dipapar = baris.slice(0, 2);
+  if (baris.length > 2) {
+    dipapar[1] = dipapar[1].slice(0, HAD - 1) + '…';
+  }
+  const dyMula = dipapar.length === 1 ? 3 : -2;
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="end" fill={WARNA.inkKedua} fontSize={10}>
+        {dipapar.map((b, i) => (
+          <tspan key={i} x={0} dy={i === 0 ? dyMula : 11}>{b}</tspan>
+        ))}
+      </text>
+    </g>
+  );
+};
+
+/**
  * Bar mendatar bagi kiraan mengikut kategori nominal.
  *
  * Satu hue, bar nipis, hujung data bulat, grid hairline SOLID (bukan putus —
@@ -48,15 +88,16 @@ const CartaBar: React.FC<{
   data: Array<{ name: string; value: number; fullName?: string }>;
   tinggi?: number;
   lebarLabel?: number;
-}> = ({ data, tinggi = 220, lebarLabel = 120 }) => (
+  balut?: boolean;
+}> = ({ data, tinggi = 220, lebarLabel = 120, balut = false }) => (
   <ResponsiveContainer width="100%" height={tinggi}>
     <BarChart data={data} layout="vertical" margin={{ top: 4, right: 44, bottom: 4, left: 4 }}>
       <CartesianGrid horizontal={false} stroke={WARNA.grid} />
       <XAxis type="number" tick={{ fontSize: 10, fill: WARNA.inkMuted }}
              axisLine={{ stroke: WARNA.paksi }} tickLine={false} />
       <YAxis type="category" dataKey="name" width={lebarLabel}
-             tick={{ fontSize: 10, fill: WARNA.inkKedua }}
-             axisLine={false} tickLine={false} />
+             tick={balut ? <TickBalut /> : { fontSize: 10, fill: WARNA.inkKedua }}
+             axisLine={false} tickLine={false} interval={0} />
       <Tooltip
         contentStyle={gayaTooltip}
         cursor={{ fill: 'rgba(42,120,214,0.06)' }}
@@ -93,16 +134,6 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
     return Object.entries(counts)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [yearData]);
-
-  // Gender distribution
-  const genderData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    yearData.forEach(d => {
-      const gender = d.gender || 'Tidak Dinyatakan';
-      counts[gender] = (counts[gender] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [yearData]);
 
   // Category distribution
@@ -154,7 +185,11 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
       counts[school] = (counts[school] || 0) + 1;
     });
     return Object.entries(counts)
-      .map(([name, value]) => ({ name: name.length > 25 ? name.slice(0, 25) + '...' : name, value, fullName: name }))
+      // Nama penuh. Memotong pada 25 aksara menjadikan "SK TARCISIAN CONVENT"
+      // dan "SK TARCISIAN CONVENT 2" kelihatan serupa, dan nama yang terpotong
+      // memerlukan tooltip untuk dibaca — tooltip tidak boleh menjadi
+      // satu-satunya jalan. Tick membalut kepada dua baris.
+      .map(([name, value]) => ({ name, value, fullName: name }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
   }, [yearData]);
@@ -270,12 +305,12 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
           {/* Dahulunya pai sepuluh hirisan. Pai membandingkan nilai yang
               hampir sama dengan buruk, dan sepuluh hirisan melebihi had lapan
               hue. Bar disusun menjawab "yang mana terbesar" terus. */}
-          <CartaBar data={programDipapar} tinggi={Math.max(180, programDipapar.length * 30)} lebarLabel={130} />
+          <CartaBar data={programDipapar} tinggi={Math.max(200, programDipapar.length * 40)} lebarLabel={150} balut />
         </div>
 
         <div className={KAD}>
           <TajukKad icon={School} warna="text-emerald-600">10 Sekolah Teratas</TajukKad>
-          <CartaBar data={topSchools} tinggi={Math.max(180, topSchools.length * 30)} lebarLabel={130} />
+          <CartaBar data={topSchools} tinggi={Math.max(200, topSchools.length * 40)} lebarLabel={150} balut />
         </div>
       </div>
 

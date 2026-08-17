@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { SubmissionData } from '../../types';
-import { TrendingUp, Users, Award, School, PieChart as PieIcon } from 'lucide-react';
+import { TrendingUp, Users, Award, School, PieChart as PieIcon, Anchor } from 'lucide-react';
 import { safeGetMonth } from '../../utils/dataProcessing';
 
 interface AdvancedAnalyticsProps {
@@ -43,6 +43,27 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
       if (d.category) {
         counts[d.category] = (counts[d.category] || 0) + 1;
       }
+    });
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [yearData]);
+
+  // Unit distribution — PESERTA sahaja.
+  //
+  // Pegawai tiada unit (supabaseApi.ts:469 menetapkannya kosong bagi mereka),
+  // jadi memasukkan mereka akan menghasilkan baldi "Tiada Unit" yang lebih
+  // besar daripada mana-mana unit sebenar dan menjadikan carta itu separuh
+  // tentang unit, separuh tentang peranan. Keputusan U2 dalam
+  // docs/rancangan-penapis-unit.md.
+  const unitData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    yearData.forEach(d => {
+      const r = String(d.role || 'PESERTA').toUpperCase();
+      if (r !== 'PESERTA' && r !== 'PENERIMA RAMBU') return;
+      const unit = (d.unit || '').trim();
+      if (!unit) return;
+      counts[unit] = (counts[unit] || 0) + 1;
     });
     return Object.entries(counts)
       .map(([name, value]) => ({ name, value }))
@@ -201,6 +222,37 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Unit Chart — bentuk sama seperti Kategori, di sebelahnya */}
+      {unitData.length > 0 && (
+        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+          <h4 className="font-bold text-sm text-gray-800 mb-4 flex items-center gap-2">
+            <Anchor size={16} className="text-orange-600" /> Pecahan Unit Peserta
+          </h4>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={unitData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip contentStyle={{ fontSize: 11 }} />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Bilangan">
+                {unitData.map((_, i) => <Cell key={i} fill={COLORS[(i + 3) % COLORS.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+            {unitData.map((u, i) => (
+              <div key={u.name} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
+                <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-600">
+                  <span className="w-2 h-2 rounded-full" style={{ background: COLORS[(i + 3) % COLORS.length] }} />
+                  {u.name}
+                </span>
+                <span className="text-sm font-bold text-gray-800">{u.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

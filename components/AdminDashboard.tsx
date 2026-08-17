@@ -36,6 +36,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
   // Penapis jenis sekolah — SR/SM membayar kadar berbeza, jadi laporan selalunya
   // perlu dipisahkan mengikutnya (migrasi 031).
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<SchoolType | ''>('');
+  // Penapis unit. Hanya PESERTA mempunyai unit — supabaseApi.ts:469 menetapkan
+  // medan itu kosong bagi pegawai. Jadi memilih satu unit menyembunyikan setiap
+  // pegawai (keputusan U1 dalam docs/rancangan-penapis-unit.md), yang betul:
+  // pegawai bukan sebahagian daripada mana-mana unit.
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState('');
   const [selectedSchoolFilter, setSelectedSchoolFilter] = useState(''); // '' = semua sekolah
 
   // Program mana aktifkan siri (rujuk docs/rancangan-siri.md) — kawal keterlihatan penapis Siri.
@@ -110,8 +115,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
           && (!schoolQuery || String(d.school || '').toLowerCase().includes(schoolQuery))
           && (selectedSiriFilter === '' || (d.siri || 1) === selectedSiriFilter)
           && (selectedTypeFilter === '' || (d.schoolType || 'lain') === selectedTypeFilter)
+          && (selectedUnitFilter === '' || (d.unit || '') === selectedUnitFilter)
       );
-  }, [submittedData, selectedYear, selectedSchoolFilter, selectedSiriFilter, selectedTypeFilter]);
+  }, [submittedData, selectedYear, selectedSchoolFilter, selectedSiriFilter, selectedTypeFilter, selectedUnitFilter]);
 
   // Senarai sekolah untuk dropdown filter (dari data yang dihantar, ikut abjad)
   const schoolFilterOptions = useMemo(() => {
@@ -624,6 +630,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
                         <option value="rendah">SR — Sekolah Rendah</option>
                         <option value="menengah">SM — Sekolah Menengah</option>
                         <option value="lain">Lain-lain</option>
+                    </select>
+                    {/* Unit hanya diisi bagi PESERTA, jadi memilih satu unit
+                        menyingkirkan setiap pegawai daripada SEMUA tab — bukan
+                        hanya carta. Tajuk menyatakannya supaya senarai Pemimpin
+                        yang tiba-tiba kosong tidak kelihatan seperti pepijat. */}
+                    <select
+                        className="p-2 border rounded-lg text-orange-700 outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50 text-sm font-bold w-full md:w-auto"
+                        value={selectedUnitFilter}
+                        onChange={(e) => setSelectedUnitFilter(e.target.value)}
+                        title="Tapis ikut unit — peserta sahaja mempunyai unit, jadi pegawai tersembunyi apabila satu unit dipilih"
+                    >
+                        <option value="">Semua Unit</option>
+                        <option value="Perdana">Perdana</option>
+                        <option value="Udara">Udara</option>
+                        <option value="Laut">Laut</option>
+                        <option value="PPKI">PPKI</option>
+                        <option value="PPKI Udara">PPKI Udara</option>
                     </select>
                 </div>
 

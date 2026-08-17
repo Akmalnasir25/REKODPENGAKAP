@@ -61,6 +61,12 @@ export const UserForm: React.FC<UserFormProps> = ({
   
   // Registration Data
   type PersonRole = 'PESERTA' | 'PEMIMPIN' | 'PENOLONG PEMIMPIN' | 'PEMBANTU' | 'PENGUJI';
+
+  // Peranan yang MENYERTAI kem, jadi mempunyai kategori, unit, makanan dan
+  // maklumat kesihatan. Pemimpin, Penolong Pemimpin dan Penguji tidak
+  // (keputusan G2). Satu senarai, dirujuk di setiap tempat yang memerlukannya
+  // — tiga salinan berasingan akan menyimpang.
+  const BERKATEGORI: string[] = ['PESERTA', 'PENERIMA RAMBU', 'PEMBANTU'];
   
   const participantIdCounterRef = useRef(0);
   const createEmptyParticipant = (role: PersonRole = 'PESERTA'): Participant & { role: PersonRole } => ({ 
@@ -120,7 +126,34 @@ export const UserForm: React.FC<UserFormProps> = ({
     s.badgeName === leaderInfo.badgeType &&
     ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
      (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
+  // Kategori permulaan bagi program ini (migrasi 056). Keris bermula pada
+  // Kanak-kanak, Usaha/Maju/Jaya pada Muda, Kemahiran pada Remaja. Program
+  // tanpa tetapan mewarisi Kanak-kanak, iaitu kelakuan sebelum ini.
+  const kategoriLalai = selectedProgramSetting?.defaultCategory || 'Pengakap Kanak-kanak';
   const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
+
+  // Menukar program menukar kategori permulaan. Baris yang masih memegang
+  // lalai program LAMA diselaraskan; baris yang guru sudah ubah manual
+  // dibiarkan (keputusan K2) — kerja mereka tidak boleh hilang kerana menukar
+  // pilihan program.
+  const kategoriLalaiSebelum = useRef(kategoriLalai);
+  useEffect(() => {
+    const lama = kategoriLalaiSebelum.current;
+    if (lama === kategoriLalai) return;
+    kategoriLalaiSebelum.current = kategoriLalai;
+    setAllPeople(prev => {
+      let berubah = false;
+      const baharu = prev.map(p => {
+        // Pemimpin, Penolong Pemimpin dan Penguji TIADA kategori. Kategori
+        // mereka kosong, jadi semakan "kosong bermakna belum disentuh" akan
+        // mengisinya semula dan membatalkan pengosongan itu.
+        if (!BERKATEGORI.includes((p as any).role)) return p;
+        if (p.kategori === lama || !p.kategori) { berubah = true; return { ...p, kategori: kategoriLalai }; }
+        return p;
+      });
+      return berubah ? baharu : prev;
+    });
+  }, [kategoriLalai]);
   const siriEnabled = !!selectedProgramSetting?.siriEnabled;
   const siriOptions = Array.from({ length: selectedProgramSetting?.maxSiri || 5 }, (_, i) => i + 1);
 
@@ -385,6 +418,84 @@ export const UserForm: React.FC<UserFormProps> = ({
         `Pendaftaran ${jenis.join(' dan ')} untuk '${leaderInfo.badgeType}' telah ditutup oleh admin.\n\n` +
         `${peranaanDitolak.length} rekod berkenaan perlu dibuang sebelum borang ini boleh dihantar.`,
       );
+      return;
+    }
+
+    // Jantina mesti sepadan dengan IC.
+    //
+    // Lalai setiap baris baharu ialah 'Lelaki', dan pengesanan automatik hanya
+    // menulis gantinya apabila IC lengkap. Guru yang menampal IC tidak lengkap,
+    // atau yang mengisi jantina sebelum IC, meninggalkan lalai itu di tempatnya
+    // — dan tiada apa memberitahu sesiapa. Satu sekolah perempuan didapati
+    // mempunyai seorang pelajar direkodkan sebagai lelaki dengan cara ini.
+    //
+    // Disekat di sini dan bukan dibetulkan secara senyap: kalau IC itu yang
+    // tersalah taip, membetulkan jantina akan menyembunyikan ralat sebenar.
+    // Tanda nama ialah isyarat utama, IC hanya mengesahkan. Bila kedua-duanya
+    // bercanggah, yang tersalah taip hampir pasti IC — jadi mesej mesti
+    // menunjuk ke sana, bukan menyuruh guru menukar jantina yang betul.
+    const ikutNama = (nama: string): 'Lelaki' | 'Perempuan' | null => {
+      const n = ` ${(nama || '').toUpperCase().replace(/\s+/g, ' ')} `;
+      if (/ (BINTI|BT|BTE|A\/P|D\/O) /.test(n)) return 'Perempuan';
+      if (/ (BIN|A\/L|S\/O) /.test(n)) return 'Lelaki';
+      return null;
+    };
+    const ikutIC = (icRaw?: string): 'Lelaki' | 'Perempuan' | null => {
+      const ic = (icRaw || '').replace(/[^0-9]/g, '');
+      if (ic.length !== 12) return null;
+      return Number(ic[11]) % 2 === 0 ? 'Perempuan' : 'Lelaki';
+    };
+
+    const dinilai = allEntries.map(p => ({ p, nama: ikutNama(p.name), ic: ikutIC(p.icNumber) }));
+
+    // Jantina bercanggah dengan tanda nama: SEKAT. Tanda nama tidak boleh
+    // salah dengan cara senyap seperti satu digit IC boleh.
+    const lawanNama = dinilai.filter(x => x.nama && x.nama !== x.p.gender);
+    if (lawanNama.length > 0) {
+      alert([
+        'JANTINA TIDAK SEPADAN DENGAN NAMA',
+        '',
+        ...lawanNama.map(({ p, nama }) =>
+          `  • ${p.name} — ditulis ${p.gender}, nama menunjukkan ${nama}`),
+        '',
+        'BIN, A/L, S/O = Lelaki. BINTI, BT, BTE, A/P, D/O = Perempuan.',
+      ].join('\n'));
+      return;
+    }
+
+    // IC bercanggah dengan nama: AMARAN sahaja. Jantina sudah betul; yang salah
+    // ialah nombor IC. Menyekat penghantaran kerana satu digit akan menahan
+    // keseluruhan pendaftaran atas kesilapan yang boleh dibetulkan kemudian —
+    // tetapi guru mesti diberitahu, kerana IC digunakan untuk mengesan
+    // pendaftaran berulang dan dicetak pada sijil.
+    const icMencurigakan = dinilai.filter(x => x.nama && x.ic && x.nama !== x.ic);
+    if (icMencurigakan.length > 0) {
+      const teruskan = confirm([
+        'NO. KP BERKEMUNGKINAN TERSALAH TAIP',
+        '',
+        ...icMencurigakan.map(({ p, nama, ic }) =>
+          `  • ${p.name}\n      No. KP ${p.icNumber} menunjukkan ${ic}, tetapi nama menunjukkan ${nama}`),
+        '',
+        'Jantina akan disimpan mengikut nama.',
+        'Sila semak No. KP ini — ia digunakan untuk sijil dan semakan pendaftaran berulang.',
+        '',
+        'Teruskan menghantar?',
+      ].join('\n'));
+      if (!teruskan) return;
+    }
+
+    // Tiada tanda nama: IC ialah satu-satunya isyarat, jadi ia disekat bila
+    // bercanggah. Tiada apa lagi untuk menyemaknya terhadap.
+    const lawanIC = dinilai.filter(x => !x.nama && x.ic && x.ic !== x.p.gender);
+    if (lawanIC.length > 0) {
+      alert([
+        'JANTINA TIDAK SEPADAN DENGAN NO. KP',
+        '',
+        ...lawanIC.map(({ p, ic }) =>
+          `  • ${p.name} — ditulis ${p.gender}, No. KP menunjukkan ${ic}`),
+        '',
+        'Digit terakhir No. KP: ganjil = Lelaki, genap = Perempuan.',
+      ].join('\n'));
       return;
     }
 
@@ -760,7 +871,22 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm font-bold"
                                     value={(person as any).role || 'PESERTA'}
                                     onChange={e => {
-                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, role: e.target.value as any } : p);
+                                      // Kategori, Unit dan Makanan hanya dipaparkan untuk
+                                      // PESERTA. Menukar peranan menyembunyikan medan itu
+                                      // tetapi TIDAK mengosongkan nilainya — jadi lalai
+                                      // 'Pengakap Kanak-kanak' dan 'Perdana' terus tersimpan
+                                      // pada pemimpin dan penguji, tanpa sesiapa nampak.
+                                      // Dilaporkan oleh sekolah, 17 Ogos 2026.
+                                      const peranan = e.target.value as any;
+                                      // Pemimpin, Penolong Pemimpin dan Penguji tiada
+                                      // kategori. Pembantu ada — ia menyertai kem seperti
+                                      // peserta (keputusan G2).
+                                      const adaKategori = BERKATEGORI.includes(peranan);
+                                      const updated = allPeople.map(p => p.id === person.id
+                                        ? { ...p, role: peranan,
+                                            kategori: adaKategori ? (p.kategori || kategoriLalai) : '',
+                                            unit:     adaKategori ? (p.unit || 'Perdana') : '' }
+                                        : p);
                                       setAllPeople(updated);
                                     }}
                                 >
@@ -795,12 +921,34 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     value={person.icNumber} 
                                     onChange={e => {
                                       const val = e.target.value;
-                                      // Auto-detect gender from IC
+                                      // Jantina daripada IC: digit terakhir ganjil = lelaki,
+                                      // genap = perempuan.
+                                      //
+                                      // Setiap aksara bukan digit dibuang, bukan tanda sempang
+                                      // sahaja — IC yang ditampal selalu membawa ruang, dan
+                                      // ruang di hujung menjadikan aksara terakhir bukan digit.
+                                      //
+                                      // parseInt memulangkan NaN untuk aksara itu, dan
+                                      // NaN % 2 === 0 adalah FALSE — jadi versi lama menetapkan
+                                      // 'Lelaki' secara senyap setiap kali ia gagal. Digandingkan
+                                      // dengan lalai borang yang juga 'Lelaki', pelajar perempuan
+                                      // direkodkan sebagai lelaki tanpa sesiapa perasan.
                                       let gender = person.gender;
-                                      const cleanIC = val.replace(/-/g, '');
-                                      if (cleanIC.length >= 12) {
-                                        const lastDigit = parseInt(cleanIC[cleanIC.length - 1]);
-                                        gender = lastDigit % 2 === 0 ? 'Perempuan' : 'Lelaki';
+                                      // Nama menang. Satu digit IC mudah tersalah taip;
+                                      // BINTI ditulis oleh orang yang mengenali pelajar itu.
+                                      // PAVITHRAN A/P dengan IC lelaki ialah IC yang salah,
+                                      // bukan pelajar lelaki.
+                                      const namaKini = ` ${(person.name || '').toUpperCase().replace(/\s+/g, ' ')} `;
+                                      const dariNama = / (BINTI|BT|BTE|A\/P|D\/O) /.test(namaKini) ? 'Perempuan'
+                                        : / (BIN|A\/L|S\/O) /.test(namaKini) ? 'Lelaki' : null;
+                                      const cleanIC = val.replace(/[^0-9]/g, '');
+                                      if (dariNama) {
+                                        gender = dariNama;
+                                      } else if (cleanIC.length === 12) {
+                                        const lastDigit = Number(cleanIC[cleanIC.length - 1]);
+                                        if (Number.isInteger(lastDigit)) {
+                                          gender = lastDigit % 2 === 0 ? 'Perempuan' : 'Lelaki';
+                                        }
                                       }
                                       const updated = allPeople.map(p => p.id === person.id ? { ...p, icNumber: val, gender } : p);
                                       setAllPeople(updated);
@@ -912,14 +1060,20 @@ export const UserForm: React.FC<UserFormProps> = ({
                               </>
                             )}
 
-                            {/* CATEGORY (only for PESERTA) */}
-                            {(person as any).role === 'PESERTA' && (
+                            {/* Kategori, Unit, Makanan, Kesihatan — untuk sesiapa yang
+                                MENYERTAI kem. Pemimpin, Penolong Pemimpin dan Penguji
+                                dikecualikan; Pembantu tidak (keputusan G2).
+
+                                Medan ini disembunyikan, BUKAN dikosongkan, sebelum ini —
+                                jadi lalai 'Pengakap Kanak-kanak' terus tersimpan pada
+                                pegawai. Penukar peranan di atas kini mengosongkannya. */}
+                            {BERKATEGORI.includes((person as any).role) && (
                               <>
                               <div className="sm:col-span-4 lg:col-span-2">
                                   <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori</label>
                                   <select
                                       className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
-                                      value={person.kategori || 'Pengakap Kanak-kanak'}
+                                      value={person.kategori || kategoriLalai}
                                       onChange={e => {
                                         const updated = allPeople.map(p => p.id === person.id ? { ...p, kategori: e.target.value } : p);
                                         setAllPeople(updated);
@@ -1023,7 +1177,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                     {/* Label mengikut peranan yang benar-benar boleh didaftar.
                         "Tambah Peserta" pada program yang Peserta-nya ditutup
                         ialah janji yang borang ini tidak boleh tunaikan. */}
-                    <button type="button" onClick={() => setAllPeople([...allPeople, createEmptyParticipant(peranaanLalai)])} className="mt-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
+                    <button type="button" onClick={() => setAllPeople([...allPeople, { ...createEmptyParticipant(peranaanLalai), kategori: BERKATEGORI.includes(peranaanLalai) ? kategoriLalai : '' }])} className="mt-2 w-full py-3 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-bold hover:bg-blue-50 flex justify-center gap-2 transition">
                         <Plus size={20}/> Tambah {peranaanLalai === 'PESERTA' ? 'Peserta' : peranaanLalai === 'PENGUJI' ? 'Penguji' : 'Pemimpin'}
                     </button>
                     {!allowStudents && (

@@ -37,9 +37,16 @@ export const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data, year
   }, [yearData]);
 
   // Category distribution
+  // PESERTA sahaja — tajuk kad memang berbunyi "Peserta".
+  //
+  // Versi lama mengira setiap rekod yang mempunyai kategori, termasuk pegawai
+  // yang membawa 'Pengakap Kanak-kanak' basi daripada lalai borang. Baldi
+  // Kanak-kanak ditokok oleh pemimpin dan penguji tanpa sesiapa perasan.
   const categoryData = useMemo(() => {
     const counts: Record<string, number> = {};
     yearData.forEach(d => {
+      const r = String(d.role || 'PESERTA').toUpperCase();
+      if (r !== 'PESERTA' && r !== 'PENERIMA RAMBU') return;
       if (d.category) {
         counts[d.category] = (counts[d.category] || 0) + 1;
       }

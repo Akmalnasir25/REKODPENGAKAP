@@ -75,6 +75,8 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formSubmissionOpen, setFormSubmissionOpen] = useState(true);
   const [formMinPemimpin, setFormMinPemimpin] = useState('0');
   const [formMinPenguji, setFormMinPenguji] = useState('0');
+  // Kosong = warisi 'Pengakap Kanak-kanak' (migrasi 056).
+  const [formDefaultCategory, setFormDefaultCategory] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
@@ -113,6 +115,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormSubmissionOpen(s?.submissionOpen ?? true);
     setFormMinPemimpin(String(s?.minPemimpin ?? 0));
     setFormMinPenguji(String(s?.minPenguji ?? 0));
+    setFormDefaultCategory(s?.defaultCategory ?? '');
     setOverrideType(null);
 
     // Kiraan datang selepas modal terbuka; sehingga itu petak menunjukkan "–".
@@ -251,6 +254,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         submissionOpen: formSubmissionOpen,
         minPemimpin: Math.max(0, Number(formMinPemimpin) || 0),
         minPenguji: Math.max(0, Number(formMinPenguji) || 0),
+        defaultCategory: formDefaultCategory || null,
       });
       if (res.status === 'success') {
         // Override memerlukan id tetapan, jadi ia hanya boleh disimpan selepas
@@ -695,6 +699,30 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                       />
                     </label>
                   </div>
+
+                  {/* Kategori lalai peserta.
+                      Satu lalai tetap untuk semua program bermakna setiap
+                      pendaftaran Kemahiran bermula salah, dan guru menukarnya
+                      baris demi baris. Ini hanya nilai PERMULAAN — guru masih
+                      boleh mengubahnya pada mana-mana baris. */}
+                  <label className="block mt-3">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase">Kategori Lalai Peserta</span>
+                    <select
+                      value={formDefaultCategory}
+                      onChange={(e) => setFormDefaultCategory(e.target.value)}
+                      className="w-full p-1.5 border border-gray-200 rounded bg-white focus:ring-2 focus:ring-blue-400 outline-none"
+                    >
+                      <option value="">Pengakap Kanak-kanak (lalai sistem)</option>
+                      <option value="Pengakap Kanak-kanak">Pengakap Kanak-kanak</option>
+                      <option value="Pengakap Muda">Pengakap Muda</option>
+                      <option value="Pengakap Remaja">Pengakap Remaja</option>
+                      <option value="Kelana">Kelana</option>
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Nilai permulaan bagi peserta baharu. Guru masih boleh mengubahnya.
+                    </p>
+                  </label>
+
                   {(Number(formMinPemimpin) > 0 || Number(formMinPenguji) > 0) && (
                     <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">
                       <strong>Pemimpin</strong> dan <strong>Penolong Pemimpin</strong>

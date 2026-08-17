@@ -339,6 +339,11 @@ const createSubmissionWithPeople = async (
   const rows = people.filter(p => p.name?.trim()).map(p => {
     const role = (p as any).role || 'PESERTA';
     const isPeserta = role === 'PESERTA' || role === 'PENERIMA RAMBU';
+    // Kategori, unit, makanan dan kesihatan milik sesiapa yang MENYERTAI kem.
+    // Pemimpin, Penolong Pemimpin dan Penguji tidak — mereka tiada kategori
+    // (keputusan G1/G2). Pembantu ADA: kesemua 16 rekod Pembantu membawa
+    // kategori yang ditetapkan dengan sengaja, majoritinya Muda atau Remaja.
+    const adaKategori = isPeserta || role === 'PEMBANTU';
     // Jaring keselamatan peringkat akar: PESERTA mesti ada kategori & unit walau caller terlupa hantar.
     // (Pemimpin/Penolong/Penguji: kategori & unit kekal null — bukan jenis pengakap.)
     return {
@@ -350,13 +355,19 @@ const createSubmissionWithPeople = async (
       ic_number: formatIcNumber(p.icNumber),
       phone_number: formatPhoneNumber(p.phoneNumber),
       role,
-      category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
+      // Medan khusus peserta dipaksa NULL bagi pegawai, bukan sekadar diberi
+      // sandaran. Bentuk lama — `nilai || (isPeserta ? lalai : null)` — tidak
+      // pernah mencapai cabang null, kerana borang bermula sebagai PESERTA
+      // dengan lalai terisi dan menukar peranan hanya MENYEMBUNYIKAN medan itu.
+      // Nilai basi menang setiap kali, dan pemimpin tersimpan sebagai Pengakap
+      // Kanak-kanak. Dilaporkan oleh sekolah, 17 Ogos 2026.
+      category: adaKategori ? ((p as any).kategori || 'Pengakap Kanak-kanak') : null,
       shirt_size: (p as any).shirtSize || null,
       shirt_type: (p as any).shirtType || null,
       siri: (p as any).siri || 1,
-      unit: (p as any).unit || (isPeserta ? 'Perdana' : null),
-      makanan: (p as any).makanan || (isPeserta ? 'Biasa' : null),
-      masalah_kesihatan: (p as any).masalahKesihatan || (isPeserta ? 'Tiada' : null),
+      unit: adaKategori ? ((p as any).unit || 'Perdana') : null,
+      makanan: adaKategori ? ((p as any).makanan || 'Biasa') : null,
+      masalah_kesihatan: adaKategori ? ((p as any).masalahKesihatan || 'Tiada') : null,
       masalah_kesihatan_lain: (p as any).masalahKesihatanLain || null,
       remarks: p.remarks || null,
     };
@@ -1954,6 +1965,10 @@ export interface ProgramSetting {
   /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
   minPemimpin: number;
   minPenguji: number;
+  /** Kategori yang dipilih dahulu bagi peserta baharu dalam program ini. Guru
+   *  masih boleh mengubahnya. null = warisi 'Pengakap Kanak-kanak'
+   *  (migrasi 056). */
+  defaultCategory: string | null;
 }
 
 // Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
@@ -1963,7 +1978,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open, min_pemimpin, min_penguji,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open, min_pemimpin, min_penguji, default_category,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1996,6 +2011,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         submissionOpen: r.submission_open ?? true,
         minPemimpin: Number(r.min_pemimpin ?? 0),
         minPenguji: Number(r.min_penguji ?? 0),
+        defaultCategory: r.default_category ?? null,
       };
     });
   } catch {
@@ -2022,6 +2038,7 @@ export interface UpsertProgramSettingInput {
   /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
   minPemimpin: number;
   minPenguji: number;
+  defaultCategory?: string | null;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
@@ -2055,6 +2072,10 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       submission_open: input.submissionOpen ?? true,
       min_pemimpin: Math.max(0, Number(input.minPemimpin ?? 0)),
       min_penguji: Math.max(0, Number(input.minPenguji ?? 0)),
+      // null bermakna warisi 'Pengakap Kanak-kanak'. Rentetan kosong daripada
+      // pemilih ditukar kepada null, bukan disimpan sebagai '' yang akan
+      // melanggar CHECK constraint.
+      default_category: input.defaultCategory || null,
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
     };

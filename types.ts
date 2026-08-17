@@ -115,7 +115,12 @@ export interface School {
   approvedBadges?: string[]; 
   badgeEditPermissions?: Record<string, {
     students?: boolean;
+    /** PEMIMPIN dan PENOLONG PEMIMPIN. TIDAK termasuk PEMBANTU sejak togol
+     *  Pembantu diasingkan — rujuk docs/rancangan-togol-edit-pembantu.md */
     assistants?: boolean;
+    /** PEMBANTU. Medan baharu: baris lama tidak memilikinya, dan lalainya
+     *  TUTUP (keputusan P1) — ia tidak mewarisi `assistants`. */
+    helpers?: boolean;
     examiners?: boolean;
   }>;
   /** Kebenaran yang terpakai SELEPAS pendaftaran dihantar atau disahkan.
@@ -123,6 +128,7 @@ export interface School {
    *  semua keadaan. Rujuk docs/rancangan-edit-pegawai-selepas-sah.md */
   badgeEditPermissionsSelepas?: Record<string, {
     assistants?: boolean;
+    helpers?: boolean;
     examiners?: boolean;
   }>;
 }

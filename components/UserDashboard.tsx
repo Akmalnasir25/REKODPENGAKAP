@@ -625,8 +625,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const bolehEditPegawaiSelepas = (badge: string, year: number, siri: number, role?: string) => {
     const r = (role || 'PESERTA').toUpperCase();
     const adalahPenguji  = r === 'PENGUJI';
-    const adalahPemimpin = r === 'PEMIMPIN' || r.includes('PENOLONG') || r === 'PEMBANTU';
-    if (!adalahPenguji && !adalahPemimpin) return false;   // PESERTA & PENERIMA RAMBU tidak pernah dibuka
+    const adalahPembantu = r === 'PEMBANTU';
+    const adalahPemimpin = r === 'PEMIMPIN' || r.includes('PENOLONG');
+    if (!adalahPenguji && !adalahPemimpin && !adalahPembantu) return false;   // PESERTA & PENERIMA RAMBU tidak pernah dibuka
 
     const perms = resolveBadgePermissions(
       currentSchoolSettings?.badgeEditPermissionsSelepas, badge, year, siri,
@@ -637,6 +638,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     // bagi tahun rekod ini, kita tidak boleh membuktikan peranan itu percuma —
     // jadi ia kekal tertutup. Arah kegagalan yang betul.
     if (!programSettings.some(ps => ps.year === year)) return false;
+
+    // Pembantu mempunyai lajur yuran DAN togol kebenarannya sendiri. Menyemak
+    // yuran pemimpin di sini akan mengunci Pembantu percuma hanya kerana
+    // Pemimpin dicaj — dan lebih teruk, membuka Pembantu berbayar apabila
+    // Pemimpin percuma.
+    if (adalahPembantu) {
+      const dicajPembantu = programSettings.some(ps =>
+        ps.badgeName === badge && ps.year === year && ps.feePembantu != null);
+      if (dicajPembantu) return false;
+      return perms?.helpers === true;
+    }
 
     const dicaj = programSettings.some(ps =>
       ps.badgeName === badge && ps.year === year
@@ -677,7 +689,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       );
       const role = (item.role || 'PESERTA').toUpperCase();
       if (role === 'PENGUJI') return perBadgePermissions?.examiners ?? allowExaminers;
-      if (role.includes('PENOLONG') || role === 'PEMIMPIN' || role === 'PEMBANTU') return perBadgePermissions?.assistants ?? allowAssistants;
+      // Pembantu mempunyai togolnya sendiri. Medan `helpers` baharu, jadi baris
+      // lama tidak memilikinya — dan lalainya TUTUP (keputusan P1), bukan
+      // warisan daripada `assistants`.
+      if (role === 'PEMBANTU') return perBadgePermissions?.helpers === true;
+      if (role.includes('PENOLONG') || role === 'PEMIMPIN') return perBadgePermissions?.assistants ?? allowAssistants;
       return perBadgePermissions?.students ?? allowStudents;
   };
 

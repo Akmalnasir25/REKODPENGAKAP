@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, School as SchoolIcon, Layers, Medal, Search, MapPin } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, ToggleLeft, ToggleRight, Settings2, Lock, X, CheckCircle, Clock, Users, Shield, GraduationCap, HeartHandshake, School as SchoolIcon, Layers, Medal, Search, MapPin } from 'lucide-react';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { addSchoolBatch, deleteSchool, updateSchoolPermission, toggleSchoolEditBatch, unlockSchoolBadge, approveSchoolBadge, toggleBadgeEditPermissionBatch, updateSchoolCode, updateSchoolType, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { resetSchoolClaim } from '../services/supabaseAuth';
@@ -41,6 +41,11 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   // yang betul ialah membiarkan butang terkunci, bukan membuka peranan berbayar.
   const pegawaiDicaj = (badgeName: string) => programSettings.some(ps =>
     ps.badgeName === badgeName && (ps.feePemimpin != null || ps.feePenolong != null));
+  // Pembantu mempunyai lajur yuran sendiri sejak migrasi 051, jadi ia disemak
+  // berasingan. Menggabungkannya dengan pegawaiDicaj akan mengunci Pembantu
+  // hanya kerana Pemimpin dicaj, dan sebaliknya.
+  const pembantuDicaj = (badgeName: string) => programSettings.some(ps =>
+    ps.badgeName === badgeName && ps.feePembantu != null);
   const [unlockingBadge, setUnlockingBadge] = useState<string | null>(null); 
   const [approvingBadge, setApprovingBadge] = useState<string | null>(null); 
   const [resettingClaim, setResettingClaim] = useState<string | null>(null);
@@ -290,7 +295,7 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
       }
   };
 
-  const handleBadgeEditPermission = async (badgeName: string, type: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean, fasa: 'sebelum' | 'selepas' = 'sebelum') => {
+  const handleBadgeEditPermission = async (badgeName: string, type: 'students' | 'assistants' | 'examiners' | 'helpers' | 'all', allow: boolean, fasa: 'sebelum' | 'selepas' = 'sebelum') => {
     const label = type === 'students' ? 'PESERTA' : type === 'assistants' ? 'PEMIMPIN & PENOLONG PEMIMPIN' : type === 'examiners' ? 'PENGUJI' : 'SEMUA KATEGORI';
     const actionText = allow ? 'MEMBENARKAN EDIT' : 'MENUTUP EDIT';
     const fasaText = fasa === 'selepas'
@@ -531,6 +536,12 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
               const allStudentsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.students !== false));
               const allAssistantsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.assistants !== false));
               const allExaminersEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.examiners !== false));
+              // Pembantu lalainya TUTUP pada kedua-dua baris (`=== true`), tidak
+              // seperti tiga yang lain pada baris pertama. Medan `helpers` baharu;
+              // sebelum ini Pembantu mengikut `assistants`. Lalai buka akan
+              // membuka Pembantu pada setiap program serentak (keputusan P1).
+              const allHelpersEdit = schools.length > 0 && schools.some(s => permsForBadge(s).length > 0)
+                && schools.every(s => permsForBadge(s).every(p => p?.helpers === true));
               // Fasa kedua: kebenaran yang terpakai SELEPAS dihantar/disahkan.
               // Lalai di sini ialah TUTUP (`=== true`), bertentangan dengan baris
               // pertama yang lalainya buka (`!== false`). Pendaftaran yang sudah
@@ -546,11 +557,15 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
               const adaBaris = schools.some(s => permsSelepas(s).length > 0);
               const allAssistantsSelepas = adaBaris && schools.every(s => permsSelepas(s).every(p => p?.assistants === true));
               const allExaminersSelepas = adaBaris && schools.every(s => permsSelepas(s).every(p => p?.examiners === true));
+              const allHelpersSelepas = adaBaris && schools.every(s => permsSelepas(s).every(p => p?.helpers === true));
               const dicaj = pegawaiDicaj(badge.name);
+              const dicajPembantu = pembantuDicaj(badge.name);
 
-              const PermissionButton = ({ type, active, icon: Icon, fasa = 'sebelum' as 'sebelum' | 'selepas', lumpuh = false, sebabLumpuh = '' }: { type: 'students' | 'assistants' | 'examiners', active: boolean, icon: any, fasa?: 'sebelum' | 'selepas', lumpuh?: boolean, sebabLumpuh?: string }) => {
+              const PermissionButton = ({ type, active, icon: Icon, fasa = 'sebelum' as 'sebelum' | 'selepas', lumpuh = false, sebabLumpuh = '' }: { type: 'students' | 'assistants' | 'examiners' | 'helpers', active: boolean, icon: any, fasa?: 'sebelum' | 'selepas', lumpuh?: boolean, sebabLumpuh?: string }) => {
                 const loadingKey = `${badge.name}-${type}-${fasa}`;
-                const label = type === 'students' ? 'Peserta' : type === 'assistants' ? 'Pemimpin' : 'Penguji';
+                const label = type === 'students' ? 'Peserta'
+                  : type === 'assistants' ? 'Pemimpin'
+                  : type === 'helpers' ? 'Pembantu' : 'Penguji';
                 const warna = lumpuh
                   ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                   : active ? 'bg-green-100 text-green-700 border-green-300' : 'bg-red-100 text-red-700 border-red-300';
@@ -572,9 +587,10 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                     <Medal size={14} className="text-amber-600" />
                     <span className="text-xs font-bold text-slate-700">{badge.name}</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <PermissionButton type="students" active={allStudentsEdit} icon={Users} />
                     <PermissionButton type="assistants" active={allAssistantsEdit} icon={Shield} />
+                    <PermissionButton type="helpers" active={allHelpersEdit} icon={HeartHandshake} />
                     <PermissionButton type="examiners" active={allExaminersEdit} icon={GraduationCap} />
                   </div>
 
@@ -585,6 +601,11 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
                       type="assistants" active={allAssistantsSelepas} icon={Shield} fasa="selepas"
                       lumpuh={dicaj}
                       sebabLumpuh={`Pemimpin dan Penolong DICAJ bagi ${badge.name}. Peranan berbayar mengambil tempat, jadi ia tidak boleh dibuka selepas pengesahan — tempat akan digunakan tanpa bil.`}
+                    />
+                    <PermissionButton
+                      type="helpers" active={allHelpersSelepas} icon={HeartHandshake} fasa="selepas"
+                      lumpuh={dicajPembantu}
+                      sebabLumpuh={`Pembantu DICAJ bagi ${badge.name}. Peranan berbayar mengambil tempat, jadi ia tidak boleh dibuka selepas pengesahan — tempat akan digunakan tanpa bil.`}
                     />
                     <PermissionButton
                       type="examiners" active={allExaminersSelepas} icon={GraduationCap} fasa="selepas"

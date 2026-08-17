@@ -165,6 +165,12 @@ export const UserForm: React.FC<UserFormProps> = ({
   const pegawaiDicaj = selectedProgramSetting
     ? (selectedProgramSetting.feePemimpin != null || selectedProgramSetting.feePenolong != null)
     : false;
+  // Pembantu mempunyai lajur yuran sendiri (migrasi 051) dan togol kebenaran
+  // sendiri. Menyemaknya melalui yuran pemimpin akan mengunci Pembantu percuma
+  // kerana Pemimpin dicaj, dan membuka Pembantu berbayar kerana Pemimpin tidak.
+  const pembantuDicaj = selectedProgramSetting
+    ? selectedProgramSetting.feePembantu != null
+    : false;
 
   // Versi per program bagi senarai lungsur: adakah program ini masih menerima
   // sesuatu selepas dihantar? Menggunakan tetapan program itu sendiri, bukan
@@ -174,11 +180,12 @@ export const UserForm: React.FC<UserFormProps> = ({
       currentSchoolSettings?.badgeEditPermissionsSelepas, badgeName, currentYear, registrationSiri,
     );
     if (izin?.examiners === true) return true;
-    if (izin?.assistants !== true) return false;
     const ps = programSettings.find(s =>
       s.badgeName === badgeName &&
       ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
        (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
+    if (izin?.helpers === true && !(ps && ps.feePembantu != null)) return true;
+    if (izin?.assistants !== true) return false;
     return !(ps && (ps.feePemimpin != null || ps.feePenolong != null));
   };
 
@@ -188,6 +195,11 @@ export const UserForm: React.FC<UserFormProps> = ({
     : (selectedBadgePermissions?.assistants ?? baseAllowAssistants);
   const allowExaminers = sudahHantar ? (izinSelepas?.examiners === true)
     : (selectedBadgePermissions?.examiners ?? baseAllowExaminers);
+  // Lalai TUTUP sebelum hantar juga: medan `helpers` baharu, jadi baris lama
+  // tidak memilikinya dan Pembantu tidak mewarisi kebenaran Pemimpin
+  // (keputusan P1 dalam docs/rancangan-togol-edit-pembantu.md).
+  const allowHelpers = sudahHantar ? (izinSelepas?.helpers === true && !pembantuDicaj)
+    : (selectedBadgePermissions?.helpers === true);
 
   // Peranan yang benar-benar boleh didaftar untuk program ini.
   //
@@ -198,10 +210,11 @@ export const UserForm: React.FC<UserFormProps> = ({
   const peranaanDibenarkan = React.useMemo<PersonRole[]>(() => {
     const senarai: PersonRole[] = [];
     if (allowStudents) senarai.push('PESERTA');
-    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU');
+    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN');
+    if (allowHelpers) senarai.push('PEMBANTU');
     if (allowExaminers) senarai.push('PENGUJI');
     return senarai;
-  }, [allowStudents, allowAssistants, allowExaminers]);
+  }, [allowStudents, allowAssistants, allowHelpers, allowExaminers]);
   const peranaanLalai: PersonRole = peranaanDibenarkan[0] ?? 'PESERTA';
 
   // Baris KOSONG yang memegang peranan tertutup dibetulkan secara senyap —

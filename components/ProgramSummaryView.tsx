@@ -195,6 +195,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                 <h3 className="font-bold text-slate-800">{p.badge}{labelSiri(p.siri)}</h3>
               </div>
               <div className="p-4">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <tbody className="divide-y divide-gray-100">
                     {[
@@ -217,6 +218,7 @@ export const ProgramSummaryView: React.FC<ProgramSummaryViewProps> = ({ records,
                     </tr>
                   </tfoot>
                 </table>
+                </div>
               </div>
             </div>
           ))}

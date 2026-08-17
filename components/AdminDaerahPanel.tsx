@@ -471,7 +471,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
           style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)', borderColor: '#1a0a47' }}
           className={`
           fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
-          md:relative md:translate-x-0 print:hidden
+          md:relative md:translate-x-0 md:shrink-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
       `}>
@@ -521,7 +521,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-hidden flex flex-col h-screen overflow-y-auto bg-slate-50">
+      <main className="flex-1 min-w-0 overflow-hidden flex flex-col h-screen overflow-y-auto bg-slate-50">
         
         {/* TOP BAR / HEADER */}
         <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-sm print:hidden">

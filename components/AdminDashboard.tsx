@@ -574,7 +574,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
         {/* Filters Bar */}
         {activeTab !== 'archive' && (
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow">
+            <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-3 bg-white p-4 rounded-xl shadow">
                 <div className="flex items-center gap-2">
                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
                         <Calendar size={14}/> Tahun Semasa:
@@ -592,7 +592,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
                 <div className="w-px h-8 bg-gray-200 hidden md:block"></div>
 
-                <div className="flex items-center gap-2 flex-1">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
                         Program:
                     </label>
@@ -652,7 +652,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
 
                 <div className="w-px h-8 bg-gray-200 hidden md:block"></div>
 
-                <div className="flex items-center gap-2 flex-1">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                     <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
                         Sekolah:
                     </label>

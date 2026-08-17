@@ -797,6 +797,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                         {overrideType !== null && ' Asas dikongsi semua jenis sekolah, jadi ia diedit pada tab “Semua”.'}
                       </p>
 
+                      <div className="overflow-x-auto">
                       <table className="w-full text-[11px]">
                         <thead>
                           <tr className="text-gray-400">
@@ -866,6 +867,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
 
                     {/* HAD TEMPAT & TARIKH TUTUP IKUT SIRI */}
@@ -895,6 +897,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                           tidak hilang.
                         </p>
 
+                        <div className="overflow-x-auto">
                         <table className="w-full text-[11px]">
                           <thead>
                             <tr className="text-gray-400">
@@ -970,6 +973,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                             })}
                           </tbody>
                         </table>
+                        </div>
 
                         {/* Siri yang dikecualikan daripada bayaran, tetapi tempatnya
                             sudah terisi — bermakna sekolah SUDAH membayar. Tidak

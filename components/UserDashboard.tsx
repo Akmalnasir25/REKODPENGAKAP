@@ -1298,7 +1298,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)', borderColor: '#1a0a47' }}
           className={`
           fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
-          md:relative md:translate-x-0 print:hidden
+          md:relative md:translate-x-0 md:shrink-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
       `}>
@@ -1443,7 +1443,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-hidden flex flex-col h-screen overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-hidden flex flex-col h-screen overflow-y-auto">
         {/* Top Toolbar - sentiasa nampak */}
         <div className="hidden md:flex items-center justify-end gap-2 px-6 py-2 bg-white border-b border-gray-200 print:hidden">
           <NotificationBell />
@@ -2027,6 +2027,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             </div>
                           </div>
                         )}
+                        <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold">
                                 <tr>
@@ -2215,6 +2216,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 {filteredData.length === 0 && <tr><td colSpan={12} className="px-6 py-8 text-center text-gray-400 italic text-xs">Tiada rekod.</td></tr>}
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     {/* --- ACTION BUTTONS AREA (Bottom Right) --- */}
@@ -2304,7 +2306,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl relative border-2 border-amber-500">
                 <button onClick={() => setShowRambuModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
                 <h3 className="font-bold text-lg mb-4 flex gap-2 items-center text-amber-700 border-b pb-2"><Medal className="text-amber-600" /> Pendaftaran Anugerah Rambu {selectedYear}</h3>
-                <div className="max-h-60 overflow-y-auto border rounded-lg mb-4">
+                <div className="max-h-60 overflow-auto border rounded-lg mb-4">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-100 uppercase text-xs text-gray-600 sticky top-0">
                             <tr><th className="px-4 py-2 text-center w-10">Pilih</th><th className="px-4 py-2">Nama Murid</th><th className="px-4 py-2 text-center">No. KP</th></tr>
@@ -2394,7 +2396,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <p className="text-xs text-gray-500 italic mb-3">Import dilakukan mengikut <b>satu peranan</b> setiap kali. Untuk bawa masuk peranan lain (cth Pemimpin/Penguji), ulang proses ini & tukar pilihan <b>Peranan</b>.</p>
 
                 {importSourceBadge && importTargetBadge && (
-                    <div className="max-h-96 overflow-y-auto border rounded-lg mb-4">
+                    <div className="max-h-96 overflow-auto border rounded-lg mb-4">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-100 uppercase text-xs text-gray-600 sticky top-0">
                                 <tr>

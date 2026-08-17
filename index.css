@@ -10,6 +10,39 @@
 
   html {
     scroll-behavior: smooth;
+    /* iOS membesarkan teks sendiri dalam landskap. Itu menukar lebar
+       kandungan tanpa apa-apa dalam susun atur kita berubah, jadi halaman
+       yang muat dalam potret melimpah bila iPad dipusing. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ── iOS Safari: zum-auto pada fokus ────────────────────────────────
+     Safari MEMBESARKAN halaman apabila pengguna menyentuh medan yang
+     fonnya bawah 16px, dan ia tidak pernah mengecil semula. Halaman yang
+     muat sempurna sebelum sentuhan tiba-tiba lebih lebar daripada skrin —
+     itulah "bila buka jadi overflow" pada iPhone.
+
+     16px pada peranti sentuh sahaja; desktop kekal dengan saiz asalnya. */
+  @supports (-webkit-touch-callout: none) {
+    select,
+    textarea,
+    input:not([type='checkbox']):not([type='radio']) {
+      font-size: 16px;
+    }
+  }
+
+  /* ── 100vh pada iOS ─────────────────────────────────────────────────
+     100vh di Safari iOS bermaksud tinggi TANPA bar pelayar, jadi bahagian
+     bawah setiap skrin h-screen tersembunyi di sebalik bar itu. dvh
+     mengukur viewport yang benar-benar kelihatan. */
+  @supports (height: 100dvh) {
+    .h-screen {
+      height: 100dvh;
+    }
+
+    .min-h-screen {
+      min-height: 100dvh;
+    }
   }
 
   /* Dark mode body */

@@ -747,7 +747,13 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm font-bold"
                                     value={(person as any).role || 'PESERTA'}
                                     onChange={e => {
-                                      const updated = allPeople.map(p => p.id === person.id ? { ...p, role: e.target.value as any } : p);
+                                      const peranan = e.target.value as any;
+                                      // Menukar kepada peranan bukan-pegawai mesti menggugurkan flag.
+                                      // Membiarkannya bermakna seorang murid dikira sebagai penguji.
+                                      const pegawai = peranan === 'PEMIMPIN' || peranan === 'PENOLONG PEMIMPIN' || peranan === 'PEMBANTU';
+                                      const updated = allPeople.map(p => p.id === person.id
+                                        ? { ...p, role: peranan, isPenguji: pegawai ? (p as any).isPenguji : false }
+                                        : p);
                                       setAllPeople(updated);
                                     }}
                                 >
@@ -757,6 +763,27 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     <option value="PEMBANTU" disabled={!allowAssistants}>Pembantu</option>
                                     <option value="PENGUJI" disabled={!allowExaminers}>Penguji</option>
                                 </select>
+
+                                {/* Seorang guru yang mengiringi pasukan DAN menguji ialah kes biasa,
+                                    tetapi borang menolak KP yang sama dua kali — jadi dia tidak boleh
+                                    didaftarkan sekali lagi sebagai Penguji. Flag ini merekodkannya
+                                    tanpa pendaftaran kedua: satu tempat, satu yuran (migrasi 054). */}
+                                {['PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU'].includes(String((person as any).role || '')) && (
+                                  <label className={`flex items-start gap-2 mt-2 ${allowExaminers ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                                    <input
+                                      type="checkbox"
+                                      disabled={!allowExaminers}
+                                      checked={!!(person as any).isPenguji}
+                                      onChange={e => setAllPeople(allPeople.map(p => p.id === person.id
+                                        ? { ...p, isPenguji: e.target.checked } : p))}
+                                      className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-[11px] leading-tight text-slate-600">
+                                      Juga bertugas sebagai <strong>Penguji</strong>
+                                      {!allowExaminers && <em className="block text-[10px] text-slate-400">Penguji ditutup admin</em>}
+                                    </span>
+                                  </label>
+                                )}
                             </div>
 
                             {/* NAME FIELD */}

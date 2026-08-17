@@ -217,6 +217,7 @@ export const fetchCloudData = async (
         icNumber: p.ic_number || '',
         studentPhone: p.phone_number || '',
         role: p.role || 'PESERTA',
+        isPenguji: !!p.is_penguji,
         category: p.category || '',
         shirtSize: p.shirt_size || '',
         shirtType: p.shirt_type || '',
@@ -350,6 +351,10 @@ const createSubmissionWithPeople = async (
       ic_number: formatIcNumber(p.icNumber),
       phone_number: formatPhoneNumber(p.phoneNumber),
       role,
+      // Hanya pegawai boleh merangkap penguji. PESERTA yang membawa flag ini
+      // akan memenuhi syarat min_penguji tanpa seorang penguji pun — jadi ia
+      // dipaksa palsu di sini, bukan sekadar dipercayai daripada pemanggil.
+      is_penguji: !isPeserta && !!(p as any).isPenguji,
       category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
       shirt_size: (p as any).shirtSize || null,
       shirt_type: (p as any).shirtType || null,
@@ -1427,7 +1432,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; isPenguji?: boolean; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -1440,6 +1445,11 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.icNumber !== undefined) updateData.ic_number = updates.icNumber || null;
     if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber || null;
     if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
+    if (updates.isPenguji !== undefined) updateData.is_penguji = !!updates.isPenguji;
+    // Menukar peranan kepada PESERTA mesti menggugurkan flag. Tanpa ini, seorang
+    // pemimpin bertanda yang ditukar kepada peserta kekal dikira sebagai penguji
+    // — memenuhi min_penguji dengan seorang murid.
+    if (updates.role === 'PESERTA' || updates.role === 'PENERIMA RAMBU') updateData.is_penguji = false;
     if (updates.category !== undefined) updateData.category = updates.category || null;
     if (updates.shirtSize !== undefined) updateData.shirt_size = updates.shirtSize || null;
     if (updates.shirtType !== undefined) updateData.shirt_type = updates.shirtType || null;

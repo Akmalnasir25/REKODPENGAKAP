@@ -255,7 +255,13 @@ export const generateSummaryReport = (
   // pembaca tidak akan tahu program itu wujud. Baris '0' memberitahu perkara
   // sebenar: program itu ada, pesertanya tiada.
   const badgeCount: Record<string, number> = {};
-  currentYearData.forEach(d => { badgeCount[d.badge || 'Tidak Dinyatakan'] = 0; });
+  const badgePembantu: Record<string, number> = {};
+  currentYearData.forEach(d => {
+    const badge = d.badge || 'Tidak Dinyatakan';
+    badgeCount[badge] = badgeCount[badge] || 0;
+    badgePembantu[badge] = badgePembantu[badge] || 0;
+    if ((d.role || '').toUpperCase() === 'PEMBANTU') badgePembantu[badge]++;
+  });
   peserta.forEach(d => {
     const badge = d.badge || 'Tidak Dinyatakan';
     badgeCount[badge] = (badgeCount[badge] || 0) + 1;
@@ -316,8 +322,17 @@ export const generateSummaryReport = (
   // terbelah merentas muka surat. Halaman landscape mempunyai ruang mendatar
   // yang tidak digunakan; tiga lajur 82mm menjajar tepat dengan lebar jadual
   // sekolah dan muat pada satu muka surat.
-  const KOL_X = [14, 100, 186];
-  const KOL_W = [82, 82, 81];
+  //
+  // Jadual lencana kini mempunyai tiga lajur, jadi ia diberi ruang lebih.
+  // Jadual kategori tinggal beberapa baris sahaja selepas peranan dibuang
+  // daripadanya, jadi ruang itu diambil dari sana. Tepi kanan (267mm) kekal
+  // menjajar dengan jadual sekolah di bawah.
+  // Kedudukan diperiksa dengan mengira: 14+82=96, 100+94=194, 200+67=267.
+  // Setiap jadual mesti berakhir sebelum jadual berikutnya bermula, dan yang
+  // terakhir berakhir tepat pada 267mm supaya tepi kanannya menjajar dengan
+  // jadual sekolah di bawah.
+  const KOL_X = [14, 100, 200];
+  const KOL_W = [82, 94, 67];
   const kepalaJadual = yPos;
 
   const jadualRingkas = (
@@ -326,6 +341,7 @@ export const generateSummaryReport = (
     kepala: string[],
     badan: string[][],
     warna: [number, number, number],
+    lajur?: Record<number, any>,
   ) => {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
@@ -338,7 +354,7 @@ export const generateSummaryReport = (
       body: badan,
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: warna, textColor: [255, 255, 255], fontStyle: 'bold' },
-      columnStyles: { 1: { halign: 'center', fontStyle: 'bold', cellWidth: 22 } },
+      columnStyles: lajur || { 1: { halign: 'center', fontStyle: 'bold', cellWidth: 22 } },
       // Baris JUMLAH ditebalkan supaya mata tidak membacanya sebagai satu
       // lagi program bernama JUMLAH PESERTA.
       didParseCell: (d: any) => {
@@ -368,12 +384,21 @@ export const generateSummaryReport = (
   // untuk melihat bahawa pegawai benar-benar tidak dikira di sini.
   const barisJumlah = (n: number) => ['JUMLAH PESERTA', n.toString()];
 
-  hujung.push(jadualRingkas(1, 'PECAHAN LENCANA (PESERTA)', ['Program', 'Bilangan'],
+  // Peserta dan pembantu dalam lajur berasingan, bukan satu angka bercampur.
+  // Pembantu SM tiada peserta langsung — 16 pendaftarnya semua pembantu —
+  // jadi tanpa lajur kedua, program itu hanya baris sifar yang tidak
+  // menerangkan apa-apa.
+  hujung.push(jadualRingkas(1, 'PECAHAN LENCANA', ['Program', 'Peserta', 'Pembantu'],
     [
-      ...Object.entries(badgeCount).sort((a, b) => b[1] - a[1]).map(([badge, count]) => [badge, count.toString()]),
-      barisJumlah(totalParticipants),
+      ...Object.entries(badgeCount).sort((a, b) => b[1] - a[1])
+        .map(([badge, count]) => [badge, count.toString(), (badgePembantu[badge] || 0).toString()]),
+      ['JUMLAH', totalParticipants.toString(), totalPembantu.toString()],
     ],
-    [30, 58, 138]));
+    [30, 58, 138],
+    {
+      1: { halign: 'center', fontStyle: 'bold', cellWidth: 20 },
+      2: { halign: 'center', cellWidth: 20, textColor: [71, 85, 105] },
+    }));
 
   if (Object.keys(categoryCount).length > 0) {
     hujung.push(jadualRingkas(2, 'PECAHAN KATEGORI (PESERTA)', ['Kategori', 'Bilangan'],

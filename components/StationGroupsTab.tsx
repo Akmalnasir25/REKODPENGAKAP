@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Grid3x3, RefreshCw, Download, AlertTriangle, Users } from 'lucide-react';
+import { Grid3x3, RefreshCw, Download, AlertTriangle, Users, RotateCcw } from 'lucide-react';
 import { Badge } from '../types';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import {
@@ -7,7 +7,8 @@ import {
   simpanJadual, ambilJadual, pindahSekolah, JadualStesen,
   ambilPengujiLayak, bahagikanPenguji, simpanPenguji, ambilPenguji,
   pindahPenguji, ambilNamaStesen, simpanNamaStesen, simpanProgramGabung,
-  simpanKuotaPenguji, pilihPenguji,
+  simpanKuotaPenguji, pilihPenguji, ambilRingkasanPenguji, kosongkanPenguji,
+  RingkasanPenguji,
   PengujiLayak, PengujiStesen,
 } from '../services/stationGroupService';
 import { muatTurunPdfStesen, muatTurunPdfPenguji } from '../services/stationGroupPdf';
@@ -38,6 +39,8 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   // Berapa penguji program ini perlukan daripada kolam. '' = belum
   // ditetapkan, iaitu ambil semua yang ada.
   const [kuota, setKuota] = useState<number | ''>('');
+  // Status pengagihan SEMUA program siri ini, bukan hanya yang dibuka.
+  const [ringkasan, setRingkasan] = useState<RingkasanPenguji[]>([]);
   const [memuat, setMemuat] = useState(false);
   const [menjana, setMenjana] = useState(false);
   const [ralat, setRalat] = useState('');
@@ -61,6 +64,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         const [pg, nm] = await Promise.all([ambilPenguji(j.runId), ambilNamaStesen(j.runId)]);
         setPenguji(pg); setNamaStesen(nm);
       } else { setPenguji([]); setNamaStesen({}); }
+      setRingkasan(await ambilRingkasanPenguji(year, siri));
     } catch (e: any) {
       setRalat(e.message || 'Gagal memuat jadual.');
       setJadual(null); setPenguji([]); setNamaStesen({});
@@ -141,6 +145,24 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       await muat();
     } catch (e: any) {
       setRalat(e.message || 'Gagal menjana penguji.');
+    } finally { setMenjana(false); }
+  };
+
+  const kosongkan = async () => {
+    if (!jadual) return;
+    if (!confirm(
+      `Buang SEMUA ${penguji.length} penguji daripada jadual ${badgeName} Siri ${siri}?
+
+`
+      + 'Mereka kembali ke kolam dan boleh diambil oleh program lain. Nama '
+      + 'stesen yang kau taip TIDAK dipadam.'
+    )) return;
+    setMenjana(true); setRalat('');
+    try {
+      await kosongkanPenguji(jadual.runId);
+      await muat();
+    } catch (e: any) {
+      setRalat(e.message || 'Gagal mengosongkan penguji.');
     } finally { setMenjana(false); }
   };
 
@@ -291,6 +313,14 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                 className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition">
                 <Download size={15} /> PDF Penguji
               </button>
+              {/* Hanya muncul bila ada sesuatu untuk dikosongkan. Butang yang
+                  tidak melakukan apa-apa hanya menimbulkan keraguan. */}
+              {penguji.length > 0 && (
+                <button onClick={kosongkan} disabled={menjana}
+                  className="flex items-center gap-2 bg-white text-rose-700 border border-rose-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-rose-50 transition disabled:opacity-50">
+                  <RotateCcw size={15} /> Reset
+                </button>
+              )}
             </>
           )}
         </div>
@@ -336,6 +366,68 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
               pada stesen yang sama.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Status SEMUA program siri ini. Sengaja di luar blok `jadual` supaya
+          ia kelihatan walaupun program yang dibuka belum ada jadual — itulah
+          saat admin paling perlu tahu apa yang program lain sudah ambil. */}
+      {!memuat && paparan === 'penguji' && ringkasan.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-slate-100 px-4 py-2">
+            <span className="font-bold text-sm text-slate-800">
+              Status pengagihan penguji &mdash; Siri {siri} {year}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5">Program</th>
+                  <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-16">Stesen</th>
+                  <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-16">Perlu</th>
+                  <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-24">Ditempatkan</th>
+                  <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5 w-28">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ringkasan.map(r => {
+                  const kurang = r.kuota ? Math.max(0, r.kuota - r.ditempatkan) : 0;
+                  const label = r.ditempatkan === 0 ? 'Belum diagih'
+                    : kurang > 0 ? `Kurang ${kurang}` : 'Selesai';
+                  const warna = r.ditempatkan === 0 ? 'bg-slate-100 text-slate-500'
+                    : kurang > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800';
+                  return (
+                    <tr key={r.runId}
+                      className={`border-t border-slate-100 ${r.badgeName === badgeName ? 'bg-blue-50/70' : ''}`}>
+                      <td className="px-3 py-1.5">
+                        <button onClick={() => setBadgeName(r.badgeName)}
+                          className="font-bold text-slate-800 hover:text-blue-700 hover:underline underline-offset-2">
+                          {r.badgeName}
+                        </button>
+                      </td>
+                      <td className="px-3 py-1.5 text-center text-slate-500">{r.bilKumpulan}</td>
+                      <td className="px-3 py-1.5 text-center text-slate-500">{r.kuota ?? '—'}</td>
+                      <td className="px-3 py-1.5 text-center font-bold text-slate-800">{r.ditempatkan}</td>
+                      <td className="px-3 py-1.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${warna}`}>{label}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                  <td className="px-3 py-1.5 font-bold text-slate-700">JUMLAH DIAMBIL DARI KOLAM</td>
+                  <td colSpan={2} />
+                  <td className="px-3 py-1.5 text-center font-bold text-slate-900">
+                    {ringkasan.reduce((n, r) => n + r.ditempatkan, 0)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 

@@ -256,6 +256,75 @@ export const simpanProgramGabung = async (
   if (error) throw error;
 };
 
+export interface RingkasanPenguji {
+  runId: string;
+  badgeName: string;
+  bilKumpulan: number;
+  kuota: number | null;
+  ditempatkan: number;
+}
+
+/**
+ * Status pengagihan penguji bagi SEMUA program dalam satu siri.
+ *
+ * Tanpa ini, admin membuka satu program pada satu masa dan tiada cara
+ * mengetahui sama ada program lain sudah mengambil bahagiannya daripada
+ * kolam yang dikongsi — sedangkan itulah maklumat yang menentukan berapa
+ * ramai yang masih tinggal.
+ *
+ * Dua bacaan mudah, bukan satu pertanyaan bersarang: baris penguji sudah
+ * membawa `year` dan `siri` sendiri (disalin ke sana untuk kekangan dalam
+ * migrasi 062), jadi ia boleh dibaca terus dan dikumpulkan di sini.
+ */
+export const ambilRingkasanPenguji = async (
+  year: number, siri: number,
+): Promise<RingkasanPenguji[]> => {
+  const [larian, penguji] = await Promise.all([
+    supabase.from('station_group_runs')
+      .select('id, bil_kumpulan, penguji_diperlukan, badge:badge_id(name)')
+      .eq('year', year).eq('siri', siri),
+    supabase.from('station_group_examiners')
+      .select('run_id').eq('year', year).eq('siri', siri),
+  ]);
+  if (larian.error) throw larian.error;
+  if (penguji.error) throw penguji.error;
+
+  const kira = new Map<string, number>();
+  (penguji.data || []).forEach((r: any) => {
+    kira.set(r.run_id, (kira.get(r.run_id) || 0) + 1);
+  });
+
+  return (larian.data || []).map((r: any) => {
+    const b = Array.isArray(r.badge) ? r.badge[0] : r.badge;
+    return {
+      runId: r.id,
+      badgeName: b?.name || '-',
+      bilKumpulan: r.bil_kumpulan,
+      kuota: r.penguji_diperlukan ?? null,
+      ditempatkan: kira.get(r.id) || 0,
+    };
+  }).sort((a, b) => a.badgeName.localeCompare(b.badgeName));
+};
+
+/**
+ * Buang semua penempatan penguji bagi satu larian.
+ *
+ * Nama stesen TIDAK dipadam. Ia ditaip tangan dan tiada kaitan dengan siapa
+ * yang menguji — memadamnya bersama penempatan bermakna kerja itu hilang
+ * setiap kali admin mahu mengagih semula.
+ *
+ * Ini juga cara melepaskan penguji kembali ke kolam: selagi baris ini wujud,
+ * kekangan unique(year, siri, person_ic) menghalang program lain mengambil
+ * mereka.
+ */
+export const kosongkanPenguji = async (runId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('station_group_examiners')
+    .delete()
+    .eq('run_id', runId);
+  if (error) throw error;
+};
+
 /** Kosong disimpan sebagai NULL — kekangan menolak 0 dan negatif. */
 export const simpanKuotaPenguji = async (
   runId: string, kuota: number | null,

@@ -26,6 +26,13 @@ export interface JadualStesen {
   bilKumpulan: number;
   createdAt: string;
   sekolah: SekolahStesen[];
+  /**
+   * Program TAMBAHAN yang penguji dikumpulkan bersama.
+   *
+   * Kosong bermakna kolam penguji program ini sahaja. Stesen tidak pernah
+   * dikongsi — hanya kolam orang. Rujuk docs/rancangan-kumpulan-stesen.md.
+   */
+  programGabung: string[];
 }
 
 /** Label mengikut bahagian: 12 kumpulan = 1A-6A + 1B-6B. */
@@ -136,7 +143,7 @@ export const ambilJadual = async (
 ): Promise<JadualStesen | null> => {
   const { data, error } = await supabase
     .from('station_group_runs')
-    .select(`id, year, siri, bil_kumpulan, created_at,
+    .select(`id, year, siri, bil_kumpulan, created_at, program_gabung,
              badge:badge_id(name),
              sekolah:station_group_schools(station_label, peserta_snapshot, school:school_id(id, name))`)
     .eq('year', year).eq('siri', siri);
@@ -156,6 +163,7 @@ export const ambilJadual = async (
     siri: (baris as any).siri,
     bilKumpulan: (baris as any).bil_kumpulan,
     createdAt: (baris as any).created_at,
+    programGabung: (baris as any).program_gabung || [],
     sekolah: ((baris as any).sekolah || []).map((x: any) => {
       const sc = Array.isArray(x.school) ? x.school[0] : x.school;
       return {
@@ -201,17 +209,43 @@ export interface PengujiStesen {
   stesen: string;
 }
 
+/**
+ * Senarai penguji yang boleh diletakkan.
+ *
+ * `programs` ialah kolam: program larian ini, dicampur mana-mana program lain
+ * yang admin tanda untuk digabungkan. Keris Perak 27 + Keris Emas 7 = 34.
+ *
+ * Menggabungkan kolam tidak membenarkan seorang penguji berada dalam dua
+ * jadual — kedua-dua program MELIHAT orang yang sama, tetapi hanya satu boleh
+ * MENGAMBILNYA. `sudahDitempatkan` memberitahu siapa yang sudah diambil.
+ */
 export const ambilPengujiLayak = async (
-  badgeName: string, year: number, siri: number,
+  programs: string[], year: number, siri: number,
 ): Promise<PengujiLayak[]> => {
   const { data, error } = await supabase.rpc('penguji_layak_stesen', {
-    p_badge_name: badgeName, p_year: year, p_siri: siri,
+    p_programs: programs, p_year: year, p_siri: siri,
   });
   if (error) throw error;
   return (data || []).map((r: any) => ({
     personIc: r.person_ic, nama: r.nama, sekolah: r.sekolah || '',
     programLain: r.program_lain || '', sudahDitempatkan: r.sudah_ditempatkan || '',
   }));
+};
+
+/**
+ * Rekod program mana digabungkan untuk larian ini.
+ *
+ * Disimpan supaya tandaan itu kekal selepas muat semula, dan supaya sesiapa
+ * yang membuka jadual itu kemudian nampak dari mana penguji datang.
+ */
+export const simpanProgramGabung = async (
+  runId: string, programs: string[],
+): Promise<void> => {
+  const { error } = await supabase
+    .from('station_group_runs')
+    .update({ program_gabung: programs.length ? programs : null })
+    .eq('id', runId);
+  if (error) throw error;
 };
 
 /**

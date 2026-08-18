@@ -176,3 +176,50 @@ Keris Perak dua belas. Kerana setiap larian sudah khusus kepada satu program,
 tahun dan siri, itu terhasil dengan sendirinya.
 
 **Migrasi 062.**
+
+## 13. Kolam penguji merentas beberapa program
+
+Dua program yang berjalan pada hari yang sama berkongsi pemimpin. Admin
+menanda program mana digabungkan; penguji kedua-duanya menjadi satu senarai.
+
+Dua soalan ditutup sebelum kod ditulis:
+
+| # | Soalan | Keputusan |
+|---|---|---|
+| **G1** | Apa yang ditanda untuk membuat senarai gabungan? | **Program.** Tanda Keris Perak + Keris Emas, dan SEMUA penguji kedua-duanya menjadi satu kolam. Bukan tanda seorang demi seorang |
+| **G2** | Selepas digabung, stesen bagaimana? | **Setiap program kekal stesennya sendiri.** Keris Perak 12 stesen, Keris Emas stesennya sendiri. Kolam 34 orang itu dibahagikan antara dua set stesen yang berasingan |
+
+Angka sebenar Siri 2 2026: Keris Perak 27 penguji, Keris Emas 7, tiada
+pertindihan antara keduanya — kolam 34.
+
+### Yang digabungkan ialah senarai, bukan penempatan
+
+Ini perbezaan yang menjadikannya selamat. Kedua-dua program **melihat** 34
+orang yang sama. Hanya satu boleh **mengambil** seseorang.
+
+Kekangan `unique (year, siri, person_ic)` daripada migrasi 062 sudah
+menguatkuasakannya, dan ia tidak dilonggarkan. Menggabungkan kolam hanya
+meluaskan senarai yang boleh dipilih; ia tidak menyentuh siapa yang boleh
+diletakkan di mana. Seorang penguji yang diambil oleh jadual Keris Perak
+muncul dalam skrin Keris Emas sebagai **sudah ditempatkan**, dan pangkalan
+data menolak percubaan untuk meletakkannya sekali lagi.
+
+Susunan kerja yang terhasil: jana Keris Perak dahulu, ia mengambil bahagiannya
+daripada kolam; kemudian jana Keris Emas, ia mendapat yang selebihnya.
+
+### `program_lain` melaporkan lebih daripada gabungan
+
+Lajur itu menyenaraikan **setiap** program siri ini yang seseorang daftar,
+bukan hanya yang ditanda. Kalau Cikgu X juga penguji Maju sedangkan Maju tidak
+ditanda, admin tetap nampak — kerana Maju masih boleh mengambilnya kemudian,
+dan itu maklumat yang diperlukan sebelum meletakkannya.
+
+### Tandaan itu disimpan
+
+`station_group_runs.program_gabung text[]` — program TAMBAHAN, tidak termasuk
+program larian itu sendiri. Disimpan supaya tandaan kekal selepas muat semula
+dan supaya sesiapa yang membuka jadual itu kemudian nampak dari mana penguji
+datang. Tandaan hanya boleh disimpan selepas jadual peserta wujud; sebelum itu
+tiada larian untuk menyimpannya.
+
+**Migrasi 063.**

@@ -6,7 +6,7 @@ import {
   labelStesen, bahagikanSekolah, ambilSekolahLayak,
   simpanJadual, ambilJadual, pindahSekolah, JadualStesen,
   ambilPengujiLayak, bahagikanPenguji, simpanPenguji, ambilPenguji,
-  pindahPenguji, ambilNamaStesen, simpanNamaStesen,
+  pindahPenguji, ambilNamaStesen, simpanNamaStesen, simpanProgramGabung,
   PengujiLayak, PengujiStesen,
 } from '../services/stationGroupService';
 import { muatTurunPdfStesen, muatTurunPdfPenguji } from '../services/stationGroupPdf';
@@ -32,6 +32,8 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const [penguji, setPenguji] = useState<PengujiStesen[]>([]);
   const [pengujiLayak, setPengujiLayak] = useState<PengujiLayak[]>([]);
   const [namaStesen, setNamaStesen] = useState<Record<string, string>>({});
+  // Program TAMBAHAN yang pengujinya dikumpulkan bersama program ini.
+  const [gabung, setGabung] = useState<string[]>([]);
   const [memuat, setMemuat] = useState(false);
   const [menjana, setMenjana] = useState(false);
   const [ralat, setRalat] = useState('');
@@ -49,6 +51,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     try {
       const j = await ambilJadual(badgeName, year, siri);
       setJadual(j);
+      setGabung(j?.programGabung || []);
       if (j) {
         const [pg, nm] = await Promise.all([ambilPenguji(j.runId), ambilNamaStesen(j.runId)]);
         setPenguji(pg); setNamaStesen(nm);
@@ -60,6 +63,19 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   }, [badgeName, year, siri]);
 
   useEffect(() => { muat(); }, [muat]);
+
+  // Kolam dibaca semula setiap kali tandaan program berubah, supaya kiraan
+  // yang dipaparkan sentiasa kolam yang sebenarnya akan diagihkan.
+  const kunciGabung = gabung.join('|');
+  useEffect(() => {
+    if (!badgeName) { setPengujiLayak([]); return; }
+    let dibatalkan = false;
+    ambilPengujiLayak([badgeName, ...gabung], year, siri)
+      .then(l => { if (!dibatalkan) setPengujiLayak(l); })
+      .catch(() => { if (!dibatalkan) setPengujiLayak([]); });
+    return () => { dibatalkan = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [badgeName, year, siri, kunciGabung]);
 
   const jana = async () => {
     if (!badgeName) return;
@@ -97,7 +113,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     if (!jadual) return;
     setMenjana(true); setRalat('');
     try {
-      const layak = await ambilPengujiLayak(badgeName, year, siri);
+      const layak = await ambilPengujiLayak([badgeName, ...gabung], year, siri);
       setPengujiLayak(layak);
       // Yang sudah diambil oleh jadual program LAIN dikecualikan — kekangan
       // pangkalan data akan menolaknya, jadi lebih baik tidak mencuba.
@@ -118,6 +134,18 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     } catch (e: any) {
       setRalat(e.message || 'Gagal menjana penguji.');
     } finally { setMenjana(false); }
+  };
+
+  const togolGabung = async (nama: string) => {
+    const baharu = gabung.includes(nama)
+      ? gabung.filter(x => x !== nama)
+      : [...gabung, nama].sort();
+    setGabung(baharu);
+    // Disimpan hanya kalau jadual sudah wujud; tanpa larian, tiada tempat
+    // untuk menyimpannya lagi dan tandaan itu hanya hidup dalam skrin ini.
+    if (!jadual) return;
+    try { await simpanProgramGabung(jadual.runId, baharu); }
+    catch (e: any) { setRalat(e.message || 'Gagal menyimpan gabungan program.'); }
   };
 
   const simpanNama = async (label: string, nama: string) => {
@@ -164,6 +192,19 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       penguji: penguji.filter(x => x.stesen === l).sort((m, n) => m.nama.localeCompare(n.nama)),
     }));
   }, [jadual, penguji, namaStesen]);
+
+  // Yang sudah diambil oleh jadual program lain tidak boleh diletakkan di
+  // sini — kekangan pangkalan data akan menolaknya.
+  const bolehDitempatkan = useMemo(
+    () => pengujiLayak.filter(p => !p.sudahDitempatkan || p.sudahDitempatkan === badgeName),
+    [pengujiLayak, badgeName]);
+
+  // Pecahan mengikut program. Jumlahnya boleh melebihi saiz kolam kerana
+  // seorang penguji boleh mendaftar dalam lebih daripada satu program.
+  const pecahanKolam = useMemo(() => [badgeName, ...gabung].map(n => ({
+    nama: n,
+    bil: pengujiLayak.filter(p => p.programLain.split(', ').includes(n)).length,
+  })), [pengujiLayak, badgeName, gabung]);
 
   const saiz = stesen.map(s => s.sekolah.reduce((n, x) => n + x.peserta, 0));
   const jumlah = saiz.reduce((a, b) => a + b, 0);
@@ -329,6 +370,50 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
 
           {paparan === 'penguji' && (
             <div className="space-y-4">
+              {/* Kolam penguji. Yang digabungkan ialah SENARAI ORANG, bukan
+                  stesen: setiap program kekal stesennya sendiri, dan seorang
+                  penguji hanya boleh diambil oleh satu jadual dalam siri ini. */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold text-slate-800">Kolam penguji</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Tanda program lain untuk mengambil pengujinya sekali. Stesen tidak
+                      dikongsi &mdash; {badgeName || 'program ini'} kekal stesennya sendiri.
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                    {bolehDitempatkan.length} boleh ditempatkan
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {namaBadge.filter(n => n !== badgeName).map(n => {
+                    const aktif = gabung.includes(n);
+                    return (
+                      <button key={n} onClick={() => togolGabung(n)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                          aktif
+                            ? 'bg-violet-600 border-violet-600 text-white'
+                            : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                        {aktif ? '✓ ' : '+ '}{n}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="text-[11px] text-slate-500 mt-3">
+                  {pecahanKolam.map(x => `${x.nama} ${x.bil}`).join('  ·  ')}
+                  {' → '}
+                  <strong className="text-slate-700">{pengujiLayak.length} orang unik</strong>
+                  {pengujiLayak.length !== bolehDitempatkan.length && (
+                    <span className="text-amber-700">
+                      {`, ${pengujiLayak.length - bolehDitempatkan.length} sudah diambil program lain`}
+                    </span>
+                  )}
+                </p>
+              </div>
+
               {penguji.length === 0 && (
                 <div className="text-center py-10 text-slate-400 text-sm">
                   Belum ada penguji ditempatkan. Tekan <strong>Agih Penguji</strong>.

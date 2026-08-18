@@ -1476,6 +1476,23 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
     try { return new Date(d.date).getFullYear() === year; } catch { return false; }
   }).filter(d => !(d as any).isWithdrawn), [data, year]);
 
+  const sortText = (value?: string): string => String(value || '').trim().toUpperCase();
+
+  const compareParticipantCardOrder = (a: SubmissionData, b: SubmissionData): number => {
+    const schoolA = sortText(a.school || a.schoolCode);
+    const schoolB = sortText(b.school || b.schoolCode);
+    if (!schoolA && schoolB) return 1;
+    if (schoolA && !schoolB) return -1;
+
+    const schoolCompare = schoolA.localeCompare(schoolB, 'ms-MY', { sensitivity: 'base', numeric: true });
+    if (schoolCompare !== 0) return schoolCompare;
+
+    const codeCompare = sortText(a.schoolCode).localeCompare(sortText(b.schoolCode), 'ms-MY', { sensitivity: 'base', numeric: true });
+    if (codeCompare !== 0) return codeCompare;
+
+    return sortText(a.student).localeCompare(sortText(b.student), 'ms-MY', { sensitivity: 'base', numeric: true });
+  };
+
   const dedupeByIc = (items: SubmissionData[]): SubmissionData[] => {
     const byIc = new Map<string, SubmissionData>();
     items.forEach(item => {
@@ -1490,7 +1507,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
       const existingTime = new Date(existing.date || 0).getTime();
       if (Number.isFinite(currentTime) && currentTime > existingTime) byIc.set(ic, item);
     });
-    return Array.from(byIc.values()).sort((a, b) => (a.student || '').localeCompare(b.student || ''));
+    return Array.from(byIc.values()).sort(compareParticipantCardOrder);
   };
 
   const yearData = useMemo(() => {
@@ -2072,7 +2089,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
-                    <span><strong>Filter cetak/PDF:</strong> {activeFilterSummary}</span>
+                    <span><strong>Filter cetak/PDF:</strong> {activeFilterSummary} <span className="font-bold text-slate-500">| Susunan: Sekolah - Nama</span></span>
                     {(selectedBadge || selectedSiri || selectedRole || search.trim()) && (
                       <button
                         onClick={() => { setSelectedBadge(''); setSelectedSiri(''); setSelectedRole(''); setSearch(''); }}
@@ -2096,7 +2113,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                           <div className="flex-1 min-w-0">
                             <div className="text-xs font-bold uppercase truncate">{p.student}</div>
                             <div className="text-[10px] text-gray-500 truncate">
-                              {p.icNumber ? <span className="font-mono">{p.icNumber}</span> : ''} <span className="ml-1">| {getParticipantRoleMeta(p).label}</span> {p.badge && <span className="ml-1">| {p.badge}</span>} {formatParticipantSiri(p.siri) && <span className="ml-1">| {formatParticipantSiri(p.siri)}</span>}
+                              {p.school && <span>{p.school}</span>} {p.schoolCode && <span className="ml-1 font-mono">({p.schoolCode})</span>} {p.icNumber ? <span className="ml-1 font-mono">| {p.icNumber}</span> : ''} <span className="ml-1">| {getParticipantRoleMeta(p).label}</span> {p.badge && <span className="ml-1">| {p.badge}</span>} {formatParticipantSiri(p.siri) && <span className="ml-1">| {formatParticipantSiri(p.siri)}</span>}
                             </div>
                           </div>
                           <QrCode size={14} className="text-amber-600 flex-shrink-0" />
@@ -2111,7 +2128,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                 </div>
 
                 <div className="p-4 border-t flex justify-between items-center gap-2 bg-gray-50">
-                  <span className="text-[10px] text-gray-500">Layout cetak: 8 kad CR80 setiap helai A4 landskap</span>
+                  <span className="text-[10px] text-gray-500">Layout cetak: 8 kad CR80 setiap helai A4 landskap. Susunan ikut sekolah, kemudian nama.</span>
                   <div className="flex gap-2">
                     {mode === 'button' && (
                       <button onClick={() => { setIsOpen(false); setSelectedParticipant(null); }} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Tutup</button>

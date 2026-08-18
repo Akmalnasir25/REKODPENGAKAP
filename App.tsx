@@ -32,6 +32,7 @@ import { FirstLoginICModal } from './components/courses/FirstLoginICModal';
 import { getLeaderSession, clearLeaderSession } from './services/leaderAuthService';
 import { fetchLeaderSchoolData } from './services/leaderSchoolDataService';
 import type { LeaderSession } from './types';
+import { ParticipantCardScanPage } from './components/ParticipantCardScanPage';
 
 
 // Helper functions for access control (independent of localStorage)
@@ -62,7 +63,12 @@ const getAccessState = async () => {
 
 const ADMIN_SESSION_KEY = 'ADMIN_SESSION_DATA';
 const DEVELOPER_SESSION_KEY = 'DEVELOPER_SESSION_DATA';
-const isLocalPreview = () => ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const isLocalPreview = () => Boolean((import.meta as any).env?.DEV) && ['4002', '4173'].includes(window.location.port);
+const getParticipantCardTokenFromHash = (): string | null => {
+  const hash = window.location.hash.replace(/^#/, '');
+  const match = /^\/kad-peserta\/([A-Za-z0-9_-]{10,80})$/.exec(hash);
+  return match ? decodeURIComponent(match[1]) : null;
+};
 
 export default function App() {
   return (
@@ -105,6 +111,7 @@ function AppContent() {
   const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null);
   const [leaderSession, setLeaderSession] = useState<LeaderSession | null>(null);
   const [showPrivacyConsent, setShowPrivacyConsent] = useState(false);
+  const [participantCardToken, setParticipantCardToken] = useState<string | null>(() => getParticipantCardTokenFromHash());
 
   useEffect(() => {
     const hasAccepted = localStorage.getItem('PDPA_CONSENT_ACCEPTED');
@@ -139,9 +146,25 @@ function AppContent() {
   // Listen for browser back/forward buttons
   useEffect(() => {
     const cleanup = onHashNavigation((hashView) => {
+      setParticipantCardToken(getParticipantCardTokenFromHash());
       setView(hashView);
     });
     return cleanup;
+  }, []);
+
+  useEffect(() => {
+    const syncParticipantCardRoute = () => {
+      const token = getParticipantCardTokenFromHash();
+      setParticipantCardToken(token);
+      if (token) document.title = 'Kad Peserta - Pengakap';
+    };
+    window.addEventListener('hashchange', syncParticipantCardRoute);
+    window.addEventListener('popstate', syncParticipantCardRoute);
+    syncParticipantCardRoute();
+    return () => {
+      window.removeEventListener('hashchange', syncParticipantCardRoute);
+      window.removeEventListener('popstate', syncParticipantCardRoute);
+    };
   }, []);
 
   // Load access state on mount and when URL changes
@@ -252,6 +275,13 @@ function AppContent() {
           }
         }
 
+        const cardToken = getParticipantCardTokenFromHash();
+        if (cardToken) {
+          setParticipantCardToken(cardToken);
+          setIsInitializing(false);
+          return;
+        }
+
         // 1. Check URL Config
         const urlParams = new URLSearchParams(window.location.search);
         const urlScriptParam = urlParams.get('scriptUrl');
@@ -297,7 +327,9 @@ function AppContent() {
         if (!sessionRestored && savedDeveloperSession) {
             try {
                 const parsedDeveloper = JSON.parse(savedDeveloperSession);
-                if (parsedDeveloper && (!parsedDeveloper.expiresAt || parsedDeveloper.expiresAt > Date.now())) {
+                if (parsedDeveloper?.authToken === 'PREVIEW_DEVELOPER_TOKEN' && !isLocalPreview()) {
+                    localStorage.removeItem(DEVELOPER_SESSION_KEY);
+                } else if (parsedDeveloper && (!parsedDeveloper.expiresAt || parsedDeveloper.expiresAt > Date.now())) {
                     setIsDeveloperMode(true);
                     replaceViewInHash('developer');
                     setView('developer');
@@ -314,7 +346,9 @@ function AppContent() {
         if (!sessionRestored && savedAdminSession) {
             try {
                 const parsedAdmin = JSON.parse(savedAdminSession);
-                if (parsedAdmin && (!parsedAdmin.expiresAt || parsedAdmin.expiresAt > Date.now())) {
+                if (parsedAdmin?.authToken === 'PREVIEW_BYPASS_TOKEN' && !isLocalPreview()) {
+                    localStorage.removeItem(ADMIN_SESSION_KEY);
+                } else if (parsedAdmin && (!parsedAdmin.expiresAt || parsedAdmin.expiresAt > Date.now())) {
                     setAdminSession(parsedAdmin);
                     setAdminRole(null);
                     replaceViewInHash('admin');
@@ -467,7 +501,7 @@ function AppContent() {
   const handleAdminRegionalLogin = async (username: string, password: string, role: 'negeri' | 'daerah'): Promise<{success: boolean, message?: string, adminData?: any}> => {
     try {
         const currentAccessState = await getAccessState();
-        const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+        const isPreviewMode = isLocalPreview();
         
         if (!currentAccessState.adminAccess) {
             return { success: false, message: 'Akses pentadbir sedang ditutup. Sila hubungi developer.' };
@@ -533,7 +567,7 @@ function AppContent() {
 
   const handleDeveloperLogin = async (username: string, password: string): Promise<{success: boolean, message?: string}> => {
     try {
-      const isPreviewMode = ['4002', '4173'].includes(window.location.port) || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+      const isPreviewMode = isLocalPreview();
 
       if (isPreviewMode) {
         localStorage.setItem(DEVELOPER_SESSION_KEY, JSON.stringify({
@@ -681,6 +715,10 @@ function AppContent() {
 
 
   const renderContent = () => {
+      if (participantCardToken) {
+          return <ParticipantCardScanPage token={participantCardToken} />;
+      }
+
       // Check for maintenance mode using accessState (respects config.json priority)
       const isMaintenanceMode = accessState.maintenance;
       const isAdminAccess = Boolean(adminRole || adminSession || isDeveloperMode);

@@ -112,6 +112,115 @@ export const validatePassword = (password: string): { valid: boolean; errors: st
   return { valid: errors.length === 0, errors };
 };
 
+export interface ParticipantCardToken {
+  icNumber: string;
+  token: string;
+}
+
+export interface ParticipantCardRelinkResult {
+  oldIcNumber: string;
+  newIcNumber: string;
+  token: string;
+  replacedToken?: string | null;
+  message?: string;
+}
+
+export interface ParticipantCardProgram {
+  badge: string;
+  year: number;
+  siri: number;
+}
+
+export interface ParticipantCardPublic {
+  ok: boolean;
+  message?: string;
+  name?: string;
+  role?: string;
+  age?: number | null;
+  schoolName?: string;
+  schoolCode?: string;
+  negeriName?: string;
+  negeriCode?: string;
+  daerahName?: string;
+  daerahCode?: string;
+  programs?: ParticipantCardProgram[];
+}
+
+export const normalizeIcNumber = (value?: string): string =>
+  String(value || '').replace(/\D/g, '');
+
+export const ensureParticipantCards = async (icNumbers: string[]): Promise<ParticipantCardToken[]> => {
+  const uniqueIcNumbers = Array.from(new Set(
+    icNumbers
+      .map(normalizeIcNumber)
+      .filter(ic => /^\d{12}$/.test(ic))
+  ));
+
+  if (uniqueIcNumbers.length === 0) return [];
+
+  const { data, error } = await supabase.rpc('ensure_participant_cards', {
+    p_ic_numbers: uniqueIcNumbers,
+  });
+
+  if (error) throw error;
+
+  return (data || []).map((row: any) => ({
+    icNumber: row.ic_number,
+    token: row.token,
+  }));
+};
+
+export const relinkParticipantCard = async (
+  token: string,
+  newIcNumber: string,
+  reason?: string
+): Promise<ParticipantCardRelinkResult> => {
+  const { data, error } = await supabase.rpc('relink_participant_card', {
+    p_token: String(token || '').trim(),
+    p_new_ic_number: normalizeIcNumber(newIcNumber),
+    p_reason: reason || null,
+  });
+
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Relink kad tidak berjaya.');
+
+  return {
+    oldIcNumber: row.old_ic_number,
+    newIcNumber: row.new_ic_number,
+    token: row.token,
+    replacedToken: row.replaced_token,
+    message: row.message,
+  };
+};
+
+export const getParticipantCardPublic = async (token: string): Promise<ParticipantCardPublic> => {
+  const { data, error } = await supabase.rpc('get_participant_card_public', {
+    p_token: token,
+  });
+
+  if (error) throw error;
+  if (!data || typeof data !== 'object') {
+    return { ok: false, message: 'Kad peserta tidak dijumpai.' };
+  }
+
+  return {
+    ok: Boolean((data as any).ok),
+    message: (data as any).message,
+    name: (data as any).name,
+    role: (data as any).role,
+    age: (data as any).age ?? null,
+    schoolName: (data as any).schoolName,
+    schoolCode: (data as any).schoolCode,
+    negeriName: (data as any).negeriName,
+    negeriCode: (data as any).negeriCode,
+    daerahName: (data as any).daerahName,
+    daerahCode: (data as any).daerahCode,
+    programs: Array.isArray((data as any).programs) ? (data as any).programs : [],
+  };
+};
+
 export const fetchCloudData = async (
   _url?: string,
   role?: string,
@@ -203,7 +312,9 @@ export const fetchCloudData = async (
         schoolCode: s.school_code,
         schoolType: s.school_type || 'lain',
         negeriCode: s.negeri?.code,
+        negeriName: s.negeri?.name,
         daerahCode: s.daerah?.code,
+        daerahName: s.daerah?.name,
         isClaimed: Boolean(s.is_claimed),
         claimedEmail: s.claimed_email || undefined,
         claimedAt: s.claimed_at || undefined,
@@ -233,7 +344,9 @@ export const fetchCloudData = async (
         schoolType: p.submission?.school?.school_type || 'lain',
         submissionStatus: p.submission?.status || 'submitted',
         negeriCode: p.submission?.school?.negeri?.code,
+        negeriName: p.submission?.school?.negeri?.name,
         daerahCode: p.submission?.school?.daerah?.code,
+        daerahName: p.submission?.school?.daerah?.name,
         badge: p.submission?.badge?.name || '',
         student: p.name || '',
         gender: p.gender || '',

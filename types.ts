@@ -41,9 +41,11 @@ export interface SubmissionData {
   school: string;
   schoolCode?: string;
   schoolType?: SchoolType;
+  negeriName?: string;
   /** Status baris submissions induk. 'draft' = belum dihantar (cth menunggu bayaran). */
   submissionStatus?: string;
   negeriCode?: string;
+  daerahName?: string;
   daerahCode?: string;
   badge: string;
   student: string;
@@ -108,7 +110,9 @@ export interface School {
   name: string;
   schoolCode?: string;
   schoolType?: SchoolType;
+  negeriName?: string;
   negeriCode?: string;
+  daerahName?: string;
   daerahCode?: string;
   isClaimed?: boolean;
   claimedEmail?: string;

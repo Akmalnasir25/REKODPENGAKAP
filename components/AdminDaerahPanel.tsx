@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User, MapPin, Wallet } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User, MapPin, Wallet, QrCode } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -19,6 +19,7 @@ import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
 import { CoursesAdminPanel } from './courses/admin/CoursesAdminPanel';
 import { FloatedStudentsTab } from './FloatedStudentsTab';
+import { ParticipantCardsTab } from './ParticipantCardsTab';
 
 interface AdminDaerahPanelProps {
   daerahCode: string;
@@ -40,7 +41,7 @@ interface AdminDaerahPanelProps {
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
   daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'bayaran' | 'history' | 'audit' | 'attendance' | 'withdrawals' | 'courses' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'bayaran' | 'history' | 'audit' | 'attendance' | 'participantCards' | 'withdrawals' | 'courses' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -419,6 +420,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'pengesahan', label: 'Pengesahan', icon: CheckCircle, allowed: true },
     { id: 'bayaran', label: 'Rumusan Bayaran', icon: Wallet, allowed: true },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
+    { id: 'participantCards', label: 'Kad Peserta', icon: QrCode, allowed: true },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true },
     { id: 'floated', label: 'Murid Terapung', icon: MapPin, allowed: true },
     { id: 'courses', label: 'Kursus Pemimpin', icon: Users, allowed: true },
@@ -614,7 +616,17 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
 
             {tab === 'dashboard' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
-                 <AdminDashboard data={filteredData} schools={filteredSchools} badges={badges} userProfiles={userProfiles} onRefresh={refreshData} onDelete={deleteData} readOnlyBadges={readOnlyBadges} />
+                 <AdminDashboard
+                   data={filteredData}
+                   schools={filteredSchools}
+                   badges={badges}
+                   userProfiles={userProfiles}
+                   onRefresh={refreshData}
+                   onDelete={deleteData}
+                   readOnlyBadges={readOnlyBadges}
+                   logoUrl={daerahLogoUrl || LOGO_URL}
+                   issuerLabel={`DAERAH ${daerahName}`}
+                 />
               </div>
             )}
 
@@ -880,6 +892,16 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   })()}
                 </div>
               </div>
+            )}
+
+            {tab === 'participantCards' && (
+              <ParticipantCardsTab
+                data={filteredData}
+                schools={filteredSchools}
+                logoUrl={daerahLogoUrl || LOGO_URL}
+                issuerLabel={`DAERAH ${daerahName}`}
+                scopeLabel={`Daerah ${daerahName}`}
+              />
             )}
 
             {tab === 'withdrawals' && (

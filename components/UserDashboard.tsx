@@ -24,7 +24,7 @@ import { ProgramSummaryView } from './ProgramSummaryView';
 import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
-import { SchoolQRGenerator, ParticipantQRGenerator } from './ui/QRVerification';
+import { SchoolQRGenerator } from './ui/QRVerification';
 import { WithdrawalsList } from './WithdrawalsList';
 import { SchoolLeaderRequestsTab } from './SchoolLeaderRequestsTab';
 import { FloatedStudentsTab } from './FloatedStudentsTab';
@@ -2002,9 +2002,6 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             />
                             {filteredData.length > 0 && (
                               <SchoolQRGenerator data={filteredData} year={selectedYear} />
-                            )}
-                            {filteredData.length > 0 && (
-                              <ParticipantQRGenerator data={filteredData} year={selectedYear} />
                             )}
                         </div>
                     </div>

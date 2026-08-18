@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3 } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Sparkles, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, QrCode } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -7,6 +7,7 @@ import { AdminMigration } from './AdminMigration';
 import { AdminHistory } from './AdminHistory';
 import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
+import { ParticipantCardsTab } from './ParticipantCardsTab';
 import { SubmissionData, Badge, School as SchoolType } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassword } from '../services/supabaseApi';
@@ -28,7 +29,7 @@ interface AdminPanelProps {
 export const AdminPanel: React.FC<AdminPanelProps> = ({ 
   role, onBack, scriptUrl, setScriptUrl, data, schools, badges, isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'migration' | 'history' | 'audit' | 'config'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'participantCards' | 'migration' | 'history' | 'audit' | 'config'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -220,6 +221,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     { id: 'analytics', label: 'Analitik', icon: BarChart3, allowed: true },
     { id: 'schools', label: 'Urus Sekolah', icon: School, allowed: true },
     { id: 'badges', label: 'Urus Program', icon: Medal, allowed: true },
+    { id: 'participantCards', label: 'Kad Peserta', icon: QrCode, allowed: true },
     { id: 'history', label: 'Semakan Rekod', icon: History, allowed: true },
     { id: 'audit', label: 'Audit Data', icon: AlertTriangle, allowed: true },
     // Only District Admin can see Migration
@@ -531,6 +533,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="animate-[fadeIn_0.2s_ease-out]">
                  <AnalyticsDashboard allData={data} badges={badges} />
               </div>
+            )}
+
+            {tab === 'participantCards' && (
+              <ParticipantCardsTab
+                data={data}
+                schools={schools}
+                logoUrl={LOGO_URL}
+                issuerLabel="PENGAKAP MALAYSIA"
+                scopeLabel="Admin"
+              />
             )}
 
             {tab === 'dashboard' && (

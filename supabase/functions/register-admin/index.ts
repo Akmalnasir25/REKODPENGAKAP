@@ -120,9 +120,10 @@ serve(async (req) => {
         .from("daerah")
         .select("id, negeri_id")
         .eq("code", daerahCode)
+        .eq("negeri_id", adminProfile.negeri_id)
         .single();
 
-      if (daerahError || !daerahCheck || daerahCheck.negeri_id !== adminProfile.negeri_id) {
+      if (daerahError || !daerahCheck) {
         return new Response(
           JSON.stringify({ status: "error", message: "Daerah tidak dijumpai atau bukan dalam negeri anda." }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -177,12 +178,29 @@ serve(async (req) => {
     }
 
     if (daerahCode) {
-      const { data: daerahData } = await supabaseAdmin
+      let daerahQuery = supabaseAdmin
         .from("daerah")
         .select("id")
-        .eq("code", daerahCode)
-        .single();
+        .eq("code", daerahCode);
+      if (negeriId) daerahQuery = daerahQuery.eq("negeri_id", negeriId);
+      const { data: daerahData } = await daerahQuery.single();
       daerahId = daerahData?.id || null;
+    }
+
+    if ((role === "negeri_admin" || role === "daerah_admin") && !negeriId) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      return new Response(
+        JSON.stringify({ status: "error", message: "Negeri tidak dijumpai. Akaun admin tidak dicipta." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (role === "daerah_admin" && !daerahId) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      return new Response(
+        JSON.stringify({ status: "error", message: "Daerah tidak dijumpai dalam negeri dipilih. Akaun admin tidak dicipta." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Update profile

@@ -11,6 +11,7 @@ import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
 import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 import { FloatStudentModal } from './FloatStudentModal';
 import { safeGetYear, deduplicateRecords, computeRoleStats, parseBadgeStatusKey, gabungPegawaiSiri } from '../utils/dataProcessing';
+import { LOGO_URL } from '../constants';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
@@ -22,12 +23,24 @@ interface AdminDashboardProps {
   onFloat?: (item: SubmissionData) => void;
   // Senarai nama badge yang readonly untuk pengguna ini (cth: admin daerah lihat program negeri)
   readOnlyBadges?: Set<string>;
+  logoUrl?: string;
+  issuerLabel?: string;
 }
 
 type TabType = 'all' | 'students' | 'leaders' | 'assistants' | 'pembantu' | 'examiners' | 'principals' | 'archive';
 type PrintMode = 'none' | 'stats' | 'list' | 'archive';
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, userProfiles = [], onRefresh, onDelete, onFloat, readOnlyBadges }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  data,
+  schools,
+  userProfiles = [],
+  onRefresh,
+  onDelete,
+  onFloat,
+  readOnlyBadges,
+  logoUrl = LOGO_URL,
+  issuerLabel = 'PENGAKAP MALAYSIA',
+}) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [searchQuery, setSearchQuery] = useState('');

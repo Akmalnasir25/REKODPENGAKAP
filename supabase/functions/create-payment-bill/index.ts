@@ -48,7 +48,19 @@ const medan = (objek: any, nama: string): any => {
   return kunci ? objek[kunci] : undefined;
 };
 
+// Tempoh hidup bil, mengikut kaedah.
+//
+// Tiga puluh minit masuk akal untuk gateway: skrin FPX itu sendiri mati
+// dalam tempoh itu, jadi bil yang hidup lebih lama hanya menunjuk ke skrin
+// yang sudah tiada.
+//
+// Ia tidak masuk akal untuk pindahan bank. Guru mencipta bil, pergi membuat
+// pindahan, mencari slip, mengimbas atau memotretnya, kemudian memuat naik.
+// Tiga puluh minit membunuh bil itu di tengah jalan — dua bil RM85 SEK RAJA
+// PEREMPUAN TAAYAH (18 Ogos 2026) mati tepat dalam tingkap itu, satu demi
+// satu, tanpa bukti sempat dilampirkan.
 const TEMPOH_BIL_MINIT = 30;
+const TEMPOH_BIL_BANK_MINIT = 120;
 
 type Kaedah = 'toyyibpay' | 'bank_transfer' | 'cheque';
 
@@ -515,7 +527,10 @@ serve(async (req) => {
     // billChargeToCustomer=0, jadi ia TIDAK ditambah ke jumlah bil kita.
     const caj = 0;
     const total = amount;
-    const luput = new Date(Date.now() + TEMPOH_BIL_MINIT * 60 * 1000);
+    const tempohMinit = body.method === 'bank_transfer'
+      ? TEMPOH_BIL_BANK_MINIT
+      : TEMPOH_BIL_MINIT;
+    const luput = new Date(Date.now() + tempohMinit * 60 * 1000);
     const gatewayId = itemDibil[0].gatewayId;
 
     const { data: bil, error: bilErr } = await admin.from('payment_bills').insert({

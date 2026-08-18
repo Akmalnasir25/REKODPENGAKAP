@@ -125,6 +125,9 @@ export interface School {
     students?: boolean;
     assistants?: boolean;
     examiners?: boolean;
+    /** PEMBANTU. Berundur kepada `assistants` bila tidak ditetapkan, supaya
+     *  program yang tidak pernah menetapkannya kekal berkelakuan sama. */
+    helpers?: boolean;
   }>;
   /** Kebenaran yang terpakai SELEPAS pendaftaran dihantar atau disahkan.
    *  Tiada `students`: PESERTA kekal terkunci selepas penghantaran dalam
@@ -132,6 +135,9 @@ export interface School {
   badgeEditPermissionsSelepas?: Record<string, {
     assistants?: boolean;
     examiners?: boolean;
+    /** PEMBANTU selepas hantar. Berundur kepada `assistants` seperti fasa
+     *  pertama — dua peraturan berbeza akan menyimpang. */
+    helpers?: boolean;
   }>;
 }
 

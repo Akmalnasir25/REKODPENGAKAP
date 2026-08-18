@@ -677,7 +677,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       );
       const role = (item.role || 'PESERTA').toUpperCase();
       if (role === 'PENGUJI') return perBadgePermissions?.examiners ?? allowExaminers;
-      if (role.includes('PENOLONG') || role === 'PEMIMPIN' || role === 'PEMBANTU') return perBadgePermissions?.assistants ?? allowAssistants;
+      // PEMBANTU mempunyai gerbangnya sendiri, berundur kepada `assistants`
+      // bila tidak ditetapkan — peraturan yang SAMA seperti UserForm. Dua
+      // definisi "siapa boleh sentuh Pembantu" akan menyimpang.
+      if (role === 'PEMBANTU') return perBadgePermissions?.helpers ?? perBadgePermissions?.assistants ?? allowAssistants;
+      if (role.includes('PENOLONG') || role === 'PEMIMPIN') return perBadgePermissions?.assistants ?? allowAssistants;
       return perBadgePermissions?.students ?? allowStudents;
   };
 

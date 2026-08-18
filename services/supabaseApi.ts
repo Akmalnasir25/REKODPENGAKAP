@@ -1304,7 +1304,7 @@ export const getSubmittedSchools = async (daerahCode?: string, year?: number, ne
  * tidak boleh mengubah apa yang dibenarkan sebelum penghantaran, dan
  * sebaliknya.
  */
-export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'all', allow: boolean, year: number = currentYear(), _csrfToken?: string, fasa: 'sebelum' | 'selepas' = 'sebelum'): Promise<ApiResponse> => {
+export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: string, permissionType: 'students' | 'assistants' | 'examiners' | 'helpers' | 'all', allow: boolean, year: number = currentYear(), _csrfToken?: string, fasa: 'sebelum' | 'selepas' = 'sebelum'): Promise<ApiResponse> => {
   try {
     const badge = await getBadgeByName(badgeName);
     if (!badge) return { status: 'error', message: 'Program tidak dijumpai.' };
@@ -1336,8 +1336,8 @@ export const toggleBadgeEditPermissionBatch = async (_url: string, badgeName: st
     // selepas penghantaran dalam semua keadaan, termasuk melalui butang MASTER.
     const applyPermission = (current: any = {}) => permissionType === 'all'
       ? (fasa === 'selepas'
-          ? { ...current, assistants: allow, examiners: allow }
-          : { ...current, students: allow, assistants: allow, examiners: allow })
+          ? { ...current, assistants: allow, examiners: allow, helpers: allow }
+          : { ...current, students: allow, assistants: allow, examiners: allow, helpers: allow })
       : { ...current, [permissionType]: allow };
 
     const kunciJson = fasa === 'selepas' ? 'editPermissionsSelepas' : 'editPermissions';

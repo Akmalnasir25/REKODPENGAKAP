@@ -189,6 +189,19 @@ export const UserForm: React.FC<UserFormProps> = ({
   const allowExaminers = sudahHantar ? (izinSelepas?.examiners === true)
     : (selectedBadgePermissions?.examiners ?? baseAllowExaminers);
 
+  // PEMBANTU mempunyai gerbangnya sendiri, tetapi ia BERUNDUR kepada
+  // `assistants` bila tidak ditetapkan. Sebabnya program bernama "Pembantu"
+  // wujud: admin mahu membuka Pembantu tanpa membuka Pemimpin. Sebelum ini
+  // tiada cara menyatakannya, dan `helpers: true` yang pernah ditulis ke
+  // pangkalan data tidak pernah dibaca oleh sesiapa — semua tiga kunci yang
+  // borang tahu ditetapkan palsu, dan sekolah berdepan "Akses Terhad".
+  //
+  // Sandaran itu penting: tanpanya, setiap program yang tidak pernah
+  // menetapkan `helpers` akan kehilangan Pembantu pada saat kod ini naik.
+  const allowHelpers = sudahHantar
+    ? ((izinSelepas?.helpers ?? izinSelepas?.assistants) === true && !pegawaiDicaj)
+    : (selectedBadgePermissions?.helpers ?? selectedBadgePermissions?.assistants ?? baseAllowAssistants);
+
   // Peranan yang benar-benar boleh didaftar untuk program ini.
   //
   // Dropdown peranan melumpuhkan pilihan yang ditutup, tetapi itu hanya
@@ -198,10 +211,11 @@ export const UserForm: React.FC<UserFormProps> = ({
   const peranaanDibenarkan = React.useMemo<PersonRole[]>(() => {
     const senarai: PersonRole[] = [];
     if (allowStudents) senarai.push('PESERTA');
-    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU');
+    if (allowAssistants) senarai.push('PEMIMPIN', 'PENOLONG PEMIMPIN');
+    if (allowHelpers) senarai.push('PEMBANTU');
     if (allowExaminers) senarai.push('PENGUJI');
     return senarai;
-  }, [allowStudents, allowAssistants, allowExaminers]);
+  }, [allowStudents, allowAssistants, allowHelpers, allowExaminers]);
   const peranaanLalai: PersonRole = peranaanDibenarkan[0] ?? 'PESERTA';
 
   // Baris KOSONG yang memegang peranan tertutup dibetulkan secara senyap —
@@ -318,7 +332,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   }
 
   // Check if ALL permissions are revoked
-  if (userSession && (!allowStudents && !allowAssistants && !allowExaminers)) {
+  if (userSession && (!allowStudents && !allowAssistants && !allowHelpers && !allowExaminers)) {
       return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
             <div className="bg-white p-8 rounded-xl shadow-xl max-w-md text-center">
@@ -760,7 +774,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                                     <option value="PESERTA" disabled={!allowStudents}>Peserta</option>
                                     <option value="PEMIMPIN" disabled={!allowAssistants}>Pemimpin</option>
                                     <option value="PENOLONG PEMIMPIN" disabled={!allowAssistants}>Penolong Pemimpin</option>
-                                    <option value="PEMBANTU" disabled={!allowAssistants}>Pembantu</option>
+                                    <option value="PEMBANTU" disabled={!allowHelpers}>Pembantu</option>
                                     <option value="PENGUJI" disabled={!allowExaminers}>Penguji</option>
                                 </select>
 

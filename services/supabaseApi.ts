@@ -134,6 +134,23 @@ export interface ParticipantCardProgram {
 export interface ParticipantCardPublic {
   ok: boolean;
   message?: string;
+  cardKind?: 'participant' | 'program';
+  cardType?: 'participant' | 'urusetia' | 'general';
+  cardTitle?: string;
+  displayName?: string;
+  cardNumber?: string;
+  tag?: string;
+  programName?: string;
+  programYear?: number | null;
+  siri?: number | null;
+  issuerLabel?: string;
+  scopeLabel?: string;
+  colorKey?: string;
+  accent?: string;
+  accentDark?: string;
+  accentSoft?: string;
+  trim?: string;
+  details?: Record<string, string>;
   name?: string;
   role?: string;
   age?: number | null;
@@ -145,6 +162,59 @@ export interface ParticipantCardPublic {
   daerahCode?: string;
   programs?: ParticipantCardProgram[];
 }
+
+export type ProgramCardType = 'urusetia' | 'general';
+
+export interface ProgramCardInput {
+  cardType: ProgramCardType;
+  title: string;
+  displayName: string;
+  cardNumber?: string;
+  tag?: string;
+  programName?: string;
+  programYear?: number | null;
+  siri?: number | null;
+  issuerLabel?: string;
+  scopeLabel?: string;
+  colorKey?: string;
+  accent?: string;
+  accentDark?: string;
+  accentSoft?: string;
+  trim?: string;
+  payload?: Record<string, string>;
+}
+
+export interface ProgramCardRecord extends ProgramCardInput {
+  id: string;
+  token: string;
+  revokedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+const mapProgramCardRow = (row: any): ProgramCardRecord => ({
+  id: row.id,
+  token: row.token,
+  cardType: row.card_type,
+  title: row.title || '',
+  displayName: row.display_name || '',
+  cardNumber: row.card_number || '',
+  tag: row.tag || '',
+  programName: row.program_name || '',
+  programYear: row.program_year ?? null,
+  siri: row.siri ?? null,
+  issuerLabel: row.issuer_label || '',
+  scopeLabel: row.scope_label || '',
+  colorKey: row.color_key || '',
+  accent: row.accent || '',
+  accentDark: row.accent_dark || '',
+  accentSoft: row.accent_soft || '',
+  trim: row.trim_color || row.trim || '',
+  payload: row.payload && typeof row.payload === 'object' ? row.payload : {},
+  revokedAt: row.revoked_at,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
 
 export const normalizeIcNumber = (value?: string): string =>
   String(value || '').replace(/\D/g, '');
@@ -208,6 +278,8 @@ export const getParticipantCardPublic = async (token: string): Promise<Participa
   return {
     ok: Boolean((data as any).ok),
     message: (data as any).message,
+    cardKind: (data as any).cardKind || 'participant',
+    cardType: (data as any).cardType || 'participant',
     name: (data as any).name,
     role: (data as any).role,
     age: (data as any).age ?? null,
@@ -219,6 +291,121 @@ export const getParticipantCardPublic = async (token: string): Promise<Participa
     daerahCode: (data as any).daerahCode,
     programs: Array.isArray((data as any).programs) ? (data as any).programs : [],
   };
+};
+
+export const getProgramCardPublic = async (token: string): Promise<ParticipantCardPublic> => {
+  const { data, error } = await supabase.rpc('get_program_card_public', {
+    p_token: token,
+  });
+
+  if (error) throw error;
+  if (!data || typeof data !== 'object') {
+    return { ok: false, message: 'Kad program tidak dijumpai.' };
+  }
+
+  return {
+    ok: Boolean((data as any).ok),
+    message: (data as any).message,
+    cardKind: (data as any).cardKind || 'program',
+    cardType: (data as any).cardType,
+    cardTitle: (data as any).cardTitle,
+    displayName: (data as any).displayName,
+    cardNumber: (data as any).cardNumber,
+    tag: (data as any).tag,
+    programName: (data as any).programName,
+    programYear: (data as any).programYear ?? null,
+    siri: (data as any).siri ?? null,
+    issuerLabel: (data as any).issuerLabel,
+    scopeLabel: (data as any).scopeLabel,
+    colorKey: (data as any).colorKey,
+    accent: (data as any).accent,
+    accentDark: (data as any).accentDark,
+    accentSoft: (data as any).accentSoft,
+    trim: (data as any).trim,
+    details: (data as any).details && typeof (data as any).details === 'object' ? (data as any).details : {},
+    name: (data as any).displayName || (data as any).cardTitle,
+    role: (data as any).cardType === 'urusetia' ? 'URUSETIA' : 'KAD UMUM',
+    programs: [],
+  };
+};
+
+export const createProgramCards = async (cards: ProgramCardInput[]): Promise<ProgramCardRecord[]> => {
+  if (cards.length === 0) return [];
+  const payload = cards.map(card => ({
+    card_type: card.cardType,
+    title: card.title,
+    display_name: card.displayName,
+    card_number: card.cardNumber || null,
+    tag: card.tag || null,
+    program_name: card.programName || null,
+    program_year: card.programYear || null,
+    siri: card.siri || null,
+    issuer_label: card.issuerLabel || null,
+    scope_label: card.scopeLabel || null,
+    color_key: card.colorKey || null,
+    accent: card.accent || null,
+    accent_dark: card.accentDark || null,
+    accent_soft: card.accentSoft || null,
+    trim_color: card.trim || null,
+    payload: card.payload || {},
+  }));
+
+  const { data, error } = await supabase.rpc('create_program_cards', {
+    p_cards: payload,
+  });
+
+  if (error) throw error;
+  return (data || []).map(mapProgramCardRow);
+};
+
+export const listProgramCards = async (cardType?: ProgramCardType): Promise<ProgramCardRecord[]> => {
+  const { data, error } = await supabase.rpc('list_program_cards', {
+    p_card_type: cardType || null,
+  });
+
+  if (error) throw error;
+  return (data || []).map(mapProgramCardRow);
+};
+
+export const updateProgramCard = async (
+  cardId: string,
+  patch: Partial<ProgramCardInput>
+): Promise<ProgramCardRecord> => {
+  const { data, error } = await supabase.rpc('update_program_card', {
+    p_card_id: cardId,
+    p_patch: {
+      title: patch.title,
+      display_name: patch.displayName,
+      card_number: patch.cardNumber,
+      tag: patch.tag,
+      program_name: patch.programName,
+      program_year: patch.programYear,
+      siri: patch.siri,
+      issuer_label: patch.issuerLabel,
+      scope_label: patch.scopeLabel,
+      color_key: patch.colorKey,
+      accent: patch.accent,
+      accent_dark: patch.accentDark,
+      accent_soft: patch.accentSoft,
+      trim_color: patch.trim,
+      payload: patch.payload,
+    },
+  });
+
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Kad tidak dijumpai atau tidak berjaya dikemaskini.');
+  return mapProgramCardRow(row);
+};
+
+export const revokeProgramCard = async (cardId: string, reason?: string): Promise<boolean> => {
+  const { data, error } = await supabase.rpc('revoke_program_card', {
+    p_card_id: cardId,
+    p_reason: reason || null,
+  });
+
+  if (error) throw error;
+  return Boolean(data);
 };
 
 export const fetchCloudData = async (

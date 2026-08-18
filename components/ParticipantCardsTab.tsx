@@ -4,6 +4,7 @@ import { SubmissionData, School } from '../types';
 import { LOGO_URL } from '../constants';
 import { ParticipantQRGenerator } from './ui/QRVerification';
 import { deduplicateRecords } from '../utils/dataProcessing';
+import { ProgramCardsManager } from './ProgramCardsManager';
 
 interface ParticipantCardsTabProps {
   data: SubmissionData[];
@@ -22,6 +23,7 @@ export const ParticipantCardsTab: React.FC<ParticipantCardsTabProps> = ({
   issuerLabel = 'PENGAKAP MALAYSIA',
   scopeLabel = 'Admin',
 }) => {
+  const [activeCardTab, setActiveCardTab] = useState<'peserta' | 'urusetia' | 'umum'>('peserta');
   const approvedData = useMemo(() => {
     return deduplicateRecords(data, schools, false);
   }, [data, schools]);
@@ -43,10 +45,10 @@ export const ParticipantCardsTab: React.FC<ParticipantCardsTabProps> = ({
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
             <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-              <QrCode size={20} className="text-amber-600" /> Pengurusan Kad Peserta
+              <QrCode size={20} className="text-amber-600" /> Pengurusan Kad Program
             </h2>
             <p className="text-sm text-slate-500 mt-1">
-              {scopeLabel}. Data disahkan sahaja. Urus paparan kad, jana QR kekal, cetak ikut filter, muat turun PDF pukal dan relink QR lama.
+              {scopeLabel}. Urus Kad Peserta, Kad Urusetia dan Kad Umum bernombor dengan QR token kekal.
             </p>
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
@@ -62,14 +64,59 @@ export const ParticipantCardsTab: React.FC<ParticipantCardsTabProps> = ({
         </div>
       </div>
 
-      <ParticipantQRGenerator
-        data={approvedData}
-        year={selectedYear}
-        logoUrl={logoUrl}
-        issuerLabel={issuerLabel}
-        mode="panel"
-        title="Kad Peserta"
-      />
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-2 print:hidden">
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { id: 'peserta', label: 'Peserta', count: approvedData.length },
+            { id: 'urusetia', label: 'Urusetia', count: null },
+            { id: 'umum', label: 'Umum Bernombor', count: null },
+          ].map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveCardTab(item.id as typeof activeCardTab)}
+              className={`rounded-lg px-3 py-2 text-xs font-black transition ${
+                activeCardTab === item.id
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {item.label}{typeof item.count === 'number' ? ` (${item.count})` : ''}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeCardTab === 'peserta' && (
+        <ParticipantQRGenerator
+          data={approvedData}
+          year={selectedYear}
+          logoUrl={logoUrl}
+          issuerLabel={issuerLabel}
+          mode="panel"
+          title="Kad Peserta"
+        />
+      )}
+
+      {activeCardTab === 'urusetia' && (
+        <ProgramCardsManager
+          cardType="urusetia"
+          year={selectedYear}
+          logoUrl={logoUrl}
+          issuerLabel={issuerLabel}
+          scopeLabel={scopeLabel}
+        />
+      )}
+
+      {activeCardTab === 'umum' && (
+        <ProgramCardsManager
+          cardType="general"
+          year={selectedYear}
+          logoUrl={logoUrl}
+          issuerLabel={issuerLabel}
+          scopeLabel={scopeLabel}
+        />
+      )}
     </div>
   );
 };

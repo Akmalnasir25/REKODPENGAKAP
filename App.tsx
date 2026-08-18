@@ -156,7 +156,7 @@ function AppContent() {
     const syncParticipantCardRoute = () => {
       const token = getParticipantCardTokenFromHash();
       setParticipantCardToken(token);
-      if (token) document.title = 'Kad Peserta - Pengakap';
+      if (token) document.title = 'Kad Program - Pengakap';
     };
     window.addEventListener('hashchange', syncParticipantCardRoute);
     window.addEventListener('popstate', syncParticipantCardRoute);

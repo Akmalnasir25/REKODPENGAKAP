@@ -47,7 +47,7 @@ interface FormState {
 const PROGRAM_CARDS_PER_PAGE = 8;
 const DEV_PROGRAM_CARDS_KEY = 'PROGRAM_CARDS_DEV_RECORDS';
 const DEV_CARD_SCAN_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
-const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png';
+const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png?v=20260819-bg2';
 
 const COLOR_PRESETS: ColorPreset[] = [
   { key: 'maroon-gold', label: 'Maroon Emas', accent: '#991b1b', accentDark: '#450a0a', accentSoft: '#fef2f2', trim: '#d8ad3f' },
@@ -364,8 +364,8 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
     position: relative;
     overflow: hidden;
     background-image:
-      linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)),
-      linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 57%, rgba(216,173,63,0.16)),
+      linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.34) 38%, rgba(255,255,255,0.70)),
+      linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.18) 57%, rgba(216,173,63,0.08)),
       var(--card-bg);
     background-size: cover, cover, cover;
     background-position: center, center, center;
@@ -464,24 +464,45 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
     text-align: center;
   }
   .access-title {
-    color: #0f172a;
+    display: inline-block;
+    align-self: center;
+    max-width: 100%;
+    padding: 0.8mm 1.5mm;
+    color: #020617;
+    background: rgba(255,255,255,0.62);
+    border-radius: 1.6mm;
     font-size: 11.6pt;
     line-height: 1.04;
     font-weight: 900;
+    text-wrap: balance;
     overflow-wrap: anywhere;
     letter-spacing: 0;
+    text-shadow: 0 0.25mm 0.7mm rgba(255,255,255,0.78);
   }
   .access-number {
+    display: inline-block;
+    align-self: center;
+    max-width: 100%;
     margin-top: 1.8mm;
+    padding: 0.6mm 1.4mm;
     color: var(--accent-dark);
+    background: rgba(255,255,255,0.72);
+    border-radius: 1.5mm;
     font-size: 15.5pt;
     line-height: 1;
     font-weight: 900;
     letter-spacing: 0;
+    text-shadow: 0 0.25mm 0.7mm rgba(255,255,255,0.78);
   }
   .access-subtitle {
+    display: inline-block;
+    align-self: center;
+    max-width: 100%;
     margin-top: 1.4mm;
+    padding: 0.45mm 1mm;
     color: #334155;
+    background: rgba(255,255,255,0.58);
+    border-radius: 1.3mm;
     font-size: 6.1pt;
     line-height: 1.12;
     font-weight: 800;
@@ -493,7 +514,7 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
     min-height: 12mm;
     margin-top: 1.4mm;
     padding: 1.6mm 2mm;
-    background: rgba(255,255,255,0.82);
+    background: rgba(255,255,255,0.88);
     border: 0.25mm solid rgba(23,55,68,0.14);
     border-left: 1mm solid var(--trim);
     border-radius: 2mm;
@@ -1127,7 +1148,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                     width: 216,
                     height: 342,
                     borderRadius: 11,
-                    backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)), linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 58%, rgba(216,173,63,0.16)), url(${CARD_SCOUT_CAMP_BG_URL})`,
+                    backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.34) 38%, rgba(255,255,255,0.70)), linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.18) 58%, rgba(216,173,63,0.08)), url(${CARD_SCOUT_CAMP_BG_URL})`,
                     backgroundSize: 'cover, cover, cover',
                     backgroundPosition: 'center, center, center',
                     backgroundRepeat: 'no-repeat',
@@ -1150,13 +1171,13 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                       </div>
                     </div>
                     <div className="mt-5 flex min-h-[100px] flex-col justify-center">
-                      <div className="break-words text-[17px] font-black uppercase leading-tight text-slate-900">
+                      <div className="inline-block max-w-full self-center break-words rounded-md bg-white/65 px-2 py-1 text-[17px] font-black uppercase leading-tight text-slate-950 shadow-sm" style={{ textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>
                         {getVisualTitle(previewCard)}
                       </div>
-                      {previewCard.cardNumber && <div className="mt-2 text-[24px] font-black leading-none" style={{ color: previewPalette.accentDark }}>{previewCard.cardNumber}</div>}
-                      {getVisualSubtitle(previewCard) && <div className="mt-2 line-clamp-2 text-[10px] font-extrabold uppercase leading-tight text-slate-600">{getVisualSubtitle(previewCard)}</div>}
+                      {previewCard.cardNumber && <div className="mt-2 inline-block max-w-full self-center rounded-md bg-white/70 px-2 py-1 text-[24px] font-black leading-none shadow-sm" style={{ color: previewPalette.accentDark, textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>{previewCard.cardNumber}</div>}
+                      {getVisualSubtitle(previewCard) && <div className="mt-2 inline-block max-w-full self-center rounded bg-white/60 px-2 py-0.5 line-clamp-2 text-[10px] font-extrabold uppercase leading-tight text-slate-600">{getVisualSubtitle(previewCard)}</div>}
                     </div>
-                    <div className="mt-1 rounded-lg border bg-white/80 px-2.5 py-1.5 text-left text-[9px] font-extrabold leading-tight text-slate-800" style={{ borderLeftWidth: 4, borderLeftColor: previewPalette.trim }}>
+                    <div className="mt-1 rounded-lg border bg-white/85 px-2.5 py-1.5 text-left text-[9px] font-extrabold leading-tight text-slate-800" style={{ borderLeftWidth: 4, borderLeftColor: previewPalette.trim }}>
                       {[previewCard.programName, previewCard.siri ? `Siri ${previewCard.siri}` : '', previewCard.programYear ? String(previewCard.programYear) : ''].filter(Boolean).join(' | ') || (previewCard.cardType === 'urusetia' ? 'TAG URUSETIA' : 'PAS PROGRAM')}
                     </div>
                     <div className="mx-auto mt-2 flex min-h-[112px] w-[112px] items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">

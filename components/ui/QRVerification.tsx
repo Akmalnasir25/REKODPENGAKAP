@@ -685,7 +685,7 @@ interface ParticipantQRGeneratorProps {
 
 const PARTICIPANT_CARDS_PER_PAGE = 8;
 const DEV_PARTICIPANT_CARD_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
-const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png';
+const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png?v=20260819-bg2';
 
 const escapeHtml = (value: unknown): string => {
   const text = String(value ?? '');
@@ -1009,8 +1009,8 @@ const buildParticipantCardsDocument = (
     position: relative;
     overflow: hidden;
     background-image:
-      linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)),
-      linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 58%, rgba(216,173,63,0.16)),
+      linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.34) 38%, rgba(255,255,255,0.70)),
+      linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.18) 58%, rgba(216,173,63,0.08)),
       var(--card-bg);
     background-size: cover, cover, cover;
     background-position: center, center, center;
@@ -1113,18 +1113,24 @@ const buildParticipantCardsDocument = (
     text-align: center;
   }
   .participant-name {
-    color: #0f172a;
+    display: inline-block;
+    align-self: center;
+    padding: 0.8mm 1.5mm;
+    color: #020617;
+    background: rgba(255,255,255,0.62);
+    border-radius: 1.6mm;
     font-weight: 900;
     line-height: 1.06;
     text-wrap: balance;
     overflow-wrap: anywhere;
     letter-spacing: 0;
+    text-shadow: 0 0.25mm 0.7mm rgba(255,255,255,0.78);
   }
   .school-box {
     min-height: 10.8mm;
     margin-top: 1.7mm;
     padding: 1.6mm 2mm;
-    background: rgba(255,255,255,0.82);
+    background: rgba(255,255,255,0.88);
     border: 0.25mm solid rgba(23,55,68,0.14);
     border-left: 1mm solid var(--trim);
     border-radius: 2mm;
@@ -1915,7 +1921,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                     width: 216,
                     height: 342,
                     borderRadius: 11,
-                    backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)), linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 58%, rgba(216,173,63,0.16)), url(${CARD_SCOUT_CAMP_BG_URL})`,
+                    backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.34) 38%, rgba(255,255,255,0.70)), linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.18) 58%, rgba(216,173,63,0.08)), url(${CARD_SCOUT_CAMP_BG_URL})`,
                     backgroundSize: 'cover, cover, cover',
                     backgroundPosition: 'center, center, center',
                     backgroundRepeat: 'no-repeat',
@@ -1953,7 +1959,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                       </div>
                     </div>
                     <div className="mt-5 min-h-[72px] flex flex-col justify-center">
-                      <div className="font-black text-slate-900 leading-tight break-words uppercase" style={{ fontSize: getNameFontSize(selectedCardName) + 2 }}>
+                      <div className="inline-block self-center rounded-md bg-white/65 px-2 py-1 font-black text-slate-950 leading-tight break-words uppercase shadow-sm" style={{ fontSize: getNameFontSize(selectedCardName) + 2, textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>
                         {selectedCardName}
                       </div>
                     </div>

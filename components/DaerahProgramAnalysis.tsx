@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MapPin, Award, Users, BarChart3, TrendingUp, Calendar, FileSpreadsheet, ChevronDown, ChevronUp, Activity } from 'lucide-react';
 import { SubmissionData, School, Badge, SchoolType } from '../types';
+import { gabungPegawaiSiri } from '../utils/dataProcessing';
 
 interface DaerahProgramAnalysisProps {
   data: SubmissionData[];
@@ -100,11 +101,20 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
   const matrix = useMemo(() => {
     return targetDaerah.map(daerah => {
       const daerahRecords = yearFilteredData.filter(r => r.daerahCode === daerah.code);
-      const peserta = daerahRecords.filter(isPesertaRecord);
-      const pemimpin = daerahRecords.filter(r => (r.role || '').toUpperCase() === 'PEMIMPIN');
-      const penolong = daerahRecords.filter(r => (r.role || '').toUpperCase().includes('PENOLONG'));
+
+      // Jumlah peringkat daerah menggabungkan pegawai yang SAMA merentas
+      // program dalam siri yang sama. Seorang penguji yang didaftarkan dalam
+      // tiga program satu siri ialah seorang, bukan tiga — dia hadir sekali.
+      //
+      // Pecahan per program di bawah sengaja TIDAK digabungkan: di situ
+      // program ialah dimensi yang sedang dilihat, jadi dia memang patut
+      // muncul dalam ketiga-tiganya.
+      const daerahDigabung = gabungPegawaiSiri(daerahRecords);
+      const peserta = daerahDigabung.filter(isPesertaRecord);
+      const pemimpin = daerahDigabung.filter(r => (r.role || '').toUpperCase() === 'PEMIMPIN');
+      const penolong = daerahDigabung.filter(r => (r.role || '').toUpperCase().includes('PENOLONG'));
       // Termasuk pegawai yang ditanda merangkap penguji (migrasi 054).
-      const penguji = daerahRecords.filter(r => (r.role || '').toUpperCase() === 'PENGUJI' || r.isPenguji);
+      const penguji = daerahDigabung.filter(r => (r.role || '').toUpperCase() === 'PENGUJI' || r.isPenguji);
       const daerahSchools = schools.filter(s => s.daerahCode === daerah.code);
 
       // Program breakdown untuk daerah ini

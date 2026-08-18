@@ -4,6 +4,7 @@ import { fetchCloudData, addNegeri, deleteNegeri, addDaerah, deleteDaerah, addAd
 import { registerAdmin } from '../services/supabaseAuth';
 import { Negeri, Daerah, AdminRegional, School as SchoolType } from '../types';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { gabungPegawaiSiri } from '../utils/dataProcessing';
 
 interface DeveloperDashboardProps {
   scriptUrl: string;
@@ -905,10 +906,19 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
 
               const activeFilterCount = [dataFilterNegeri, dataFilterDaerah, dataFilterBadge, dataFilterSchool, dataFilterRole, dataFilterYear, dataFilterGender, dataSearchText].filter(Boolean).length;
 
-              // Stats for filtered data
-              const statPeserta = filteredSubmissions.filter(d => !d.role || d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU').length;
-              const statPenolong = filteredSubmissions.filter(d => (d.role || '').toUpperCase().includes('PENOLONG') || d.role === 'PEMIMPIN' || d.role === 'PEMBANTU').length;
-              const statPenguji = filteredSubmissions.filter(d => (d.role || '').toUpperCase() === 'PENGUJI' || d.isPenguji).length;
+              // Stats for filtered data.
+              //
+              // Pegawai digabungkan merentas program dalam siri yang sama:
+              // seorang penguji yang didaftarkan dalam tiga program satu siri
+              // ialah seorang, bukan tiga. Peserta tidak terjejas — fungsi itu
+              // melepaskan mereka tanpa disentuh.
+              //
+              // Bila penapis Program aktif kita SEDANG melihat satu program
+              // sahaja, jadi tiada apa untuk digabungkan.
+              const statSubmissions = dataFilterBadge ? filteredSubmissions : gabungPegawaiSiri(filteredSubmissions as any);
+              const statPeserta = statSubmissions.filter((d: any) => !d.role || d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU').length;
+              const statPenolong = statSubmissions.filter((d: any) => (d.role || '').toUpperCase().includes('PENOLONG') || d.role === 'PEMIMPIN' || d.role === 'PEMBANTU').length;
+              const statPenguji = statSubmissions.filter((d: any) => (d.role || '').toUpperCase() === 'PENGUJI' || d.isPenguji).length;
               const statSchools = new Set(filteredSubmissions.map(d => d.schoolCode || d.school).filter(Boolean)).size;
 
               return (

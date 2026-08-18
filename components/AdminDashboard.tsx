@@ -205,6 +205,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
       // Removes whitespace and converts to uppercase
       const genderRaw = (item.gender || '').trim().toUpperCase();
       
+      // Pegawai yang ditanda merangkap penguji dikira dalam KEDUA-DUA baldi
+      // (migrasi 054): sekali pada peranannya sendiri di bawah, sekali di sini.
+      // Rantai else-if memastikan baris PENGUJI tidak dikira dua kali.
+      if (role !== 'PENGUJI' && item.isPenguji) {
+          stats[schoolName].examiners += 1;
+      }
+
       if (role === 'PENGUJI') {
           stats[schoolName].examiners += 1;
       } else if (role === 'PEMIMPIN') {
@@ -404,7 +411,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ data, schools, u
               case 'leaders': return role === 'PEMIMPIN';
               case 'assistants': return role.includes('PENOLONG');
               case 'pembantu': return role === 'PEMBANTU';
-              case 'examiners': return role === 'PENGUJI';
+              case 'examiners': return role === 'PENGUJI' || !!item.isPenguji;
               default: return true; // 'all'
           }
       });

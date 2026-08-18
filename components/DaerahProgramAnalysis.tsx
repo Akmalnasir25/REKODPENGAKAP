@@ -103,7 +103,8 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
       const peserta = daerahRecords.filter(isPesertaRecord);
       const pemimpin = daerahRecords.filter(r => (r.role || '').toUpperCase() === 'PEMIMPIN');
       const penolong = daerahRecords.filter(r => (r.role || '').toUpperCase().includes('PENOLONG'));
-      const penguji = daerahRecords.filter(r => (r.role || '').toUpperCase() === 'PENGUJI');
+      // Termasuk pegawai yang ditanda merangkap penguji (migrasi 054).
+      const penguji = daerahRecords.filter(r => (r.role || '').toUpperCase() === 'PENGUJI' || r.isPenguji);
       const daerahSchools = schools.filter(s => s.daerahCode === daerah.code);
 
       // Program breakdown untuk daerah ini
@@ -133,6 +134,7 @@ export const DaerahProgramAnalysis: React.FC<DaerahProgramAnalysisProps> = ({
         const p = programBreakdown[r.badge];
         p.total++;
         const role = (r.role || 'PESERTA').toUpperCase();
+        if (role !== 'PENGUJI' && r.isPenguji) p.penguji++;
         if (role === 'PEMIMPIN') p.pemimpin++;
         else if (role.includes('PENOLONG')) p.penolong++;
         else if (role === 'PENGUJI') p.penguji++;

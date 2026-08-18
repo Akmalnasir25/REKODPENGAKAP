@@ -254,6 +254,9 @@ export const generateSummaryReport = (
     s.total++;
     const role = (d.role || 'PESERTA').toUpperCase();
     const gender = (d.gender || '').toUpperCase();
+    // Pegawai yang ditanda merangkap penguji dikira dalam kedua-dua baldi
+    // (migrasi 054) — sama seperti papan pemuka dan computeRoleStats.
+    if (role !== 'PENGUJI' && d.isPenguji) s.penguji++;
     if (role === 'PENGUJI') s.penguji++;
     else if (role === 'PEMIMPIN') s.pemimpin++;
     else if (role.includes('PENOLONG')) s.penolong++;

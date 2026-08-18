@@ -227,8 +227,9 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
           )}
         </div>
 
-        {jadual && (
-          <div className="flex gap-1 mt-3 border-b border-slate-200">
+        {/* Sentiasa kelihatan, walaupun jadual belum dijana. Menyembunyikannya
+            bermakna admin tidak tahu bahagian penguji wujud langsung. */}
+        <div className="flex gap-1 mt-3 border-b border-slate-200">
             {(['peserta', 'penguji'] as const).map(v => (
               <button key={v} onClick={() => setPaparan(v)}
                 className={`px-3 py-1.5 text-xs font-bold border-b-2 -mb-px transition ${
@@ -236,8 +237,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                 {v === 'peserta' ? 'Peserta' : `Penguji (${penguji.length})`}
               </button>
             ))}
-          </div>
-        )}
+        </div>
 
         <p className="text-[11px] text-slate-400 mt-3">
           Peserta <strong>diluluskan</strong> sahaja; pegawai tidak dimasukkan. Satu sekolah
@@ -257,7 +257,17 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         <div className="text-center py-12 text-slate-400">
           <Grid3x3 size={44} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">Belum ada jadual untuk {badgeName} Siri {siri} {year}.</p>
-          <p className="text-xs mt-1">Tekan Jana Kumpulan untuk membinanya.</p>
+          {paparan === 'peserta' ? (
+            <p className="text-xs mt-1">Tekan Jana Kumpulan untuk membinanya.</p>
+          ) : (
+            // Penguji ditempatkan pada stesen yang SAMA seperti peserta, jadi
+            // stesen itu perlu wujud dahulu. Dikatakan terus, bukan dibiarkan
+            // admin meneka kenapa skrin ini kosong.
+            <p className="text-xs mt-1">
+              Jana jadual <strong>Peserta</strong> dahulu — penguji ditempatkan
+              pada stesen yang sama.
+            </p>
+          )}
         </div>
       )}
 

@@ -227,15 +227,36 @@ export const generateSummaryReport = (
 
   // Statistics
   const currentYearData = data.filter(d => new Date(d.date).getFullYear() === year);
-  const totalParticipants = currentYearData.filter(d => (d.role || 'PESERTA').toUpperCase() === 'PESERTA').length;
+
+  // Satu takrifan "peserta", diguna oleh ketiga-tiga jadual ringkas supaya
+  // pecahan lencana dan pecahan kategori sentiasa berjumlah tepat dengan
+  // baris `Jumlah Peserta`. Baris tanpa peranan dianggap peserta, sama
+  // seperti sebelum ini.
+  const adalahPeserta = (d: { role?: string }) => (d.role || 'PESERTA').toUpperCase() === 'PESERTA';
+  const peserta = currentYearData.filter(adalahPeserta);
+
+  const totalParticipants = peserta.length;
   const totalLeaders = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PEMIMPIN').length;
   const totalAssistants = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PENOLONG PEMIMPIN').length;
   const totalPembantu = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PEMBANTU').length;
   const totalExaminers = currentYearData.filter(d => (d.role || '').toUpperCase() === 'PENGUJI').length;
 
-  // Badge breakdown
+  // Pecahan lencana — PESERTA SAHAJA.
+  //
+  // Dahulunya ia mengira semua orang, jadi Keris Emas 1100 termasuk pemimpin,
+  // penolong, pembantu dan penguji sekolah itu. Angka itu tidak boleh
+  // digunakan untuk apa-apa: bukan bilangan kanak-kanak yang akan hadir,
+  // bukan bilangan sijil, bukan bilangan yuran. Pegawai sudah dikira dalam
+  // RINGKASAN KESELURUHAN di sebelahnya.
+  // Setiap program yang mempunyai SEBARANG pendaftaran bermula pada sifar,
+  // termasuk program yang langsung tiada peserta. Pembantu SM dan Pembantu
+  // CPR ialah program sebegitu — kesemua pendaftarnya berperanan PEMBANTU.
+  // Tanpa permulaan sifar ini, kedua-duanya lenyap terus dari jadual dan
+  // pembaca tidak akan tahu program itu wujud. Baris '0' memberitahu perkara
+  // sebenar: program itu ada, pesertanya tiada.
   const badgeCount: Record<string, number> = {};
-  currentYearData.forEach(d => {
+  currentYearData.forEach(d => { badgeCount[d.badge || 'Tidak Dinyatakan'] = 0; });
+  peserta.forEach(d => {
     const badge = d.badge || 'Tidak Dinyatakan';
     badgeCount[badge] = (badgeCount[badge] || 0) + 1;
   });
@@ -272,23 +293,18 @@ export const generateSummaryReport = (
   });
   const schoolStatsList = Object.values(schoolStatsMap).sort((a, b) => a.name.localeCompare(b.name));
 
-  // Category breakdown - termasuk peserta (ikut kategori), pemimpin, penolong, penguji
+  // Pecahan kategori — PESERTA SAHAJA.
+  //
+  // Kategori (Kanak-kanak, Muda, Remaja, Kelana) ialah kategori PESERTA;
+  // pegawai tidak mempunyai kategori. Jadual lama menyelitkan peranan sebagai
+  // kalau ia kategori, jadi 'Penolong Pemimpin 587' duduk bersebelahan
+  // 'Pengakap Muda 144' seolah-olah dua perkara yang sama. Angka peranan itu
+  // juga sudah dicetak kata demi kata dalam RINGKASAN KESELURUHAN — jadual
+  // ini hanya mengulanginya.
   const categoryCount: Record<string, number> = {};
-  currentYearData.forEach(d => {
-    const role = (d.role || 'PESERTA').toUpperCase();
-    if (role === 'PEMIMPIN') {
-      categoryCount['Pemimpin'] = (categoryCount['Pemimpin'] || 0) + 1;
-    } else if (role.includes('PENOLONG')) {
-      categoryCount['Penolong Pemimpin'] = (categoryCount['Penolong Pemimpin'] || 0) + 1;
-    } else if (role === 'PEMBANTU') {
-      categoryCount['Pembantu'] = (categoryCount['Pembantu'] || 0) + 1;
-    } else if (role === 'PENGUJI') {
-      categoryCount['Penguji'] = (categoryCount['Penguji'] || 0) + 1;
-    } else if (d.category) {
-      categoryCount[d.category] = (categoryCount[d.category] || 0) + 1;
-    } else {
-      categoryCount['Tidak Dinyatakan'] = (categoryCount['Tidak Dinyatakan'] || 0) + 1;
-    }
+  peserta.forEach(d => {
+    const kategori = d.category || 'Tidak Dinyatakan';
+    categoryCount[kategori] = (categoryCount[kategori] || 0) + 1;
   });
 
   let yPos = (negeri || daerah) ? headerStartY + 20 : headerStartY + 14;
@@ -323,6 +339,14 @@ export const generateSummaryReport = (
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: warna, textColor: [255, 255, 255], fontStyle: 'bold' },
       columnStyles: { 1: { halign: 'center', fontStyle: 'bold', cellWidth: 22 } },
+      // Baris JUMLAH ditebalkan supaya mata tidak membacanya sebagai satu
+      // lagi program bernama JUMLAH PESERTA.
+      didParseCell: (d: any) => {
+        if (d.section === 'body' && String(d.row.raw?.[0] || '').startsWith('JUMLAH')) {
+          d.cell.styles.fontStyle = 'bold';
+          d.cell.styles.fillColor = [241, 245, 249];
+        }
+      },
     });
     return (doc as any).lastAutoTable.finalY;
   };
@@ -338,13 +362,25 @@ export const generateSummaryReport = (
     ['JUMLAH KESELURUHAN', currentYearData.length.toString()],
   ], [15, 23, 42]));
 
-  hujung.push(jadualRingkas(1, 'PECAHAN MENGIKUT LENCANA', ['Program', 'Bilangan'],
-    Object.entries(badgeCount).sort((a, b) => b[1] - a[1]).map(([badge, count]) => [badge, count.toString()]),
+  // Baris JUMLAH pada kedua-dua jadual peserta. Ia bukan hiasan: ia
+  // membolehkan pembaca mengesahkan sendiri bahawa kedua-duanya berjumlah
+  // sama dengan `Jumlah Peserta` di jadual pertama, iaitu satu-satunya cara
+  // untuk melihat bahawa pegawai benar-benar tidak dikira di sini.
+  const barisJumlah = (n: number) => ['JUMLAH PESERTA', n.toString()];
+
+  hujung.push(jadualRingkas(1, 'PECAHAN LENCANA (PESERTA)', ['Program', 'Bilangan'],
+    [
+      ...Object.entries(badgeCount).sort((a, b) => b[1] - a[1]).map(([badge, count]) => [badge, count.toString()]),
+      barisJumlah(totalParticipants),
+    ],
     [30, 58, 138]));
 
   if (Object.keys(categoryCount).length > 0) {
-    hujung.push(jadualRingkas(2, 'PECAHAN MENGIKUT KATEGORI', ['Kategori', 'Bilangan'],
-      Object.entries(categoryCount).sort((a, b) => b[1] - a[1]).map(([cat, count]) => [cat, count.toString()]),
+    hujung.push(jadualRingkas(2, 'PECAHAN KATEGORI (PESERTA)', ['Kategori', 'Bilangan'],
+      [
+        ...Object.entries(categoryCount).sort((a, b) => b[1] - a[1]).map(([cat, count]) => [cat, count.toString()]),
+        barisJumlah(totalParticipants),
+      ],
       [88, 28, 135]));
   }
 

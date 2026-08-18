@@ -685,6 +685,7 @@ interface ParticipantQRGeneratorProps {
 
 const PARTICIPANT_CARDS_PER_PAGE = 8;
 const DEV_PARTICIPANT_CARD_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
+const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png';
 
 const escapeHtml = (value: unknown): string => {
   const text = String(value ?? '');
@@ -935,9 +936,10 @@ const buildParticipantCardHtml = (
   const nameRaw = getCardDisplayName(fullName);
   const districtLabel = getDistrictIssuerLabel(participant, issuerLabel);
   const schoolCode = participant.schoolCode ? ` (${participant.schoolCode})` : '';
+  const cardBackgroundUrl = normalizePrintableUrl(CARD_SCOUT_CAMP_BG_URL);
 
   return `
-    <article class="program-card" style="--accent:${palette.accent}; --accent-dark:${palette.accentDark}; --accent-soft:${palette.accentSoft}; --trim:${palette.trim};">
+    <article class="program-card" style="--accent:${palette.accent}; --accent-dark:${palette.accentDark}; --accent-soft:${palette.accentSoft}; --trim:${palette.trim}; --card-bg:url(${escapeHtml(cardBackgroundUrl)});">
       <div class="card-spine">
         <div class="spine-role">${escapeHtml(palette.label)}</div>
       </div>
@@ -1006,9 +1008,13 @@ const buildParticipantCardsDocument = (
     height: 85.6mm;
     position: relative;
     overflow: hidden;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.99)),
-      linear-gradient(135deg, var(--accent-soft), #ffffff 58%, rgba(216,173,63,0.18));
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)),
+      linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 58%, rgba(216,173,63,0.16)),
+      var(--card-bg);
+    background-size: cover, cover, cover;
+    background-position: center, center, center;
+    background-repeat: no-repeat;
     border: 0.28mm solid #d6dee3;
     border-radius: 2.8mm;
     box-shadow: none;
@@ -1909,7 +1915,10 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                     width: 216,
                     height: 342,
                     borderRadius: 11,
-                    background: `linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.99)), linear-gradient(135deg, ${selectedPalette.accentSoft}, #ffffff 58%, rgba(216,173,63,0.18))`,
+                    backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)), linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 58%, rgba(216,173,63,0.16)), url(${CARD_SCOUT_CAMP_BG_URL})`,
+                    backgroundSize: 'cover, cover, cover',
+                    backgroundPosition: 'center, center, center',
+                    backgroundRepeat: 'no-repeat',
                   }}
                 >
                   <div className="absolute inset-y-0 left-0 w-[34px] overflow-hidden" style={{ background: `linear-gradient(180deg, ${selectedPalette.accentDark}, ${selectedPalette.accent})` }}>

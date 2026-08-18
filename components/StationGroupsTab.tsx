@@ -148,10 +148,11 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     } finally { setMenjana(false); }
   };
 
-  const kosongkan = async () => {
-    if (!jadual) return;
+  // Menerima larian sebagai hujah supaya baris mana-mana program dalam
+  // jadual status boleh direset, bukan hanya program yang sedang dibuka.
+  const kosongkan = async (runId: string, nama: string, bil: number) => {
     if (!confirm(
-      `Buang SEMUA ${penguji.length} penguji daripada jadual ${badgeName} Siri ${siri}?
+      `Buang SEMUA ${bil} penguji daripada jadual ${nama} Siri ${siri}?
 
 `
       + 'Mereka kembali ke kolam dan boleh diambil oleh program lain. Nama '
@@ -159,7 +160,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     )) return;
     setMenjana(true); setRalat('');
     try {
-      await kosongkanPenguji(jadual.runId);
+      await kosongkanPenguji(runId);
       await muat();
     } catch (e: any) {
       setRalat(e.message || 'Gagal mengosongkan penguji.');
@@ -316,7 +317,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
               {/* Hanya muncul bila ada sesuatu untuk dikosongkan. Butang yang
                   tidak melakukan apa-apa hanya menimbulkan keraguan. */}
               {penguji.length > 0 && (
-                <button onClick={kosongkan} disabled={menjana}
+                <button onClick={() => kosongkan(jadual.runId, badgeName, penguji.length)} disabled={menjana}
                   className="flex items-center gap-2 bg-white text-rose-700 border border-rose-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-rose-50 transition disabled:opacity-50">
                   <RotateCcw size={15} /> Reset
                 </button>
@@ -388,6 +389,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                   <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-16">Perlu</th>
                   <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-24">Ditempatkan</th>
                   <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5 w-28">Status</th>
+                  <th className="text-right font-bold uppercase text-[9px] px-3 py-1.5 w-36">Tindakan</th>
                 </tr>
               </thead>
               <tbody>
@@ -412,6 +414,23 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                       <td className="px-3 py-1.5">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${warna}`}>{label}</span>
                       </td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex justify-end gap-1.5">
+                          <button onClick={() => setBadgeName(r.badgeName)}
+                            disabled={r.badgeName === badgeName}
+                            className="px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition disabled:opacity-40 disabled:hover:bg-transparent">
+                            {r.badgeName === badgeName ? 'Dibuka' : 'Lihat'}
+                          </button>
+                          {/* Hanya bila ada sesuatu untuk dibuang. */}
+                          {r.ditempatkan > 0 && (
+                            <button onClick={() => kosongkan(r.runId, r.badgeName, r.ditempatkan)}
+                              disabled={menjana}
+                              className="px-2 py-1 rounded-lg text-[10px] font-bold border border-rose-200 text-rose-700 hover:bg-rose-50 transition disabled:opacity-40">
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -423,7 +442,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                   <td className="px-3 py-1.5 text-center font-bold text-slate-900">
                     {ringkasan.reduce((n, r) => n + r.ditempatkan, 0)}
                   </td>
-                  <td />
+                  <td colSpan={2} />
                 </tr>
               </tfoot>
             </table>

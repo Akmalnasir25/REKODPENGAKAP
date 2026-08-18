@@ -47,6 +47,7 @@ interface FormState {
 const PROGRAM_CARDS_PER_PAGE = 8;
 const DEV_PROGRAM_CARDS_KEY = 'PROGRAM_CARDS_DEV_RECORDS';
 const DEV_CARD_SCAN_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
+const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png';
 
 const COLOR_PRESETS: ColorPreset[] = [
   { key: 'maroon-gold', label: 'Maroon Emas', accent: '#991b1b', accentDark: '#450a0a', accentSoft: '#fef2f2', trim: '#d8ad3f' },
@@ -295,9 +296,10 @@ const buildProgramAccessCardHtml = (record: ProgramCardRecord, qrDataUrl: string
   const visualTitle = getVisualTitle(record).toUpperCase();
   const visualSubtitle = getVisualSubtitle(record).toUpperCase();
   const programLine = [record.programName, record.siri ? `Siri ${record.siri}` : '', record.programYear ? String(record.programYear) : ''].filter(Boolean).join(' | ');
+  const cardBackgroundUrl = normalizePrintableUrl(CARD_SCOUT_CAMP_BG_URL);
 
   return `
-    <article class="program-access-card" style="--accent:${palette.accent}; --accent-dark:${palette.accentDark}; --accent-soft:${palette.accentSoft}; --trim:${palette.trim};">
+    <article class="program-access-card" style="--accent:${palette.accent}; --accent-dark:${palette.accentDark}; --accent-soft:${palette.accentSoft}; --trim:${palette.trim}; --card-bg:url(${escapeHtml(cardBackgroundUrl)});">
       <div class="card-spine"><div class="spine-role">${escapeHtml(getSpineLabel(record))}</div></div>
       <div class="card-top-shape"></div>
       <div class="card-watermark"></div>
@@ -361,9 +363,13 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
     height: 85.6mm;
     position: relative;
     overflow: hidden;
-    background:
-      linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.99)),
-      linear-gradient(135deg, var(--accent-soft), #ffffff 57%, rgba(216,173,63,0.18));
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)),
+      linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 57%, rgba(216,173,63,0.16)),
+      var(--card-bg);
+    background-size: cover, cover, cover;
+    background-position: center, center, center;
+    background-repeat: no-repeat;
     border: 0.28mm solid #d6dee3;
     border-radius: 2.8mm;
   }
@@ -1121,7 +1127,10 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                     width: 216,
                     height: 342,
                     borderRadius: 11,
-                    background: `linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.99)), linear-gradient(135deg, ${previewPalette.accentSoft}, #ffffff 58%, rgba(216,173,63,0.18))`,
+                    backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.58), rgba(255,255,255,0.86) 42%, rgba(255,255,255,0.96)), linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.76) 58%, rgba(216,173,63,0.16)), url(${CARD_SCOUT_CAMP_BG_URL})`,
+                    backgroundSize: 'cover, cover, cover',
+                    backgroundPosition: 'center, center, center',
+                    backgroundRepeat: 'no-repeat',
                   }}
                 >
                   <div className="absolute inset-y-0 left-0 w-[34px] overflow-hidden" style={{ background: `linear-gradient(180deg, ${previewPalette.accentDark}, ${previewPalette.accent})` }}>

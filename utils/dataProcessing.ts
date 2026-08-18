@@ -44,6 +44,10 @@ export function computeRoleStats(records: SubmissionData[]): RoleStats {
     else if (role.includes('PENOLONG')) stats.assistants++;
     else if (role === 'PEMBANTU') stats.pembantu++;
     else if (role === 'PENGUJI') stats.examiners++;
+    // Pegawai yang merangkap penguji dikira dalam KEDUA-DUA baldi dengan
+    // sengaja — dia benar-benar memenuhi kedua-dua tugas (migrasi 054). `else
+    // if` di atas memastikan baris berperanan PENGUJI tidak dikira dua kali.
+    if (role !== 'PENGUJI' && d.isPenguji) stats.examiners++;
     if (role.includes('RAMBU')) stats.rambu++;
   }
   return stats;

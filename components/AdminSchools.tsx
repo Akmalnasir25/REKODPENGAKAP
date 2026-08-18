@@ -296,7 +296,7 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
   };
 
   const handleBadgeEditPermission = async (badgeName: string, type: 'students' | 'assistants' | 'examiners' | 'helpers' | 'all', allow: boolean, fasa: 'sebelum' | 'selepas' = 'sebelum') => {
-    const label = type === 'students' ? 'PESERTA' : type === 'assistants' ? 'PEMIMPIN & PENOLONG PEMIMPIN' : type === 'examiners' ? 'PENGUJI' : 'SEMUA KATEGORI';
+    const label = type === 'students' ? 'PESERTA' : type === 'assistants' ? 'PEMIMPIN & PENOLONG PEMIMPIN' : type === 'examiners' ? 'PENGUJI' : type === 'helpers' ? 'PEMBANTU' : 'SEMUA KATEGORI';
     const actionText = allow ? 'MEMBENARKAN EDIT' : 'MENUTUP EDIT';
     const fasaText = fasa === 'selepas'
       ? '\n\nIni terpakai SELEPAS pendaftaran dihantar atau disahkan. Sekolah akan boleh tambah, edit dan buang peranan ini walaupun pendaftaran sudah masuk statistik.'
@@ -536,10 +536,13 @@ export const AdminSchools: React.FC<AdminSchoolsProps> = ({ schools = [], badges
               const allStudentsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.students !== false));
               const allAssistantsEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.assistants !== false));
               const allExaminersEdit = schools.length > 0 && schools.every(s => permsForBadge(s).every(p => p?.examiners !== false));
-              // Pembantu lalainya TUTUP pada kedua-dua baris (`=== true`), tidak
-              // seperti tiga yang lain pada baris pertama. Medan `helpers` baharu;
-              // sebelum ini Pembantu mengikut `assistants`. Lalai buka akan
-              // membuka Pembantu pada setiap program serentak (keputusan P1).
+              // Pembantu lalainya TUTUP (`=== true`), tidak seperti tiga yang
+              // lain pada baris pertama. Medan `helpers` baharu; membiarkannya
+              // berundur kepada `assistants` akan membuka Pembantu pada setiap
+              // program serentak pada hari ia dipasang (keputusan P1).
+              //
+              // Butang mesti menunjukkan keadaan yang SEBENARNYA berkuat kuasa,
+              // jadi syarat di sini mesti sepadan dengan apa yang borang baca.
               const allHelpersEdit = schools.length > 0 && schools.some(s => permsForBadge(s).length > 0)
                 && schools.every(s => permsForBadge(s).every(p => p?.helpers === true));
               // Fasa kedua: kebenaran yang terpakai SELEPAS dihantar/disahkan.

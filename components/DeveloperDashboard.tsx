@@ -908,7 +908,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ scriptUr
               // Stats for filtered data
               const statPeserta = filteredSubmissions.filter(d => !d.role || d.role === 'PESERTA' || d.role === 'PENERIMA RAMBU').length;
               const statPenolong = filteredSubmissions.filter(d => (d.role || '').toUpperCase().includes('PENOLONG') || d.role === 'PEMIMPIN' || d.role === 'PEMBANTU').length;
-              const statPenguji = filteredSubmissions.filter(d => (d.role || '').toUpperCase() === 'PENGUJI').length;
+              const statPenguji = filteredSubmissions.filter(d => (d.role || '').toUpperCase() === 'PENGUJI' || d.isPenguji).length;
               const statSchools = new Set(filteredSubmissions.map(d => d.schoolCode || d.school).filter(Boolean)).size;
 
               return (

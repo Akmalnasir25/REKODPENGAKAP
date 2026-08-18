@@ -689,9 +689,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       );
       const role = (item.role || 'PESERTA').toUpperCase();
       if (role === 'PENGUJI') return perBadgePermissions?.examiners ?? allowExaminers;
-      // Pembantu mempunyai togolnya sendiri. Medan `helpers` baharu, jadi baris
-      // lama tidak memilikinya — dan lalainya TUTUP (keputusan P1), bukan
-      // warisan daripada `assistants`.
+      // Pembantu mempunyai gerbangnya sendiri, dan lalainya TUTUP — bukan
+      // warisan daripada `assistants` (keputusan P1). Medan `helpers` baharu,
+      // jadi baris lama tidak memilikinya; membiarkannya berundur kepada
+      // Pemimpin bermakna butang Pembantu tidak bermakna apa-apa sehingga ia
+      // ditetapkan buat kali pertama.
       if (role === 'PEMBANTU') return perBadgePermissions?.helpers === true;
       if (role.includes('PENOLONG') || role === 'PEMIMPIN') return perBadgePermissions?.assistants ?? allowAssistants;
       return perBadgePermissions?.students ?? allowStudents;
@@ -1010,6 +1012,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       icNumber: item.icNumber || '',
       phoneNumber: item.studentPhone || '',
       role: item.role || 'PESERTA',
+      // editFormData ialah Record<string, string>, jadi flag dibawa sebagai
+      // 'ya' / '' dan ditukar semula kepada boolean semasa simpan.
+      isPenguji: item.isPenguji ? 'ya' : '',
       category: item.category || '',
       unit: item.unit || '',
       makanan: item.makanan || '',
@@ -1023,7 +1028,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     setSavingEdit(true);
     try {
       const identifier = { icNumber: item.icNumber, membershipId: item.id, name: item.student };
-      const res = await updateParticipantFields(identifier, editFormData);
+      const { isPenguji, ...medanTeks } = editFormData;
+      const res = await updateParticipantFields(identifier, {
+        ...medanTeks,
+        isPenguji: isPenguji === 'ya',
+      });
       if (res.status === 'success') { setEditingRow(null); onRefresh(); }
       else alert('Gagal: ' + (res.message || 'Ralat.'));
     } catch (e) { alert('Ralat server.'); } finally { setSavingEdit(false); }
@@ -2073,7 +2082,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                           </td>
                                           <td className="px-4 py-2"><input className="w-full p-1 border rounded text-xs uppercase font-mono" value={editFormData.membershipId} onChange={e => setEditFormData(p => ({...p, membershipId: e.target.value}))} /></td>
                                           <td className="px-4 py-2">
-                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.role} onChange={e => setEditFormData(p => ({...p, role: e.target.value}))}>
+                                            <select className="w-full p-1 border rounded text-xs" value={editFormData.role} onChange={e => {
+                                              const peranan = e.target.value;
+                                              const pegawai = ['PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU'].includes(peranan);
+                                              setEditFormData(p => ({ ...p, role: peranan, isPenguji: pegawai ? p.isPenguji : '' }));
+                                            }}>
                                               <option value="PESERTA">Peserta</option>
                                               <option value="PEMIMPIN">Pemimpin</option>
                                               <option value="PENOLONG PEMIMPIN">Penolong Pemimpin</option>
@@ -2081,6 +2094,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                               <option value="PENGUJI">Penguji</option>
                                               <option value="PENERIMA RAMBU">Penerima Rambu</option>
                                             </select>
+                                            {['PEMIMPIN', 'PENOLONG PEMIMPIN', 'PEMBANTU'].includes(editFormData.role) && (
+                                              <label className="flex items-center gap-1 mt-1 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={editFormData.isPenguji === 'ya'}
+                                                  onChange={e => setEditFormData(p => ({ ...p, isPenguji: e.target.checked ? 'ya' : '' }))}
+                                                  className="w-3 h-3"
+                                                />
+                                                <span className="text-[10px] text-slate-600">Juga Penguji</span>
+                                              </label>
+                                            )}
                                           </td>
                                           <td className="px-4 py-2">
                                             <select className="w-full p-1 border rounded text-xs" value={editFormData.category} onChange={e => setEditFormData(p => ({...p, category: e.target.value}))}>
@@ -2180,7 +2204,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-4 py-3 text-xs font-semibold uppercase">{item.role || 'Peserta'}</td>
+                                        <td className="px-4 py-3 text-xs font-semibold uppercase">
+                                          {item.role || 'Peserta'}
+                                          {/* Tanpa penanda ini, pegawai yang merangkap penguji
+                                              kelihatan seperti pemimpin biasa, dan tiada apa
+                                              menjelaskan kenapa kiraan penguji lebih tinggi
+                                              daripada bilangan baris berperanan PENGUJI. */}
+                                          {item.isPenguji && (
+                                            <span className="ml-1 px-1 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] normal-case font-bold">
+                                              + Penguji
+                                            </span>
+                                          )}
+                                        </td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.category || '-'}</td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.unit || '-'}</td>
                                         <td className="px-4 py-3 text-xs text-slate-600">{item.makanan || '-'}</td>

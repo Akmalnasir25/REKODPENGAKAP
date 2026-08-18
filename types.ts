@@ -16,6 +16,10 @@ export interface Participant {
   shirtSize?: string;
   shirtType?: string;
   siri?: number;
+  /** Pegawai ini turut bertugas sebagai Penguji. Hanya bermakna bagi
+   *  PEMIMPIN / PENOLONG PEMIMPIN / PEMBANTU. Kekal SATU pendaftaran —
+   *  satu tempat, satu yuran (migrasi 054). */
+  isPenguji?: boolean;
   remarks: string;
 }
 
@@ -56,6 +60,10 @@ export interface SubmissionData {
   /** Benar bila baris ini mewakili LEBIH daripada satu pendaftaran. Butang
    *  Sunting dan Padam mesti dilumpuhkan — ia hanya boleh menyentuh satu. */
   digabung?: boolean;
+  /** Pegawai ini turut bertugas sebagai Penguji (migrasi 054). Satu
+   *  pendaftaran sahaja — ia dikira dalam senarai penguji tanpa mengambil
+   *  tempat atau yuran kedua. */
+  isPenguji?: boolean;
   groupNumber?: string;
   principalName?: string;
   principalPhone?: string;
@@ -122,6 +130,9 @@ export interface School {
      *  TUTUP (keputusan P1) — ia tidak mewarisi `assistants`. */
     helpers?: boolean;
     examiners?: boolean;
+    /** PEMBANTU. Berundur kepada `assistants` bila tidak ditetapkan, supaya
+     *  program yang tidak pernah menetapkannya kekal berkelakuan sama. */
+    helpers?: boolean;
   }>;
   /** Kebenaran yang terpakai SELEPAS pendaftaran dihantar atau disahkan.
    *  Tiada `students`: PESERTA kekal terkunci selepas penghantaran dalam
@@ -130,6 +141,9 @@ export interface School {
     assistants?: boolean;
     helpers?: boolean;
     examiners?: boolean;
+    /** PEMBANTU selepas hantar. Berundur kepada `assistants` seperti fasa
+     *  pertama — dua peraturan berbeza akan menyimpang. */
+    helpers?: boolean;
   }>;
 }
 

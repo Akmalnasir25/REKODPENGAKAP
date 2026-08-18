@@ -217,6 +217,7 @@ export const fetchCloudData = async (
         icNumber: p.ic_number || '',
         studentPhone: p.phone_number || '',
         role: p.role || 'PESERTA',
+        isPenguji: !!p.is_penguji,
         category: p.category || '',
         shirtSize: p.shirt_size || '',
         shirtType: p.shirt_type || '',
@@ -336,6 +337,22 @@ const createSubmissionWithPeople = async (
     return cleaned;
   };
 
+  // Kategori lalai program. Borang sudah menyelesaikannya sebelum hantar,
+  // tetapi import pukal dan migrasi masuk terus ke sini — tanpa ini mereka
+  // jatuh kembali kepada Pengakap Kanak-kanak yang ditulis keras, dan
+  // tetapan program diabaikan senyap.
+  let kategoriLalai = 'Pengakap Kanak-kanak';
+  try {
+    const { data: psId } = await supabase.rpc('resolve_program_setting', {
+      p_school_id: school.id, p_badge_id: badge.id, p_year: year,
+    });
+    if (psId) {
+      const { data: ps } = await supabase
+        .from('program_settings').select('default_category').eq('id', psId).maybeSingle();
+      if (ps?.default_category) kategoriLalai = ps.default_category;
+    }
+  } catch (_) { /* lalai sistem kekal — bukan sebab untuk menggagalkan pendaftaran */ }
+
   const rows = people.filter(p => p.name?.trim()).map(p => {
     const role = (p as any).role || 'PESERTA';
     const isPeserta = role === 'PESERTA' || role === 'PENERIMA RAMBU';
@@ -355,13 +372,20 @@ const createSubmissionWithPeople = async (
       ic_number: formatIcNumber(p.icNumber),
       phone_number: formatPhoneNumber(p.phoneNumber),
       role,
+      // Hanya pegawai boleh merangkap penguji. PESERTA yang membawa flag ini
+      // akan memenuhi syarat min_penguji tanpa seorang penguji pun — jadi ia
+      // dipaksa palsu di sini, bukan sekadar dipercayai daripada pemanggil.
+      is_penguji: !isPeserta && !!(p as any).isPenguji,
       // Medan khusus peserta dipaksa NULL bagi pegawai, bukan sekadar diberi
       // sandaran. Bentuk lama — `nilai || (isPeserta ? lalai : null)` — tidak
       // pernah mencapai cabang null, kerana borang bermula sebagai PESERTA
       // dengan lalai terisi dan menukar peranan hanya MENYEMBUNYIKAN medan itu.
       // Nilai basi menang setiap kali, dan pemimpin tersimpan sebagai Pengakap
       // Kanak-kanak. Dilaporkan oleh sekolah, 17 Ogos 2026.
-      category: adaKategori ? ((p as any).kategori || 'Pengakap Kanak-kanak') : null,
+      //
+      // Lalainya diambil dari lajur default_category program, bukan rentetan
+      // tetap — borang mungkin menghantar nilai kosong.
+      category: adaKategori ? ((p as any).kategori || kategoriLalai) : null,
       shirt_size: (p as any).shirtSize || null,
       shirt_type: (p as any).shirtType || null,
       siri: (p as any).siri || 1,
@@ -1467,7 +1491,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; isPenguji?: boolean; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -1480,6 +1504,11 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.icNumber !== undefined) updateData.ic_number = updates.icNumber || null;
     if (updates.phoneNumber !== undefined) updateData.phone_number = updates.phoneNumber || null;
     if (updates.role !== undefined) updateData.role = updates.role || 'PESERTA';
+    if (updates.isPenguji !== undefined) updateData.is_penguji = !!updates.isPenguji;
+    // Menukar peranan kepada PESERTA mesti menggugurkan flag. Tanpa ini, seorang
+    // pemimpin bertanda yang ditukar kepada peserta kekal dikira sebagai penguji
+    // — memenuhi min_penguji dengan seorang murid.
+    if (updates.role === 'PESERTA' || updates.role === 'PENERIMA RAMBU') updateData.is_penguji = false;
     if (updates.category !== undefined) updateData.category = updates.category || null;
     if (updates.shirtSize !== undefined) updateData.shirt_size = updates.shirtSize || null;
     if (updates.shirtType !== undefined) updateData.shirt_type = updates.shirtType || null;
@@ -2038,7 +2067,7 @@ export interface UpsertProgramSettingInput {
   /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
   minPemimpin: number;
   minPenguji: number;
-  defaultCategory?: string | null;
+  defaultCategory: string | null;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.

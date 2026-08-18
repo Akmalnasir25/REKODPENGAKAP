@@ -7,6 +7,7 @@ import {
   simpanJadual, ambilJadual, pindahSekolah, JadualStesen,
   ambilPengujiLayak, bahagikanPenguji, simpanPenguji, ambilPenguji,
   pindahPenguji, ambilNamaStesen, simpanNamaStesen, simpanProgramGabung,
+  simpanKuotaPenguji, pilihPenguji,
   PengujiLayak, PengujiStesen,
 } from '../services/stationGroupService';
 import { muatTurunPdfStesen, muatTurunPdfPenguji } from '../services/stationGroupPdf';
@@ -34,6 +35,9 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const [namaStesen, setNamaStesen] = useState<Record<string, string>>({});
   // Program TAMBAHAN yang pengujinya dikumpulkan bersama program ini.
   const [gabung, setGabung] = useState<string[]>([]);
+  // Berapa penguji program ini perlukan daripada kolam. '' = belum
+  // ditetapkan, iaitu ambil semua yang ada.
+  const [kuota, setKuota] = useState<number | ''>('');
   const [memuat, setMemuat] = useState(false);
   const [menjana, setMenjana] = useState(false);
   const [ralat, setRalat] = useState('');
@@ -52,6 +56,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       const j = await ambilJadual(badgeName, year, siri);
       setJadual(j);
       setGabung(j?.programGabung || []);
+      setKuota(j?.pengujiDiperlukan ?? '');
       if (j) {
         const [pg, nm] = await Promise.all([ambilPenguji(j.runId), ambilNamaStesen(j.runId)]);
         setPenguji(pg); setNamaStesen(nm);
@@ -122,8 +127,11 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         setRalat('Tiada penguji yang boleh ditempatkan untuk program ini.');
         return;
       }
-      const agih = bahagikanPenguji(boleh, jadual.bilKumpulan);
-      const ikutIc = new Map(boleh.map(p => [p.personIc, p]));
+      // Kuota mengehadkan berapa yang diambil; selebihnya kekal dalam kolam
+      // untuk program lain dalam siri ini.
+      const dipilih = pilihPenguji(boleh, badgeName, kuota === '' ? null : kuota);
+      const agih = bahagikanPenguji(dipilih, jadual.bilKumpulan);
+      const ikutIc = new Map(dipilih.map(p => [p.personIc, p]));
       await simpanPenguji(jadual.runId, year, siri, agih.map(a => ({
         personIc: a.personIc,
         nama: ikutIc.get(a.personIc)?.nama || '-',
@@ -134,6 +142,13 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     } catch (e: any) {
       setRalat(e.message || 'Gagal menjana penguji.');
     } finally { setMenjana(false); }
+  };
+
+  const simpanKuota = async (nilai: number | '') => {
+    setKuota(nilai);
+    if (!jadual) return;
+    try { await simpanKuotaPenguji(jadual.runId, nilai === '' ? null : nilai); }
+    catch (e: any) { setRalat(e.message || 'Gagal menyimpan kuota penguji.'); }
   };
 
   const togolGabung = async (nama: string) => {
@@ -205,6 +220,18 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     nama: n,
     bil: pengujiLayak.filter(p => p.programLain.split(', ').includes(n)).length,
   })), [pengujiLayak, badgeName, gabung]);
+
+  // Apa yang kuota itu bermakna dalam amalan, dikira di hadapan mata supaya
+  // admin tidak perlu membahagi sendiri: 24 orang untuk 12 stesen ialah 2
+  // setiap stesen. Bila tidak sekata, sebahagian stesen mendapat seorang lebih.
+  const kesanKuota = useMemo(() => {
+    const bil = kuota === '' ? bolehDitempatkan.length : Math.min(kuota, bolehDitempatkan.length);
+    const stesenBil = jadual?.bilKumpulan || 0;
+    if (!stesenBil) return null;
+    const asas = Math.floor(bil / stesenBil);
+    const lebih = bil % stesenBil;
+    return { bil, stesenBil, asas, lebih, kurang: kuota === '' ? 0 : Math.max(0, kuota - bolehDitempatkan.length) };
+  }, [kuota, bolehDitempatkan, jadual]);
 
   const saiz = stesen.map(s => s.sekolah.reduce((n, x) => n + x.peserta, 0));
   const jumlah = saiz.reduce((a, b) => a + b, 0);
@@ -411,6 +438,36 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                       {`, ${pengujiLayak.length - bolehDitempatkan.length} sudah diambil program lain`}
                     </span>
                   )}
+                </p>
+
+                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <label className="text-xs font-bold text-slate-700">Penguji diperlukan</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={kuota}
+                    placeholder={String(bolehDitempatkan.length)}
+                    onChange={e => setKuota(e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                    onBlur={e => simpanKuota(e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                    className="w-24 text-sm px-2 py-1 border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  {kesanKuota && (
+                    <span className="text-[11px] text-slate-500">
+                      {kesanKuota.bil} orang &middot; {kesanKuota.stesenBil} stesen &middot;{' '}
+                      {kesanKuota.lebih === 0
+                        ? `${kesanKuota.asas} setiap stesen`
+                        : `${kesanKuota.asas}–${kesanKuota.asas + 1} setiap stesen`}
+                    </span>
+                  )}
+                  {kesanKuota && kesanKuota.kurang > 0 && (
+                    <span className="text-[11px] font-bold text-amber-700">
+                      kurang {kesanKuota.kurang} orang &mdash; kolam hanya ada {bolehDitempatkan.length}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  Kosongkan untuk mengambil seluruh kolam. Penguji {badgeName || 'program ini'} dipilih
+                  dahulu; program yang digabungkan hanya menampung kekurangan.
                 </p>
               </div>
 

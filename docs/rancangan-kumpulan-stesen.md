@@ -223,3 +223,44 @@ datang. Tandaan hanya boleh disimpan selepas jadual peserta wujud; sebelum itu
 tiada larian untuk menyimpannya.
 
 **Migrasi 063.**
+
+## 14. Kuota penguji setiap program
+
+Kolam dikongsi tidak bermakna satu program menelan keseluruhannya. Admin
+menetapkan **berapa penguji program itu perlukan**, dan hanya sebanyak itu
+diambil dari kolam. Selebihnya kekal untuk program yang lain.
+
+Contoh Siri 2: kolam 34 (Keris Perak 27 + Keris Emas 7). Keris Perak
+ditetapkan 24, jadi 10 kekal. Keris Emas ditetapkan 10 dan mengambil
+selebihnya — termasuk penguji yang mendaftar di bawah Keris Perak.
+
+Dua keputusan ditutup sebelum kod ditulis:
+
+| # | Soalan | Keputusan |
+|---|---|---|
+| **K1** | Kuota itu jumlah setiap program atau bilangan setiap stesen? | **Jumlah setiap program.** Skrin memaparkan akibatnya secara langsung — `24 orang · 12 stesen · 2 setiap stesen` — supaya tidak perlu mengira sendiri |
+| **K2** | Bila kuota lebih kecil daripada kolam, siapa dipilih? | **Penguji program itu sendiri dahulu, baru dipinjam.** Keris Perak memenuhi 24 daripada 27 orangnya sendiri dan tidak meminjam langsung; hanya kekurangan yang diambil dari program yang digabungkan |
+
+### Kenapa program sendiri dahulu
+
+Peminjaman sepatutnya menampung kekurangan, bukan menggantikan orang yang
+sudah ada. Kalau pemilihan mencampurkan kedua-duanya secara rawak, Keris
+Perak boleh mengambil penguji Keris Emas sedangkan pengujinya sendiri
+menganggur — dan Keris Emas kemudiannya kekurangan orang untuk stesennya.
+
+Susunan itu juga menjadikan hasil boleh diramal: selagi program mempunyai
+cukup orang sendiri, menanda program lain untuk digabungkan **tidak mengubah
+apa-apa**. Ia hanya membuka simpanan untuk digunakan bila diperlukan.
+
+### Kuota lebih besar daripada yang ada
+
+Ditempatkan sebanyak yang ada dan dinyatakan kekurangannya. Ia tidak
+dihalang — stesen dengan seorang penguji masih boleh berjalan, dan admin
+perlu tahu angkanya untuk mencari orang tambahan.
+
+### Disimpan bersama larian
+
+`station_group_runs.penguji_diperlukan integer`. Kosong bermakna belum
+ditetapkan; pengagihan mengambil seluruh kolam yang ada, seperti sebelum ini.
+
+**Migrasi 064.**

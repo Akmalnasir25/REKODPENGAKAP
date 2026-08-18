@@ -33,6 +33,13 @@ export interface JadualStesen {
    * dikongsi — hanya kolam orang. Rujuk docs/rancangan-kumpulan-stesen.md.
    */
   programGabung: string[];
+  /**
+   * Berapa penguji program ini perlukan daripada kolam.
+   *
+   * null bermakna belum ditetapkan — pengagihan mengambil seluruh kolam yang
+   * ada, seperti kelakuan asal.
+   */
+  pengujiDiperlukan: number | null;
 }
 
 /** Label mengikut bahagian: 12 kumpulan = 1A-6A + 1B-6B. */
@@ -143,7 +150,7 @@ export const ambilJadual = async (
 ): Promise<JadualStesen | null> => {
   const { data, error } = await supabase
     .from('station_group_runs')
-    .select(`id, year, siri, bil_kumpulan, created_at, program_gabung,
+    .select(`id, year, siri, bil_kumpulan, created_at, program_gabung, penguji_diperlukan,
              badge:badge_id(name),
              sekolah:station_group_schools(station_label, peserta_snapshot, school:school_id(id, name))`)
     .eq('year', year).eq('siri', siri);
@@ -164,6 +171,7 @@ export const ambilJadual = async (
     bilKumpulan: (baris as any).bil_kumpulan,
     createdAt: (baris as any).created_at,
     programGabung: (baris as any).program_gabung || [],
+    pengujiDiperlukan: (baris as any).penguji_diperlukan ?? null,
     sekolah: ((baris as any).sekolah || []).map((x: any) => {
       const sc = Array.isArray(x.school) ? x.school[0] : x.school;
       return {
@@ -246,6 +254,44 @@ export const simpanProgramGabung = async (
     .update({ program_gabung: programs.length ? programs : null })
     .eq('id', runId);
   if (error) throw error;
+};
+
+/** Kosong disimpan sebagai NULL — kekangan menolak 0 dan negatif. */
+export const simpanKuotaPenguji = async (
+  runId: string, kuota: number | null,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('station_group_runs')
+    .update({ penguji_diperlukan: kuota && kuota > 0 ? kuota : null })
+    .eq('id', runId);
+  if (error) throw error;
+};
+
+/**
+ * Pilih siapa yang diambil daripada kolam, mengikut kuota.
+ *
+ * Penguji program itu sendiri dahulu, baru dipinjam daripada program yang
+ * digabungkan. Peminjaman menampung kekurangan; ia tidak menggantikan orang
+ * yang sudah ada. Kalau Keris Perak perlukan 24 dan mempunyai 27 orangnya
+ * sendiri, ia tidak meminjam langsung — dan Keris Emas mendapat kesemua
+ * pengujinya kembali.
+ *
+ * Kesannya, menanda program lain untuk digabungkan tidak mengubah apa-apa
+ * selagi program itu cukup orang sendiri. Ia hanya membuka simpanan.
+ *
+ * Kuota null atau lebih besar daripada kolam bermakna ambil semua.
+ */
+export const pilihPenguji = (
+  layak: PengujiLayak[], badgeName: string, kuota: number | null,
+): PengujiLayak[] => {
+  const ikutNama = (a: PengujiLayak, b: PengujiLayak) => a.nama.localeCompare(b.nama);
+  const miliknya = (p: PengujiLayak) => p.programLain.split(', ').includes(badgeName);
+
+  const susun = [
+    ...layak.filter(miliknya).sort(ikutNama),
+    ...layak.filter(p => !miliknya(p)).sort(ikutNama),
+  ];
+  return !kuota || kuota >= susun.length ? susun : susun.slice(0, kuota);
 };
 
 /**

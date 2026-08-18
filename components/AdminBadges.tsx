@@ -75,6 +75,9 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
   const [formSubmissionOpen, setFormSubmissionOpen] = useState(true);
   const [formMinPemimpin, setFormMinPemimpin] = useState('0');
   const [formMinPenguji, setFormMinPenguji] = useState('0');
+  // Kategori yang borang pilih dahulu bagi peserta baharu. Kosong = warisi
+  // Pengakap Kanak-kanak, iaitu kelakuan sebelum tetapan ini wujud.
+  const [formDefaultCategory, setFormDefaultCategory] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
 
   const loadSettings = async () => {
@@ -113,6 +116,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
     setFormSubmissionOpen(s?.submissionOpen ?? true);
     setFormMinPemimpin(String(s?.minPemimpin ?? 0));
     setFormMinPenguji(String(s?.minPenguji ?? 0));
+    setFormDefaultCategory(s?.defaultCategory ?? '');
     setOverrideType(null);
 
     // Kiraan datang selepas modal terbuka; sehingga itu petak menunjukkan "–".
@@ -251,6 +255,7 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
         submissionOpen: formSubmissionOpen,
         minPemimpin: Math.max(0, Number(formMinPemimpin) || 0),
         minPenguji: Math.max(0, Number(formMinPenguji) || 0),
+        defaultCategory: formDefaultCategory || null,
       });
       if (res.status === 'success') {
         // Override memerlukan id tetapan, jadi ia hanya boleh disimpan selepas
@@ -666,6 +671,28 @@ export const AdminBadges: React.FC<AdminBadgesProps> = ({ badges = [], scriptUrl
                     yang sudah dibayar.
                   </p>
                 )}
+
+                {/* KATEGORI LALAI PESERTA */}
+                <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+                  <span className="block font-bold text-sm text-gray-700">Kategori Lalai Peserta</span>
+                  <p className="text-[11px] text-gray-400 mt-0.5 mb-2">
+                    Kategori yang dipilih dahulu bagi peserta baharu dalam program ini —
+                    guru masih boleh mengubahnya baris demi baris. Menetapkannya di sini
+                    menjimatkan puluhan tukaran manual bagi program yang jelas satu
+                    peringkat umur. <strong>Kosong = Pengakap Kanak-kanak.</strong>
+                  </p>
+                  <select
+                    value={formDefaultCategory}
+                    onChange={(e) => setFormDefaultCategory(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-400 outline-none"
+                  >
+                    <option value="">Pengakap Kanak-kanak (lalai sistem)</option>
+                    <option value="Pengakap Kanak-kanak">Pengakap Kanak-kanak</option>
+                    <option value="Pengakap Muda">Pengakap Muda</option>
+                    <option value="Pengakap Remaja">Pengakap Remaja</option>
+                    <option value="Kelana">Kelana</option>
+                  </select>
+                </div>
 
                 {/* SYARAT PEGAWAI — migrasi 052 */}
                 <div className="mt-3 pt-3 border-t border-dashed border-gray-200">

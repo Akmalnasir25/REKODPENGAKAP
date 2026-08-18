@@ -71,7 +71,9 @@ export const UserForm: React.FC<UserFormProps> = ({
       membershipId: '',
       icNumber: '',
       phoneNumber: '',
-      kategori: 'Pengakap Kanak-kanak',
+      // Kosong dengan sengaja: lalai sebenar bergantung pada program, dan
+      // fungsi ini dipanggil sebelum tetapan program dibaca.
+      kategori: '',
       unit: 'Perdana',
       makanan: 'Biasa',
       masalahKesihatan: 'Tiada',
@@ -120,6 +122,9 @@ export const UserForm: React.FC<UserFormProps> = ({
     s.badgeName === leaderInfo.badgeType &&
     ((s.scope === 'negeri' && s.negeriCode === schoolNegeriCode) ||
      (s.scope === 'daerah' && s.daerahCode === schoolDaerahCode)));
+  // Kategori lalai program (kolum default_category). Kosong = Pengakap
+  // Kanak-kanak, iaitu kelakuan sebelum tetapan ini wujud.
+  const kategoriLalai = selectedProgramSetting?.defaultCategory || 'Pengakap Kanak-kanak';
   const shirtEnabled = !!selectedProgramSetting?.shirtEnabled;
   const siriEnabled = !!selectedProgramSetting?.siriEnabled;
   const siriOptions = Array.from({ length: selectedProgramSetting?.maxSiri || 5 }, (_, i) => i + 1);
@@ -444,7 +449,14 @@ export const UserForm: React.FC<UserFormProps> = ({
     setSubmitting(true);
     try {
         // Split allPeople by role; tag siri (bila program aktifkan) untuk semua peserta dalam borang ini.
-        const withSiri = (list: typeof allPeople) => siriEnabled ? list.map(p => ({ ...p, siri: registrationSiri })) : list;
+        // Kategori diselesaikan DI SINI, bukan dibiarkan kosong: pelayan tidak
+    // tahu program mana yang dipilih, jadi kosong di sana bermakna jatuh
+    // kembali kepada Pengakap Kanak-kanak yang ditulis keras.
+    const withSiri = (list: typeof allPeople) => list.map(p => ({
+      ...p,
+      ...(siriEnabled ? { siri: registrationSiri } : {}),
+      kategori: (p as any).kategori || kategoriLalai,
+    }));
         const participants = withSiri(allPeople.filter(p => (p as any).role === 'PESERTA' && p.name.trim()));
         const assistants = withSiri(allPeople.filter(p => ((p as any).role === 'PEMIMPIN' || (p as any).role === 'PENOLONG PEMIMPIN' || (p as any).role === 'PEMBANTU') && p.name.trim()));
         const examiners = withSiri(allPeople.filter(p => (p as any).role === 'PENGUJI' && p.name.trim()));
@@ -947,7 +959,7 @@ export const UserForm: React.FC<UserFormProps> = ({
                                   <label className="text-xs text-gray-500 font-bold uppercase block mb-1">Kategori</label>
                                   <select
                                       className="w-full p-2.5 border border-gray-300 rounded-lg text-base md:text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm"
-                                      value={person.kategori || 'Pengakap Kanak-kanak'}
+                                      value={person.kategori || kategoriLalai}
                                       onChange={e => {
                                         const updated = allPeople.map(p => p.id === person.id ? { ...p, kategori: e.target.value } : p);
                                         setAllPeople(updated);

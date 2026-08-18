@@ -337,6 +337,22 @@ const createSubmissionWithPeople = async (
     return cleaned;
   };
 
+  // Kategori lalai program. Borang sudah menyelesaikannya sebelum hantar,
+  // tetapi import pukal dan migrasi masuk terus ke sini — tanpa ini mereka
+  // jatuh kembali kepada Pengakap Kanak-kanak yang ditulis keras, dan
+  // tetapan program diabaikan senyap.
+  let kategoriLalai = 'Pengakap Kanak-kanak';
+  try {
+    const { data: psId } = await supabase.rpc('resolve_program_setting', {
+      p_school_id: school.id, p_badge_id: badge.id, p_year: year,
+    });
+    if (psId) {
+      const { data: ps } = await supabase
+        .from('program_settings').select('default_category').eq('id', psId).maybeSingle();
+      if (ps?.default_category) kategoriLalai = ps.default_category;
+    }
+  } catch (_) { /* lalai sistem kekal — bukan sebab untuk menggagalkan pendaftaran */ }
+
   const rows = people.filter(p => p.name?.trim()).map(p => {
     const role = (p as any).role || 'PESERTA';
     const isPeserta = role === 'PESERTA' || role === 'PENERIMA RAMBU';
@@ -355,7 +371,7 @@ const createSubmissionWithPeople = async (
       // akan memenuhi syarat min_penguji tanpa seorang penguji pun — jadi ia
       // dipaksa palsu di sini, bukan sekadar dipercayai daripada pemanggil.
       is_penguji: !isPeserta && !!(p as any).isPenguji,
-      category: (p as any).kategori || (isPeserta ? 'Pengakap Kanak-kanak' : null),
+      category: (p as any).kategori || (isPeserta ? kategoriLalai : null),
       shirt_size: (p as any).shirtSize || null,
       shirt_type: (p as any).shirtType || null,
       siri: (p as any).siri || 1,
@@ -1935,6 +1951,8 @@ export interface ProgramSetting {
   /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
   minPemimpin: number;
   minPenguji: number;
+  /** Kategori yang dipilih dahulu bagi peserta baharu. NULL = Pengakap Kanak-kanak. */
+  defaultCategory: string | null;
 }
 
 // Ambil tetapan program (boleh ditapis ikut tahun). Disertakan nama badge +
@@ -1944,7 +1962,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
     let query = supabase
       .from('program_settings')
       .select(`
-        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open, min_pemimpin, min_penguji,
+        id, year, payment_enabled, payment_online_required, fee_peserta, fee_pemimpin, fee_penolong, fee_pembantu, shirt_enabled, siri_enabled, max_siri, submission_open, min_pemimpin, min_penguji, default_category,
         badge:badge_id(name, scope),
         negeri:negeri_id(code),
         daerah:daerah_id(code)
@@ -1977,6 +1995,7 @@ export const getProgramSettings = async (year?: number): Promise<ProgramSetting[
         submissionOpen: r.submission_open ?? true,
         minPemimpin: Number(r.min_pemimpin ?? 0),
         minPenguji: Number(r.min_penguji ?? 0),
+        defaultCategory: r.default_category ?? null,
       };
     });
   } catch {
@@ -2003,6 +2022,7 @@ export interface UpsertProgramSettingInput {
   /** 0 = tidak diwajibkan. Hanya PEMIMPIN dikira, bukan penolong/pembantu. */
   minPemimpin: number;
   minPenguji: number;
+  defaultCategory: string | null;
 }
 
 // Simpan (insert/update) tetapan program bagi skop & tahun tertentu.
@@ -2036,6 +2056,7 @@ export const upsertProgramSetting = async (input: UpsertProgramSettingInput): Pr
       submission_open: input.submissionOpen ?? true,
       min_pemimpin: Math.max(0, Number(input.minPemimpin ?? 0)),
       min_penguji: Math.max(0, Number(input.minPenguji ?? 0)),
+      default_category: input.defaultCategory || null,
       created_by: user?.id || null,
       updated_at: new Date().toISOString(),
     };

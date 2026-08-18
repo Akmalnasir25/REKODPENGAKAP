@@ -15,6 +15,32 @@ const toDateOnly = (value?: string) => {
   return d.toISOString();
 };
 
+/**
+ * Tahun kohort — TIDAK boleh bergantung pada zon waktu peranti.
+ *
+ * Bentuk lama ialah new Date(toDateOnly(x)).getFullYear(). toDateOnly
+ * menormalkan tarikh kepada tengah malam UTC, kemudian getFullYear membacanya
+ * semula mengikut jam tempatan. Pada peranti di BELAKANG UTC, tengah malam
+ * 1 Januari 2026 UTC ialah 31 Disember 2025 tempatan — jadi kohort direkodkan
+ * sebagai 2025, dan setiap peserta hilang daripada pengiraan yuran 2026.
+ *
+ * Itu berlaku pada SMK Gunung Rapat: laptop guru tersalah zon waktu, dan
+ * seorang peserta Jaya tersimpan pada 2025. Program itu menunjukkan sifar
+ * peserta, berjumlah RM0, dan dihantar percuma.
+ *
+ * Borang menghantar YYYY-MM-DD. Tahun itu dibaca terus daripada rentetan,
+ * jadi tiada Date, tiada zon waktu, tiada peluang tersasar. Tanpa tarikh
+ * pilihan, "sekarang" mengikut jam tempatan — itulah tahun yang guru nampak
+ * pada kalendar mereka.
+ */
+const tahunKohort = (value?: string): number => {
+  if (!value) return new Date().getFullYear();
+  const padan = /^(\d{4})-\d{2}-\d{2}/.exec(value.trim());
+  if (padan) return Number(padan[1]);
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
+};
+
 const normalize = (value?: string) => (value || '').trim().toUpperCase();
 
 const roleMap = (role?: string): string | undefined => {
@@ -296,7 +322,7 @@ const createSubmissionWithPeople = async (
 
   const badge = await getBadgeByName(leaderInfo.badgeType);
   const submittedAt = toDateOnly(customDate);
-  const year = new Date(submittedAt).getFullYear();
+  const year = tahunKohort(customDate);
   const user = session.user;
 
   const { data: submission, error: subError } = await supabase

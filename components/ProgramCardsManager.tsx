@@ -44,7 +44,7 @@ interface FormState {
   startNumber: string;
 }
 
-const PROGRAM_CARDS_PER_PAGE = 8;
+const PROGRAM_CARDS_PER_PAGE = 10;
 const DEV_PROGRAM_CARDS_KEY = 'PROGRAM_CARDS_DEV_RECORDS';
 const DEV_CARD_SCAN_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
 const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png?v=20260819-bg2';
@@ -340,13 +340,13 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
   .sheet {
     width: 297mm;
     height: 210mm;
-    padding: 14mm 16mm;
+    padding: 13.31mm 4.7mm 7.8mm;
     display: grid;
-    grid-template-columns: repeat(4, 54mm);
-    grid-template-rows: repeat(2, 85.6mm);
-    gap: 6mm;
+    grid-template-columns: repeat(5, 56mm);
+    grid-template-rows: repeat(2, 88mm);
+    gap: 12.89mm 1.86mm;
     justify-content: center;
-    align-content: center;
+    align-content: start;
     break-after: page;
     page-break-after: always;
   }
@@ -359,8 +359,8 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
     justify-content: center;
   }
   .program-access-card {
-    width: 54mm;
-    height: 85.6mm;
+    width: 56mm;
+    height: 88mm;
     position: relative;
     overflow: hidden;
     background-image:
@@ -1145,8 +1145,8 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                 <div
                   className="relative mx-auto overflow-hidden border border-slate-200 bg-white text-center shadow-xl"
                   style={{
-                    width: 216,
-                    height: 342,
+                    width: 224,
+                    height: 352,
                     borderRadius: 11,
                     backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.34) 38%, rgba(255,255,255,0.70)), linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.18) 58%, rgba(216,173,63,0.08)), url(${CARD_SCOUT_CAMP_BG_URL})`,
                     backgroundSize: 'cover, cover, cover',

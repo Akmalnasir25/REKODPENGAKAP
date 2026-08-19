@@ -683,7 +683,7 @@ interface ParticipantQRGeneratorProps {
   description?: string;
 }
 
-const PARTICIPANT_CARDS_PER_PAGE = 8;
+const PARTICIPANT_CARDS_PER_PAGE = 10;
 const DEV_PARTICIPANT_CARD_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
 const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png?v=20260819-bg2';
 
@@ -985,13 +985,13 @@ const buildParticipantCardsDocument = (
   .sheet {
     width: 297mm;
     height: 210mm;
-    padding: 14mm 16mm;
+    padding: 13.31mm 4.7mm 7.8mm;
     display: grid;
-    grid-template-columns: repeat(4, 54mm);
-    grid-template-rows: repeat(2, 85.6mm);
-    gap: 6mm;
+    grid-template-columns: repeat(5, 56mm);
+    grid-template-rows: repeat(2, 88mm);
+    gap: 12.89mm 1.86mm;
     justify-content: center;
-    align-content: center;
+    align-content: start;
     break-after: page;
     page-break-after: always;
   }
@@ -1004,8 +1004,8 @@ const buildParticipantCardsDocument = (
     justify-content: center;
   }
   .program-card {
-    width: 54mm;
-    height: 85.6mm;
+    width: 56mm;
+    height: 88mm;
     position: relative;
     overflow: hidden;
     background-image:
@@ -1276,8 +1276,8 @@ const addParticipantCardToPdf = (
   x: number,
   y: number,
 ) => {
-  const cardWidth = 54;
-  const cardHeight = 85.6;
+  const cardWidth = 56;
+  const cardHeight = 88;
   const palette = getParticipantRoleMeta(participant);
   const nameRaw = getCardDisplayName(String(participant.student || '').trim().toUpperCase());
   const districtLabel = getDistrictIssuerLabel(participant, issuerLabel);
@@ -1355,11 +1355,11 @@ const addParticipantCardToPdf = (
   }
 
   setPdfFill(doc, palette.accentDark);
-  doc.roundedRect(x + 13, y + 83.3, 7.5, 0.9, 0.4, 0.4, 'F');
+  doc.roundedRect(x + 13, y + cardHeight - 2.3, 7.5, 0.9, 0.4, 0.4, 'F');
   setPdfFill(doc, palette.trim);
-  doc.roundedRect(x + 22, y + 83.3, 15, 0.9, 0.4, 0.4, 'F');
+  doc.roundedRect(x + 22, y + cardHeight - 2.3, 15, 0.9, 0.4, 0.4, 'F');
   setPdfFill(doc, palette.accent);
-  doc.roundedRect(x + 38, y + 83.3, 11, 0.9, 0.4, 0.4, 'F');
+  doc.roundedRect(x + 38, y + cardHeight - 2.3, 11, 0.9, 0.4, 0.4, 'F');
 };
 
 const generateParticipantCardsPdf = async (
@@ -1463,7 +1463,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
   issuerLabel = 'PENGAKAP MALAYSIA',
   mode = 'button',
   title = 'Kad Peserta',
-  description = 'Jana kad CR80, muat turun PDF pukal, cetak ikut filter dan relink QR lama kepada IC yang telah dibetulkan.',
+  description = 'Jana kad 56 x 88 mm ikut template A4, muat turun PDF pukal, cetak ikut filter dan relink QR lama kepada IC yang telah dibetulkan.',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<string>('');
@@ -1918,8 +1918,8 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                 <div
                   className="relative overflow-hidden bg-white text-center shadow-xl border border-slate-200"
                   style={{
-                    width: 216,
-                    height: 342,
+                    width: 224,
+                    height: 352,
                     borderRadius: 11,
                     backgroundImage: `linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.34) 38%, rgba(255,255,255,0.70)), linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.18) 58%, rgba(216,173,63,0.08)), url(${CARD_SCOUT_CAMP_BG_URL})`,
                     backgroundSize: 'cover, cover, cover',
@@ -2042,7 +2042,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                     <Printer size={14} /> {isPrinting ? 'Menjana...' : 'Cetak Kad Ini'}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-3 text-center max-w-sm">Saiz cetakan kad ialah 54 x 85.6 mm, potret CR80/ID-1.</p>
+                <p className="text-xs text-gray-500 mt-3 text-center max-w-sm">Saiz cetakan kad ialah 56 x 88 mm, potret ikut template A4 5 x 2.</p>
               </div>
             ) : (
               <>
@@ -2143,7 +2143,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                 </div>
 
                 <div className="p-4 border-t flex justify-between items-center gap-2 bg-gray-50">
-                  <span className="text-[10px] text-gray-500">Layout cetak: 8 kad CR80 setiap helai A4 landskap. Susunan ikut sekolah, kemudian nama.</span>
+                  <span className="text-[10px] text-gray-500">Layout cetak: 10 kad setiap helai A4 landskap ikut template 5 x 2. Susunan ikut sekolah, kemudian nama.</span>
                   <div className="flex gap-2">
                     {mode === 'button' && (
                       <button onClick={() => { setIsOpen(false); setSelectedParticipant(null); }} className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Tutup</button>

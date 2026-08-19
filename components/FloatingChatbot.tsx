@@ -166,8 +166,10 @@ export function FloatingChatbot({ userId, senderName, senderEmail, role, schoolN
     });
   };
 
+  // print:hidden — butang terapung tidak wujud di atas kertas. Tanpa ini ia
+  // dicetak sebagai bulatan biru di sudut halaman, bertindih dengan jadual.
   return (
-    <div className="fixed bottom-6 right-6 z-[9997] flex flex-col items-end gap-3">
+    <div className="print:hidden fixed bottom-6 right-6 z-[9997] flex flex-col items-end gap-3">
       {/* Panel */}
       {isOpen && (
         <div className="w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">

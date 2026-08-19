@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import jsPDF from 'jspdf';
-import { Download, Palette, Plus, Printer, QrCode, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { Download, Palette, Plus, Printer, QrCode, RefreshCw, Save, Trash2, Upload } from 'lucide-react';
 import { LOGO_URL } from '../constants';
 import {
   createProgramCards,
@@ -44,10 +44,24 @@ interface FormState {
   startNumber: string;
 }
 
+interface BulkUrusetiaEntry {
+  name: string;
+  fullName: string;
+  tag?: string;
+  detailMain?: string;
+  detail1?: string;
+  detail2?: string;
+  note?: string;
+  programName?: string;
+  siri?: number;
+  payload?: Record<string, string>;
+}
+
 const PROGRAM_CARDS_PER_PAGE = 10;
 const DEV_PROGRAM_CARDS_KEY = 'PROGRAM_CARDS_DEV_RECORDS';
 const DEV_CARD_SCAN_CACHE_KEY = 'PARTICIPANT_CARD_DEV_CACHE';
 const CARD_SCOUT_CAMP_BG_URL = '/card-scout-camp-bg.png?v=20260819-bg2';
+const MAX_BULK_URUSETIA_CARDS = 300;
 
 const COLOR_PRESETS: ColorPreset[] = [
   { key: 'maroon-gold', label: 'Maroon Emas', accent: '#991b1b', accentDark: '#450a0a', accentSoft: '#fef2f2', trim: '#d8ad3f' },
@@ -56,6 +70,16 @@ const COLOR_PRESETS: ColorPreset[] = [
   { key: 'slate-gold', label: 'Hitam Emas', accent: '#1f2937', accentDark: '#020617', accentSoft: '#f8fafc', trim: '#d8ad3f' },
   { key: 'violet-cyan', label: 'Ungu Cyan', accent: '#7c3aed', accentDark: '#3f236f', accentSoft: '#f5f3ff', trim: '#06b6d4' },
   { key: 'orange-red', label: 'Oren Merah', accent: '#ea580c', accentDark: '#7c2d12', accentSoft: '#fff7ed', trim: '#dc2626' },
+  { key: 'forest-gold', label: 'Hijau Pengakap', accent: '#15803d', accentDark: '#14532d', accentSoft: '#f0fdf4', trim: '#facc15' },
+  { key: 'teal-amber', label: 'Teal Amber', accent: '#0d9488', accentDark: '#134e4a', accentSoft: '#ecfeff', trim: '#f59e0b' },
+  { key: 'cyan-red', label: 'Cyan Merah', accent: '#0891b2', accentDark: '#164e63', accentSoft: '#ecfeff', trim: '#ef4444' },
+  { key: 'rose-green', label: 'Rose Hijau', accent: '#db2777', accentDark: '#831843', accentSoft: '#fdf2f8', trim: '#22c55e' },
+  { key: 'indigo-amber', label: 'Indigo Amber', accent: '#4f46e5', accentDark: '#312e81', accentSoft: '#eef2ff', trim: '#f59e0b' },
+  { key: 'olive-yellow', label: 'Olive Kuning', accent: '#4d7c0f', accentDark: '#365314', accentSoft: '#f7fee7', trim: '#eab308' },
+  { key: 'steel-red', label: 'Steel Merah', accent: '#475569', accentDark: '#0f172a', accentSoft: '#f8fafc', trim: '#ef4444' },
+  { key: 'mint-navy', label: 'Mint Navy', accent: '#059669', accentDark: '#064e3b', accentSoft: '#ecfdf5', trim: '#1d4ed8' },
+  { key: 'copper-cyan', label: 'Copper Cyan', accent: '#c2410c', accentDark: '#7c2d12', accentSoft: '#fff7ed', trim: '#06b6d4' },
+  { key: 'plum-gold', label: 'Plum Emas', accent: '#9333ea', accentDark: '#581c87', accentSoft: '#faf5ff', trim: '#facc15' },
 ];
 
 const DEFAULT_COLOR_BY_TYPE: Record<ProgramCardType, string> = {
@@ -129,6 +153,155 @@ const sanitizeFilenamePart = (value: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 42);
+
+const splitDelimitedLine = (line: string, delimiter: string): string[] => {
+  const cells: string[] = [];
+  let current = '';
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+};
+
+const detectBulkDelimiter = (line: string): string => {
+  const candidates = ['\t', ',', ';'];
+  return candidates
+    .map(delimiter => ({ delimiter, count: splitDelimitedLine(line, delimiter).length }))
+    .sort((a, b) => b.count - a.count)[0]?.delimiter || ',';
+};
+
+const normalizeHeader = (value: string): string =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^a-z0-9/ ]+/g, '')
+    .replace(/\s+/g, ' ');
+
+const findHeaderIndex = (headers: string[], aliases: string[]): number => {
+  const normalizedAliases = aliases.map(normalizeHeader);
+  return headers.findIndex(header => normalizedAliases.includes(normalizeHeader(header)));
+};
+
+const looksLikeIndexCell = (value: string): boolean =>
+  /^\s*(?:bil|no\.?|#)?\s*\d+\s*[\).:-]?\s*$/i.test(value);
+
+const cleanBulkName = (value: string): string =>
+  String(value || '')
+    .trim()
+    .replace(/^\s*(?:\d+\s*[\).:-]\s*|[-*]\s+)/, '')
+    .replace(/\s+/g, ' ');
+
+const getShortCardName = (value: string): string => {
+  const fullName = cleanBulkName(value)
+    .toUpperCase()
+    .replace(/\bA\s*\/\s*L\b/g, 'A/L')
+    .replace(/\bA\s*\/\s*P\b/g, 'A/P');
+  const connectorWords = new Set(['BIN', 'BINTI', 'BT', 'BTE', 'A/L', 'A/P', 'AL', 'AP', 'ANAK', 'IBN', 'IBNI']);
+  const words = fullName.split(' ').map(word => word.trim()).filter(Boolean);
+  const connectorIndex = words.findIndex(word => connectorWords.has(word.replace(/[.,]/g, '')));
+  const displayWords = connectorIndex > 0 ? words.slice(0, connectorIndex) : words;
+  const displayName = displayWords.join(' ') || fullName;
+  if (displayName.length <= 34) return displayName;
+  const threeWords = displayWords.slice(0, 3).join(' ');
+  if (threeWords && threeWords.length <= 34) return threeWords;
+  const twoWords = displayWords.slice(0, 2).join(' ');
+  if (twoWords) return twoWords;
+  return displayName.slice(0, 34).trim();
+};
+
+const formatBulkPayloadLabel = (value: string): string =>
+  String(value || '')
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .slice(0, 48);
+
+const isBulkIndexHeader = (value: string): boolean =>
+  /^(bil|bilangan|no|nombor|#|index)$/i.test(normalizeHeader(value));
+
+const parseBulkUrusetiaEntries = (text: string): BulkUrusetiaEntry[] => {
+  const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+
+  const delimiter = detectBulkDelimiter(lines.find(line => /[\t,;]/.test(line)) || lines[0]);
+  const rows = lines.map(line => splitDelimitedLine(line, delimiter).map(cell => cell.trim()));
+  const firstRow = rows[0] || [];
+  const nameHeader = findHeaderIndex(firstRow, ['nama', 'name', 'full name', 'fullname', 'nama urusetia', 'nama urus setia', 'nama penuh', 'nama guru', 'nama petugas', 'nama pegawai', 'nama staf', 'nama staff', 'nama ahli']);
+  const tagHeader = findHeaderIndex(firstRow, ['tag', 'tugas', 'jawatan', 'jawatan tugas', 'jawatan peranan', 'peranan', 'role', 'designation', 'unit', 'bahagian', 'sektor']);
+  const detailMainHeader = findHeaderIndex(firstRow, ['maklumat', 'maklumat utama', 'qr untuk', 'untuk']);
+  const detail1Header = findHeaderIndex(firstRow, ['maklumat 1', 'maklumat1', 'detail 1', 'detail1']);
+  const detail2Header = findHeaderIndex(firstRow, ['maklumat 2', 'maklumat2', 'detail 2', 'detail2']);
+  const noteHeader = findHeaderIndex(firstRow, ['catatan', 'nota', 'note']);
+  const programHeader = findHeaderIndex(firstRow, ['program', 'nama program']);
+  const siriHeader = findHeaderIndex(firstRow, ['siri', 'series']);
+  const hasHeader = [nameHeader, tagHeader, detailMainHeader, detail1Header, detail2Header, noteHeader, programHeader, siriHeader].some(index => index >= 0);
+
+  const getCell = (row: string[], index: number): string => (index >= 0 ? String(row[index] || '').trim() : '');
+  const dataRows = hasHeader ? rows.slice(1) : rows;
+
+  return dataRows
+    .map(row => {
+      const firstCell = getCell(row, 0);
+      const indexOffset = !hasHeader && looksLikeIndexCell(firstCell) ? 1 : 0;
+      const fullName = cleanBulkName(hasHeader ? getCell(row, nameHeader) : getCell(row, indexOffset));
+      const tag = hasHeader ? getCell(row, tagHeader) : getCell(row, indexOffset + 1);
+      const siriValue = hasHeader ? Number(getCell(row, siriHeader)) : Number.NaN;
+      const programName = hasHeader ? getCell(row, programHeader) : '';
+      const payload: Record<string, string> = {};
+
+      if (hasHeader) {
+        firstRow.forEach((header, index) => {
+          const value = getCell(row, index);
+          const label = formatBulkPayloadLabel(header);
+          if (!value || !label || isBulkIndexHeader(label)) return;
+          if (index === nameHeader) payload['Nama Penuh'] = cleanBulkName(value);
+          else if (index === tagHeader) payload.Jawatan = value;
+          else if (index === programHeader) payload.Program = value;
+          else if (index === siriHeader) payload.Siri = value;
+          else payload[label] = value;
+        });
+      } else {
+        if (fullName) payload['Nama Penuh'] = fullName;
+        if (tag) payload.Jawatan = tag;
+      }
+
+      return {
+        name: getShortCardName(fullName),
+        fullName,
+        tag,
+        detailMain: hasHeader ? getCell(row, detailMainHeader) : getCell(row, indexOffset + 2),
+        detail1: hasHeader ? getCell(row, detail1Header) : getCell(row, indexOffset + 3),
+        detail2: hasHeader ? getCell(row, detail2Header) : getCell(row, indexOffset + 4),
+        note: hasHeader ? getCell(row, noteHeader) : getCell(row, indexOffset + 5),
+        programName,
+        siri: Number.isFinite(siriValue) && siriValue > 0 ? siriValue : undefined,
+        payload: cleanPayload(payload),
+      };
+    })
+    .filter(entry => entry.fullName)
+    .slice(0, MAX_BULK_URUSETIA_CARDS);
+};
 
 const buildProgramCardScanUrl = (token: string): string => {
   if (typeof window === 'undefined') return `#/kad-peserta/${encodeURIComponent(token)}`;
@@ -237,13 +410,26 @@ const revokeLocalProgramCard = (cardId: string): boolean => {
 const cleanPayload = (payload: Record<string, string>): Record<string, string> =>
   Object.fromEntries(Object.entries(payload).filter(([, value]) => String(value || '').trim()));
 
-const payloadFromForm = (form: FormState, cardType: ProgramCardType): Record<string, string> => {
+const EDITABLE_PAYLOAD_KEYS = new Set(['Untuk', 'Maklumat Utama', 'Maklumat 1', 'Maklumat 2', 'Catatan']);
+
+const preserveExtraPayload = (payload?: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(payload || {}).filter(([key]) => !EDITABLE_PAYLOAD_KEYS.has(key)));
+
+const payloadFromForm = (
+  form: FormState,
+  cardType: ProgramCardType,
+  extraPayload: Record<string, string> = {}
+): Record<string, string> => {
   const payload: Record<string, string> = {};
+  if (cardType === 'urusetia') {
+    if (form.displayName.trim()) payload['Nama Penuh'] = form.displayName.trim();
+    if (form.tag.trim()) payload.Jawatan = form.tag.trim();
+  }
   if (form.detailMain.trim()) payload[cardType === 'urusetia' ? 'Maklumat Utama' : 'Untuk'] = form.detailMain.trim();
   if (form.detail1.trim()) payload['Maklumat 1'] = form.detail1.trim();
   if (form.detail2.trim()) payload['Maklumat 2'] = form.detail2.trim();
   if (form.note.trim()) payload.Catatan = form.note.trim();
-  return cleanPayload(payload);
+  return cleanPayload({ ...payload, ...extraPayload });
 };
 
 const imageUrlToDataUrl = async (url: string): Promise<string> => {
@@ -302,17 +488,9 @@ const getSpineLabel = (record: ProgramCardRecord): string =>
 
 const buildProgramAccessCardHtml = (record: ProgramCardRecord, qrDataUrl: string, logoUrl: string): string => {
   const palette = getRecordPalette(record);
-  const detailEntries = Object.entries(record.payload || {}).filter(([, value]) => String(value || '').trim()).slice(0, 2);
   const visualTitle = getVisualTitle(record).toUpperCase();
   const visualSubtitle = getVisualSubtitle(record).toUpperCase();
-  const programLine = [record.programName, record.siri ? `Siri ${record.siri}` : '', record.programYear ? String(record.programYear) : ''].filter(Boolean).join(' | ');
   const cardBackgroundUrl = normalizePrintableUrl(CARD_SCOUT_CAMP_BG_URL);
-  const infoBoxHtml = record.cardType === 'urusetia'
-    ? `<section class="info-box">
-          ${programLine ? `<div class="info-line">${escapeHtml(programLine)}</div>` : '<div class="info-line">TAG URUSETIA</div>'}
-          ${detailEntries.map(([key, value]) => `<div class="info-small"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</div>`).join('')}
-        </section>`
-    : '';
 
   return `
     <article class="program-access-card" style="--accent:${palette.accent}; --accent-dark:${palette.accentDark}; --accent-soft:${palette.accentSoft}; --trim:${palette.trim}; --card-bg:url(${escapeHtml(cardBackgroundUrl)});">
@@ -332,7 +510,6 @@ const buildProgramAccessCardHtml = (record: ProgramCardRecord, qrDataUrl: string
           ${record.cardNumber ? `<div class="access-number">${escapeHtml(record.cardNumber)}</div>` : ''}
           ${visualSubtitle ? `<div class="access-subtitle">${escapeHtml(visualSubtitle)}</div>` : ''}
         </section>
-        ${infoBoxHtml}
         <section class="qr-box"><img class="access-qr" src="${qrDataUrl}" alt="" /></section>
         <div class="bottom-trim"><span></span><span></span><span></span></div>
       </div>
@@ -675,10 +852,16 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [dbUnavailable, setDbUnavailable] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkFileName, setBulkFileName] = useState('');
   const qrCacheRef = useRef<Record<string, string>>({});
 
   const titleLabel = cardType === 'urusetia' ? 'Kad Urusetia' : 'Kad Umum Bernombor';
   const selectedCard = cards.find(card => card.id === selectedCardId) || cards[0] || null;
+  const bulkUrusetiaEntries = useMemo(
+    () => cardType === 'urusetia' ? parseBulkUrusetiaEntries(bulkText) : [],
+    [bulkText, cardType]
+  );
 
   const loadCards = async () => {
     setLoading(true);
@@ -708,6 +891,8 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
     setForm(defaultForm(cardType, year));
     setEditForm(defaultForm(cardType, year));
     setSelectedCardId('');
+    setBulkText('');
+    setBulkFileName('');
     loadCards();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardType, year]);
@@ -740,6 +925,29 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
     setEditForm(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleBulkFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setError('');
+    setBulkFileName(file.name);
+
+    try {
+      if (/\.(xlsx|xls)$/i.test(file.name)) {
+        const XLSX = await import('xlsx');
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' });
+        setBulkText(rows.map(row => row.map(cell => String(cell || '').trim()).join('\t')).join('\n'));
+      } else {
+        setBulkText(await file.text());
+      }
+    } catch (err: any) {
+      setError(String(err?.message || 'Gagal membaca fail senarai urusetia.'));
+    } finally {
+      event.target.value = '';
+    }
+  };
+
   const buildInputs = (): ProgramCardInput[] => {
     const preset = getColorPreset(form.colorKey);
     const base = {
@@ -760,6 +968,31 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
     };
 
     if (cardType === 'urusetia') {
+      if (bulkUrusetiaEntries.length > 0) {
+        return bulkUrusetiaEntries.map(entry => {
+          const rowForm: FormState = {
+            ...form,
+            displayName: entry.fullName,
+            tag: entry.tag || form.tag,
+            programName: entry.programName || form.programName,
+            siri: String(entry.siri || Number(form.siri || 1)),
+            detailMain: entry.detailMain || form.detailMain,
+            detail1: entry.detail1 || form.detail1,
+            detail2: entry.detail2 || form.detail2,
+            note: entry.note || form.note,
+          };
+          return {
+            ...base,
+            tag: rowForm.tag.trim(),
+            programName: rowForm.programName.trim(),
+            siri: Number(rowForm.siri || 1),
+            payload: payloadFromForm(rowForm, cardType, entry.payload || {}),
+            displayName: entry.name,
+            cardNumber: '',
+          };
+        });
+      }
+
       return [{
         ...base,
         displayName: form.displayName.trim() || 'NAMA URUSETIA',
@@ -785,6 +1018,9 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
     setSaving(true);
     setError('');
     try {
+      if (cardType === 'urusetia' && bulkText.trim() && bulkUrusetiaEntries.length === 0) {
+        throw new Error('Tiada nama urusetia yang sah dalam senarai pukal.');
+      }
       const inputs = buildInputs();
       const created = dbUnavailable && isDevPreview()
         ? createLocalProgramCards(inputs)
@@ -793,6 +1029,10 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
       setCards(prev => [...created, ...prev]);
       setSelectedCardId(created[0]?.id || '');
       setNotice(`${created.length} ${cardType === 'urusetia' ? 'kad urusetia' : 'kad umum'} berjaya dijana.`);
+      if (cardType === 'urusetia' && bulkUrusetiaEntries.length > 0) {
+        setBulkText('');
+        setBulkFileName('');
+      }
     } catch (err: any) {
       const message = String(err?.message || '');
       if (isDevPreview() && message.includes('create_program_cards')) {
@@ -801,6 +1041,10 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
         setSelectedCardId(created[0]?.id || '');
         setDbUnavailable(true);
         setNotice('Mod ujian local: kad dijana dalam cache browser kerana migrasi 060 belum dipasang.');
+        if (cardType === 'urusetia' && bulkUrusetiaEntries.length > 0) {
+          setBulkText('');
+          setBulkFileName('');
+        }
       } else {
         setError(message || 'Gagal menjana kad program.');
       }
@@ -901,6 +1145,11 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
     setError('');
     try {
       const preset = getColorPreset(editForm.colorKey);
+      const preservedPayload = preserveExtraPayload(selectedCard.payload);
+      if (cardType === 'urusetia') {
+        if (editForm.tag.trim()) preservedPayload.Jawatan = editForm.tag.trim();
+        else delete preservedPayload.Jawatan;
+      }
       const patch: Partial<ProgramCardInput> = {
         title: editForm.title.trim() || selectedCard.title,
         displayName: editForm.displayName.trim() || selectedCard.displayName,
@@ -916,7 +1165,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
         accentDark: preset.accentDark,
         accentSoft: preset.accentSoft,
         trim: preset.trim,
-        payload: payloadFromForm(editForm, cardType),
+        payload: payloadFromForm(editForm, cardType, preservedPayload),
       };
 
       const updated = dbUnavailable && isDevPreview()
@@ -998,15 +1247,46 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
           </label>
 
           {cardType === 'urusetia' ? (
-            <label className="block text-xs font-bold text-slate-600">
-              Tag urusetia
-              <input
-                value={form.tag}
-                onChange={e => updateForm('tag', e.target.value)}
-                placeholder="Pendaftaran / Teknikal / Makanan"
-                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
-              />
-            </label>
+            <>
+              <label className="block text-xs font-bold text-slate-600">
+                Tag urusetia
+                <input
+                  value={form.tag}
+                  onChange={e => updateForm('tag', e.target.value)}
+                  placeholder="Pendaftaran / Teknikal / Makanan"
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                />
+              </label>
+
+              <div className="space-y-2 rounded-lg border border-dashed border-slate-300 bg-white p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-black text-slate-800">Import Pukal Urusetia</div>
+                    <div className="text-[10px] font-semibold text-slate-500">TXT/CSV/XLSX. Kolum Nama Penuh/Jawatan dan kolum lain masuk QR.</div>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-black text-slate-700 hover:bg-slate-100">
+                    <Upload size={12} /> Upload
+                    <input type="file" accept=".txt,.csv,.xlsx,.xls" onChange={handleBulkFileChange} className="hidden" />
+                  </label>
+                </div>
+                {bulkFileName && <div className="truncate text-[10px] font-bold text-slate-500">Fail: {bulkFileName}</div>}
+                <textarea
+                  value={bulkText}
+                  onChange={e => setBulkText(e.target.value)}
+                  rows={5}
+                  placeholder={'Contoh berheader:\nNama Penuh,Jawatan,Telefon,Catatan\nMOHD AKMAL BIN NASIR,Ketua Pendaftaran,0123456789,Meja utama\n\nAtau tanpa header:\nNUR MUSLIMAH BINTI AHMAD,Pendaftaran'}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold leading-relaxed text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                />
+                <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500">
+                  <span>{bulkText.trim() ? `${bulkUrusetiaEntries.length} nama valid akan dijana` : 'Isi senarai untuk jana banyak kad sekali gus'}</span>
+                  {bulkText.trim() && (
+                    <button type="button" onClick={() => { setBulkText(''); setBulkFileName(''); }} className="text-slate-700 hover:text-slate-950">
+                      Kosongkan
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
           ) : (
             <div className="grid grid-cols-3 gap-2">
               <label className="block text-xs font-bold text-slate-600">
@@ -1084,7 +1364,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
             disabled={saving}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            <Plus size={16} /> {saving ? 'Menjana...' : cardType === 'general' ? `Jana ${form.quantity || 1} Kad` : 'Jana Kad Urusetia'}
+            <Plus size={16} /> {saving ? 'Menjana...' : cardType === 'general' ? `Jana ${form.quantity || 1} Kad` : bulkUrusetiaEntries.length > 0 ? `Jana ${bulkUrusetiaEntries.length} Kad Urusetia` : 'Jana Kad Urusetia'}
           </button>
         </section>
 
@@ -1192,11 +1472,6 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                       {previewCard.cardNumber && <div className="mt-2 inline-block max-w-full self-center rounded-md bg-white/70 px-2 py-1 text-[24px] font-black leading-none shadow-sm" style={{ color: previewPalette.accentDark, textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>{previewCard.cardNumber}</div>}
                       {getVisualSubtitle(previewCard) && <div className="mt-2 inline-block max-w-full self-center rounded bg-white/60 px-2 py-0.5 line-clamp-2 text-[10px] font-extrabold uppercase leading-tight text-slate-600">{getVisualSubtitle(previewCard)}</div>}
                     </div>
-                    {previewCard.cardType === 'urusetia' && (
-                      <div className="mt-1 rounded-lg border bg-white/85 px-2.5 py-1.5 text-left text-[9px] font-extrabold leading-tight text-slate-800" style={{ borderLeftWidth: 4, borderLeftColor: previewPalette.trim }}>
-                        {[previewCard.programName, previewCard.siri ? `Siri ${previewCard.siri}` : '', previewCard.programYear ? String(previewCard.programYear) : ''].filter(Boolean).join(' | ') || 'TAG URUSETIA'}
-                      </div>
-                    )}
                     <div className="mx-auto mt-2 flex min-h-[112px] w-[112px] items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
                       {selectedPreviewQr ? <img src={selectedPreviewQr} alt="" className="h-[100px] w-[100px]" /> : <div className="text-[9px] font-bold text-slate-400">Menjana QR...</div>}
                     </div>

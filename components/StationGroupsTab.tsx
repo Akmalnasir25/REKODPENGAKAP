@@ -39,6 +39,10 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   // Berapa penguji program ini perlukan daripada kolam. '' = belum
   // ditetapkan, iaitu ambil semua yang ada.
   const [kuota, setKuota] = useState<number | ''>('');
+  // Bila ditanda, kiraan peserta hilang daripada senarai DAN daripada PDF.
+  // Kotak yang menyembunyikan pada skrin tetapi mencetak kiraan itu juga
+  // berbohong tentang apa yang keluar dari pencetak.
+  const [sembunyiKiraan, setSembunyiKiraan] = useState(false);
   // Status pengagihan SEMUA program siri ini, bukan hanya yang dibuka.
   const [ringkasan, setRingkasan] = useState<RingkasanPenguji[]>([]);
   const [memuat, setMemuat] = useState(false);
@@ -299,7 +303,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
           </button>
 
           {jadual && paparan === 'peserta' && (
-            <button onClick={() => muatTurunPdfStesen(jadual, stesen, daerahName)}
+            <button onClick={() => muatTurunPdfStesen(jadual, stesen, daerahName, sembunyiKiraan)}
               className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition">
               <Download size={15} /> PDF Peserta
             </button>
@@ -458,15 +462,28 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
             <span><strong className="text-slate-800">{jadual.bilKumpulan}</strong> stesen</span>
             <span>Julat <strong className="text-slate-800">{Math.min(...saiz)}–{Math.max(...saiz)}</strong></span>
             <span className={jurang > 5 ? 'text-amber-700 font-semibold' : ''}>Jurang {jurang}</span>
+            {paparan === 'peserta' && (
+              <label className="flex items-center gap-1.5 ml-auto cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sembunyiKiraan}
+                  onChange={e => setSembunyiKiraan(e.target.checked)}
+                  className="accent-blue-600"
+                />
+                <span className="font-semibold text-slate-600">Sembunyikan jumlah peserta</span>
+              </label>
+            )}
           </div>
 
           {paparan === 'peserta' && bahagian.map(([huruf, ls]) => (
             <div key={huruf} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="bg-slate-800 text-white px-4 py-2 flex justify-between items-baseline">
                 <span className="font-bold text-sm">BAHAGIAN {huruf}</span>
-                <span className="text-xs text-slate-300">
-                  {ls.reduce((n, s) => n + s.sekolah.reduce((m, x) => m + x.peserta, 0), 0)} peserta
-                </span>
+                {!sembunyiKiraan && (
+                  <span className="text-xs text-slate-300">
+                    {ls.reduce((n, s) => n + s.sekolah.reduce((m, x) => m + x.peserta, 0), 0)} peserta
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-px bg-slate-200">
                 {ls.map(s => {
@@ -475,14 +492,18 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                     <div key={s.label} className="bg-white p-3">
                       <div className="flex justify-between items-baseline mb-2 pb-1.5 border-b border-slate-100">
                         <span className="font-bold text-sm text-slate-800">STESEN {s.label}</span>
-                        <span className="text-xs font-bold text-blue-700">{bil} peserta</span>
+                        {!sembunyiKiraan && (
+                          <span className="text-xs font-bold text-blue-700">{bil} peserta</span>
+                        )}
                       </div>
                       <ol className="space-y-1">
                         {s.sekolah.map((x, i) => (
                           <li key={x.schoolId} className="flex items-center gap-2 text-[11px]">
                             <span className="text-slate-400 w-4 shrink-0">{i + 1}</span>
                             <span className="flex-1 text-slate-700 truncate" title={x.sekolah}>{x.sekolah}</span>
-                            <span className="font-bold text-slate-800 w-6 text-right">{x.peserta}</span>
+                            {!sembunyiKiraan && (
+                              <span className="font-bold text-slate-800 w-6 text-right">{x.peserta}</span>
+                            )}
                             {/* Sekolah berpindah sebagai satu unit; tiada cara
                                 memindahkan separuh daripadanya. */}
                             <select
@@ -620,20 +641,33 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                             <td className="px-3 py-1.5 text-slate-800">{pg.nama}</td>
                             <td className="px-3 py-1.5 text-slate-500">{pg.sekolah}</td>
                             <td className="px-3 py-1.5">
+                              {/* Setiap program siri ini, bukan program ini
+                                  sahaja. Kolam penguji dikongsi (§13), jadi
+                                  membetulkan satu pilihan tidak sepatutnya
+                                  memerlukan reset dua jadual. */}
                               <select
-                                className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-slate-50"
-                                value={st.label}
+                                className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-slate-50 max-w-[150px]"
+                                value={`${jadual.runId}|${st.label}`}
                                 onChange={async e => {
                                   if (!jadual) return;
+                                  const [runSasaran, label] = e.target.value.split('|');
                                   try {
-                                    await pindahPenguji(jadual.runId, pg.personIc, e.target.value);
+                                    await pindahPenguji(pg.personIc, year, siri, runSasaran, label);
                                     await muat();
                                   } catch (err: any) {
                                     setRalat(err.message || 'Gagal memindahkan penguji.');
                                   }
                                 }}
                               >
-                                {labelStesen(jadual.bilKumpulan).map(l => <option key={l} value={l}>{l}</option>)}
+                                {ringkasan.map(r => (
+                                  <optgroup key={r.runId} label={r.badgeName}>
+                                    {labelStesen(r.bilKumpulan).map(l => (
+                                      <option key={`${r.runId}|${l}`} value={`${r.runId}|${l}`}>
+                                        {r.runId === jadual.runId ? l : `${r.badgeName} ${l}`}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                ))}
                               </select>
                             </td>
                           </tr>

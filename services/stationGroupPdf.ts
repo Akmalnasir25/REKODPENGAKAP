@@ -22,6 +22,7 @@ export const muatTurunPdfStesen = (
   jadual: JadualStesen,
   stesen: Stesen[],
   daerahName?: string,
+  sembunyiKiraan = false,
 ): void => {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const lebar = doc.internal.pageSize.getWidth();
@@ -67,7 +68,9 @@ export const muatTurunPdfStesen = (
     doc.setTextColor(255);
     doc.text(`BAHAGIAN ${huruf}  (STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label})`,
       TEPI + 3, y + 4.8);
-    doc.text(`${jumBahagian} peserta`, lebar - TEPI - 3, y + 4.8, { align: 'right' });
+    if (!sembunyiKiraan) {
+      doc.text(`${jumBahagian} peserta`, lebar - TEPI - 3, y + 4.8, { align: 'right' });
+    }
     doc.setTextColor(0);
     y += 11;
 
@@ -86,7 +89,7 @@ export const muatTurunPdfStesen = (
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(8.5);
         doc.text(`STESEN ${s.label}`, x, y);
-        doc.text(`${bil} peserta`, x + LEBAR_KOL, y, { align: 'right' });
+        if (!sembunyiKiraan) doc.text(`${bil} peserta`, x + LEBAR_KOL, y, { align: 'right' });
         doc.setDrawColor(210);
         doc.line(x, y + 1.5, x + LEBAR_KOL, y + 1.5);
 
@@ -96,12 +99,21 @@ export const muatTurunPdfStesen = (
           tableWidth: LEBAR_KOL,
           theme: 'plain',
           styles: { fontSize: 8, cellPadding: { top: 0.8, bottom: 0.8, left: 0, right: 0 } },
-          columnStyles: {
-            0: { cellWidth: 6, textColor: 130 },
-            1: { cellWidth: LEBAR_KOL - 16 },
-            2: { cellWidth: 10, halign: 'right', fontStyle: 'bold' },
-          },
-          body: s.sekolah.map((v, n) => [String(n + 1), v.sekolah, String(v.peserta)]),
+          // Tanpa kiraan, nama sekolah mengambil ruang yang ditinggalkan
+          // lajur nombor itu, bukan meninggalkan jurang kosong di kanan.
+          columnStyles: sembunyiKiraan
+            ? {
+                0: { cellWidth: 6, textColor: 130 },
+                1: { cellWidth: LEBAR_KOL - 6 },
+              }
+            : {
+                0: { cellWidth: 6, textColor: 130 },
+                1: { cellWidth: LEBAR_KOL - 16 },
+                2: { cellWidth: 10, halign: 'right', fontStyle: 'bold' },
+              },
+          body: s.sekolah.map((v, n) => sembunyiKiraan
+            ? [String(n + 1), v.sekolah]
+            : [String(n + 1), v.sekolah, String(v.peserta)]),
         });
       });
 

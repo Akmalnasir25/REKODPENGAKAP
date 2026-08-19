@@ -264,3 +264,45 @@ perlu tahu angkanya untuk mencari orang tambahan.
 ditetapkan; pengagihan mengambil seluruh kolam yang ada, seperti sebelum ini.
 
 **Migrasi 064.**
+
+## 15. Sembunyikan kiraan, dan pindah penguji merentas program
+
+Dua perubahan kecil yang diminta selepas jadual digunakan sebenar.
+
+### Kiraan peserta boleh disembunyikan
+
+Satu kotak tick. Bila ditanda, bilangan peserta tidak dipaparkan dalam
+senarai — nama sekolah sahaja.
+
+Tandaan itu terpakai pada **skrin dan PDF sekali**. Kalau ia menyembunyikan
+kiraan pada skrin tetapi mencetaknya juga, kotak itu berbohong tentang apa
+yang akan keluar dari pencetak. Apa yang kau nampak ialah apa yang kau
+cetak.
+
+Jumlah keseluruhan pada bar ringkasan di atas kekal. Yang disembunyikan
+ialah kiraan setiap baris dan setiap stesen, bukan fakta bahawa jadual itu
+mempunyai peserta.
+
+### Penguji boleh dipindahkan ke stesen program lain
+
+Sebelum ini menu stesen hanya menyenaraikan stesen larian itu sendiri, jadi
+penguji hanya boleh bergerak dalam programnya. Kini menu itu menyenaraikan
+stesen **setiap program** siri tersebut, dikumpulkan mengikut program.
+
+Ini pasangan yang hilang bagi kolam yang dikongsi (§13). Kolam membenarkan
+seorang penguji dipilih oleh mana-mana program; tanpa pemindahan merentas
+program, membetulkan pilihan itu bermakna reset kedua-dua jadual.
+
+**Kenapa ia mesti RPC, bukan padam-dan-sisip di sebelah aplikasi.**
+Kekangan `unique (year, siri, person_ic)` bermakna baris lama mesti hilang
+sebelum baris baharu boleh wujud. Dua panggilan berasingan dari pelayar
+mempunyai celah antara keduanya: kalau sisipan gagal — talian putus, tab
+ditutup — penguji itu lenyap daripada kedua-dua jadual dan tiada apa
+memberitahu sesiapa. Satu fungsi pangkalan data melakukan kedua-duanya
+dalam satu transaksi, atau tidak langsung.
+
+Nama dan sekolah dibawa bersama dari baris lama; ia tidak dicari semula,
+kerana penguji yang sama sudah disahkan layak ketika dia mula-mula
+ditempatkan.
+
+**Migrasi 067.**

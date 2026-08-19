@@ -424,13 +424,27 @@ export const ambilPenguji = async (runId: string): Promise<PengujiStesen[]> => {
   }));
 };
 
+/**
+ * Pindahkan penguji ke mana-mana stesen dalam siri itu, termasuk stesen
+ * program lain.
+ *
+ * Satu laluan untuk kedua-dua kes. Pemindahan dalam program yang sama boleh
+ * dibuat dengan satu `update`, tetapi mengekalkan dua laluan bermakna dua
+ * tempat untuk salah — dan yang merentas program mesti melalui fungsi
+ * pangkalan data kerana unique(year, siri, person_ic) tidak membenarkan
+ * baris lama dan baharu wujud serentak.
+ */
 export const pindahPenguji = async (
-  runId: string, personIc: string, stesenBaharu: string,
+  personIc: string, year: number, siri: number,
+  runIdSasaran: string, stesenBaharu: string,
 ): Promise<void> => {
-  const { error } = await supabase
-    .from('station_group_examiners')
-    .update({ station_label: stesenBaharu })
-    .eq('run_id', runId).eq('person_ic', personIc);
+  const { error } = await supabase.rpc('pindah_penguji_stesen', {
+    p_person_ic: personIc,
+    p_year: year,
+    p_siri: siri,
+    p_run_baharu: runIdSasaran,
+    p_stesen: stesenBaharu,
+  });
   if (error) throw error;
 };
 

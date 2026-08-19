@@ -1471,6 +1471,75 @@ export const loginDeveloper = async (_url: string, _username: string, _password:
   return { status: 'error', message: 'Guna loginAdminSupabase dari supabaseAuth.ts dengan role developer.' };
 };
 
+export interface ProgramKehadiran {
+  badgeId: string;
+  program: string;
+  peserta: number;
+  pegawai: number;
+  disahkanPada: string | null;
+}
+
+/**
+ * Program diluluskan bagi satu sekolah dalam satu siri.
+ *
+ * Dibaca semasa imbasan QR v4, yang membawa penunjuk sahaja: sekolah, tahun,
+ * siri. Sekolah yang mendaftar program kedua SELEPAS kadnya dicetak tetap
+ * muncul di sini, dan itulah sebab QR itu tidak lagi membawa senarainya
+ * sendiri. Rujuk docs/rancangan-qr-sekolah-siri.md.
+ */
+export const ambilKehadiranSiri = async (
+  schoolCode: string, year: number, siri: number,
+): Promise<ProgramKehadiran[]> => {
+  const { data, error } = await supabase.rpc('kehadiran_sekolah_siri', {
+    p_kod_sekolah: schoolCode, p_tahun: year, p_siri: siri,
+  });
+  if (error) throw error;
+  return (data || []).map((r: any) => ({
+    badgeId: r.badge_id,
+    program: r.program,
+    peserta: Number(r.peserta || 0),
+    pegawai: Number(r.pegawai || 0),
+    disahkanPada: r.disahkan_pada || null,
+  }));
+};
+
+/**
+ * Rekod kehadiran untuk SETIAP program sekolah itu dalam satu siri.
+ *
+ * Program yang sudah disahkan dilangkau, bukan menggagalkan keseluruhan
+ * imbasan: sekolah tiga program yang satu daripadanya diimbas semalam masih
+ * boleh disahkan untuk dua yang lain dalam satu tekan.
+ *
+ * `participant_count` menyimpan jumlah SEMUA orang, sama seperti setiap baris
+ * sejarah dalam lajur itu. Skrin memaparkan peserta dan pegawai berasingan;
+ * menukar maksud lajur ini ialah kerja berasingan yang menyentuh data lama.
+ */
+export const rekodKehadiranSiri = async (
+  schoolCode: string, year: number, siri: number, program: ProgramKehadiran[],
+): Promise<{ direkod: string[]; dilangkau: string[] }> => {
+  const school = await getSchoolByCodeOrName(schoolCode);
+  if (!school) throw new Error('Sekolah tidak dijumpai.');
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const dilangkau = program.filter(p => p.disahkanPada).map(p => p.program);
+  const baharu = program.filter(p => !p.disahkanPada);
+  if (baharu.length === 0) return { direkod: [], dilangkau };
+
+  const { error } = await supabase.from('attendance_verifications').insert(
+    baharu.map(p => ({
+      school_id: school.id,
+      badge_id: p.badgeId,
+      year,
+      siri,
+      verified_by: user?.id || null,
+      participant_count: p.peserta + p.pegawai,
+      source: 'qr_school_scan',
+    })),
+  );
+  if (error) throw error;
+  return { direkod: baharu.map(p => p.program), dilangkau };
+};
+
 export const recordAttendanceVerification = async (record: { schoolCode: string; badge: string; year: number; participantCount: number; siri?: number }): Promise<ApiResponse> => {
   try {
     const school = await getSchoolByCodeOrName(record.schoolCode);

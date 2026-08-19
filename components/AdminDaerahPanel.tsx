@@ -677,6 +677,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
 
                   <QRAttendanceScanner
                     verifierName={adminSession.fullName || adminSession.username}
+                    onSelesai={loadAttendanceRecords}
                     onVerified={async (record) => {
                       const res = await recordAttendanceVerification({
                         schoolCode: record.schoolCode,

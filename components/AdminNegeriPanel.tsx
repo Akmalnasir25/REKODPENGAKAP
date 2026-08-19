@@ -955,6 +955,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
 
                   <QRAttendanceScanner
                     verifierName={adminSession.fullName || adminSession.username}
+                    onSelesai={loadAttendanceRecords}
                     onVerified={async (record) => {
                       const res = await recordAttendanceVerification({
                         schoolCode: record.schoolCode,

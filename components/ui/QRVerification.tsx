@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
+import { ambilKehadiranSiri, rekodKehadiranSiri, ProgramKehadiran } from '../../services/supabaseApi';
 import jsPDF from 'jspdf';
 import { QrCode, Download, Printer, X, CheckCircle, School, Users, ScanLine, Camera, Keyboard, Link2 } from 'lucide-react';
 import { SubmissionData } from '../../types';
@@ -17,17 +18,33 @@ interface SchoolQRData {
   v: 3; // compact school-based QR
   schoolCode: string;
   schoolName: string;
-  badge: string;
+  /** v3 sahaja — satu kad satu program. */
+  badge?: string;
   year: number;
-  totalParticipants: number;
+  /** v4 sahaja — satu kad satu SIRI, merangkumi setiap programnya. */
+  siri?: number;
+  /** v3 sahaja — kiraan dibekukan pada saat cetakan. */
+  totalParticipants?: number;
   generatedAt: string;
   ref: string;
 }
 
+/**
+ * Satu kad = satu sekolah dalam satu SIRI, bukan satu program.
+ *
+ * Sekolah yang menyertai tiga program dalam Siri 2 dahulunya menerima tiga
+ * kad dan diimbas tiga kali. Kiraan sebenar 2026: 24 daripada 57 sekolah
+ * Siri 1 mempunyai dua program, dan lapan sekolah Siri 2 mempunyai tiga.
+ *
+ * Muatan lama juga langsung tidak membawa siri, jadi setiap imbasan
+ * direkodkan sebagai Siri 1 tanpa mengira siri sebenarnya. Pengumpulan ini
+ * membetulkannya sekali gus.
+ */
 interface SchoolGroup {
   schoolCode: string;
   schoolName: string;
-  badge: string;
+  siri: number;
+  program: string[];
   participants: SubmissionData[];
 }
 
@@ -41,14 +58,15 @@ const safeGetYear = (value: unknown): number | null => {
  * Generate QR payload for a school group
  */
 const generateSchoolQRPayload = (group: SchoolGroup, year: number): string => {
-  const ref = `${group.schoolCode}-${group.badge.replace(/\s/g, '')}-${year}`.toUpperCase();
+  const ref = `${group.schoolCode}-S${group.siri}-${year}`.toUpperCase();
+  // PENUNJUK, bukan snapshot. Senarai program dan kiraannya dicari semasa
+  // imbasan, supaya program yang didaftar selepas kad dicetak tetap muncul.
   const payload: SchoolQRData = {
-    v: 3,
+    v: 4,
     schoolCode: group.schoolCode,
     schoolName: group.schoolName,
-    badge: group.badge,
     year,
-    totalParticipants: group.participants.length,
+    siri: group.siri,
     generatedAt: new Date().toISOString(),
     ref,
   };
@@ -98,25 +116,31 @@ export const SchoolQRGenerator: React.FC<SchoolQRGeneratorProps> = ({ data, year
   const [generating, setGenerating] = useState(false);
   const [qrImages, setQrImages] = useState<{ group: SchoolGroup; dataUrl: string }[]>([]);
 
-  // Group data by school + badge
+  // Dikumpulkan mengikut sekolah + SIRI. Program menjadi senarai dalam
+  // kumpulan itu, bukan pemecah kumpulan.
   const schoolGroups = useMemo((): SchoolGroup[] => {
     const yearData = data.filter(d => safeGetYear(d.date) === year);
     const map: Record<string, SchoolGroup> = {};
 
     yearData.forEach(d => {
-      const key = `${d.schoolCode}|${d.badge}`;
+      const siri = d.siri || 1;
+      const key = `${d.schoolCode}|${siri}`;
       if (!map[key]) {
         map[key] = {
           schoolCode: d.schoolCode || '',
           schoolName: d.school || '',
-          badge: d.badge || '',
+          siri,
+          program: [],
           participants: [],
         };
       }
       map[key].participants.push(d);
+      if (d.badge && !map[key].program.includes(d.badge)) map[key].program.push(d.badge);
     });
 
-    return Object.values(map).sort((a, b) => a.schoolName.localeCompare(b.schoolName));
+    Object.values(map).forEach(g => g.program.sort());
+    return Object.values(map).sort(
+      (a, b) => a.schoolName.localeCompare(b.schoolName) || a.siri - b.siri);
   }, [data, year]);
 
   const handleGenerate = async () => {
@@ -180,9 +204,9 @@ export const SchoolQRGenerator: React.FC<SchoolQRGeneratorProps> = ({ data, year
               <img src="${item.dataUrl}" alt="QR ${item.group.schoolName}" />
               <div class="school">${item.group.schoolName}</div>
               <div class="code">${item.group.schoolCode}</div>
-              <span class="badge">${item.group.badge}</span>
-              <div class="count">${item.group.participants.length} peserta</div>
-              <div class="instruction">Scan QR ini = Sahkan kehadiran semua ${item.group.participants.length} peserta sekolah ini</div>
+              <span class="badge">SIRI ${item.group.siri}</span>
+              <div class="count">${item.group.program.join(' &middot; ')}</div>
+              <div class="instruction">Scan sekali = sahkan kehadiran untuk ${item.group.program.length === 1 ? 'program ini' : `kesemua ${item.group.program.length} program di atas`}</div>
             </div>
           `).join('')}
         </div>
@@ -243,7 +267,10 @@ export const SchoolQRGenerator: React.FC<SchoolQRGeneratorProps> = ({ data, year
                         <p className="text-xs font-bold text-gray-900 uppercase">{item.group.schoolName}</p>
                         <p className="text-[10px] text-gray-500 font-mono">{item.group.schoolCode}</p>
                         <div className="flex items-center justify-center gap-2 mt-2">
-                          <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">{item.group.badge}</span>
+                          <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">Siri {item.group.siri}</span>
+                          <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-bold">
+                            {item.group.program.length} program
+                          </span>
                           <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5">
                             <Users size={9} /> {item.group.participants.length}
                           </span>
@@ -272,18 +299,29 @@ export const SchoolQRGenerator: React.FC<SchoolQRGeneratorProps> = ({ data, year
  * Uses device camera to scan QR and mark all participants as present
  */
 interface QRScannerProps {
+  /** Laluan v3: induk menulis satu baris kehadiran bagi satu program. */
   onVerified?: (record: AttendanceRecord) => void;
+  /**
+   * Laluan v4: pengimbas menulis sendiri untuk semua program siri itu, jadi
+   * induk hanya perlu memuat semula paparannya.
+   */
+  onSelesai?: () => void | Promise<void>;
   verifierName?: string;
   className?: string;
 }
 
-export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, verifierName = 'Admin', className = '' }) => {
+export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, onSelesai, verifierName = 'Admin', className = '' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [scannedData, setScannedData] = useState<SchoolQRData | null>(null);
   const [verified, setVerified] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [records, setRecords] = useState<AttendanceRecord[]>(getAttendanceRecords());
   const [scanMode, setScanMode] = useState<'camera' | 'manual'>('camera');
+  // v4: senarai program dicari selepas imbasan, bukan dibawa oleh QR.
+  const [program, setProgram] = useState<ProgramKehadiran[]>([]);
+  const [memuatProgram, setMemuatProgram] = useState(false);
+  const [ralatProgram, setRalatProgram] = useState('');
+  const [hasilRekod, setHasilRekod] = useState<{ direkod: string[]; dilangkau: string[] } | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -295,6 +333,20 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
   const parseQRText = (text: string): SchoolQRData | null => {
     try {
       const parsed = JSON.parse(text) as any;
+      // v4 — penunjuk: sekolah + tahun + siri. Program dicari semasa imbasan.
+      if (parsed.v === 4 && parsed.schoolCode && parsed.siri) {
+        return {
+          v: 4,
+          schoolCode: parsed.schoolCode,
+          schoolName: parsed.schoolName || parsed.schoolCode,
+          year: parsed.year || new Date().getFullYear(),
+          siri: Number(parsed.siri),
+          generatedAt: parsed.generatedAt || new Date().toISOString(),
+          ref: parsed.ref || `${parsed.schoolCode}-S${parsed.siri}-${parsed.year}`.toUpperCase(),
+        };
+      }
+      // v2/v3 — kad lama yang sudah dicetak dan berada di tangan sekolah.
+      // Ia mesti terus berfungsi: satu program, tanpa siri.
       if ((parsed.v === 2 || parsed.v === 3) && parsed.schoolCode && parsed.schoolName && parsed.badge) {
         return {
           v: 3,
@@ -480,17 +532,51 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
     if (!isOpen) stopCamera();
   }, [isOpen]);
 
+  // Carian dijalankan sebaik QR v4 dibaca. Ia memerlukan talian — itulah
+  // pertukaran bagi kad yang tidak pernah lapuk.
+  useEffect(() => {
+    if (!scannedData || scannedData.v !== 4 || !scannedData.siri) { setProgram([]); return; }
+    let dibatalkan = false;
+    setMemuatProgram(true); setRalatProgram('');
+    ambilKehadiranSiri(scannedData.schoolCode, scannedData.year, scannedData.siri)
+      .then(r => { if (!dibatalkan) setProgram(r); })
+      .catch(e => { if (!dibatalkan) setRalatProgram(e.message || 'Gagal mencari program sekolah ini.'); })
+      .finally(() => { if (!dibatalkan) setMemuatProgram(false); });
+    return () => { dibatalkan = true; };
+  }, [scannedData]);
+
+  const belumDisahkan = program.filter(p => !p.disahkanPada);
+  const jumlahPeserta = belumDisahkan.reduce((n, p) => n + p.peserta, 0);
+  const jumlahPegawai = belumDisahkan.reduce((n, p) => n + p.pegawai, 0);
+
+  const handleConfirmSiri = async () => {
+    if (!scannedData?.siri) return;
+    setMemuatProgram(true); setRalatProgram('');
+    try {
+      const hasil = await rekodKehadiranSiri(
+        scannedData.schoolCode, scannedData.year, scannedData.siri, program);
+      setHasilRekod(hasil);
+      setVerified(true);
+      await onSelesai?.();
+      setTimeout(() => {
+        setScannedData(null); setVerified(false); setProgram([]); setHasilRekod(null);
+      }, 4000);
+    } catch (e: any) {
+      setRalatProgram(e.message || 'Gagal merekod kehadiran.');
+    } finally { setMemuatProgram(false); }
+  };
+
   const handleConfirmAttendance = () => {
     if (!scannedData) return;
 
     const record: AttendanceRecord = {
       schoolCode: scannedData.schoolCode,
       schoolName: scannedData.schoolName,
-      badge: scannedData.badge,
+      badge: scannedData.badge || '',
       year: scannedData.year,
       verifiedAt: Date.now(),
       verifiedBy: verifierName,
-      totalParticipants: scannedData.totalParticipants,
+      totalParticipants: scannedData.totalParticipants || 0,
       participants: [],
     };
 
@@ -540,8 +626,24 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
                   <CheckCircle size={48} className="text-green-500 mx-auto mb-3" />
                   <h4 className="font-bold text-green-800 text-lg">Kehadiran Disahkan!</h4>
                   <p className="text-green-700 font-bold mt-1">{scannedData.schoolName}</p>
-                  <p className="text-sm text-green-600 mt-1">{scannedData.totalParticipants} peserta telah disahkan hadir</p>
-                  <p className="text-[10px] text-green-500 mt-2">{scannedData.badge}</p>
+                  {hasilRekod ? (
+                    <>
+                      <p className="text-sm text-green-600 mt-1">
+                        {hasilRekod.direkod.length} program direkodkan
+                      </p>
+                      <p className="text-[11px] text-green-700 mt-1">{hasilRekod.direkod.join(' · ')}</p>
+                      {hasilRekod.dilangkau.length > 0 && (
+                        <p className="text-[10px] text-amber-700 mt-2">
+                          Dilangkau kerana sudah disahkan: {hasilRekod.dilangkau.join(' · ')}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-green-600 mt-1">{scannedData.totalParticipants} peserta telah disahkan hadir</p>
+                      <p className="text-[10px] text-green-500 mt-2">{scannedData.badge}</p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -552,22 +654,93 @@ export const QRAttendanceScanner: React.FC<QRScannerProps> = ({ onVerified, veri
                     <School size={18} className="text-blue-700" />
                     <div>
                       <p className="font-bold text-blue-900">{scannedData.schoolName}</p>
-                      <p className="text-[10px] text-blue-600 font-mono">{scannedData.schoolCode} | {scannedData.badge}</p>
+                      <p className="text-[10px] text-blue-600 font-mono">
+                        {scannedData.schoolCode} | {scannedData.v === 4 ? 'SIRI ' + scannedData.siri : scannedData.badge}
+                      </p>
                     </div>
                   </div>
-                  
-                  <div className="bg-white rounded-lg p-3 mb-3">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Maklumat QR</p>
-                    <p className="text-xs text-gray-700">Jumlah peserta berdaftar: <strong>{scannedData.totalParticipants}</strong></p>
-                    <p className="text-[10px] text-gray-400 font-mono mt-1">Ref: {scannedData.ref}</p>
-                  </div>
 
-                  <button
-                    onClick={handleConfirmAttendance}
-                    className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 text-sm"
-                  >
-                    <CheckCircle size={18} /> Sahkan Kehadiran ({scannedData.totalParticipants} peserta)
-                  </button>
+                  {/* v4 — pecahan program dicari selepas imbasan, bukan dibawa
+                      oleh QR. Kad yang dicetak sebelum program kedua didaftar
+                      tetap menunjukkan kedua-duanya di sini. */}
+                  {scannedData.v === 4 ? (
+                    <>
+                      {memuatProgram && program.length === 0 && (
+                        <div className="bg-white rounded-lg p-4 mb-3 text-center text-xs text-gray-500">
+                          Mencari program sekolah ini...
+                        </div>
+                      )}
+
+                      {ralatProgram && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-xs text-red-700">
+                          {ralatProgram}
+                        </div>
+                      )}
+
+                      {!memuatProgram && !ralatProgram && program.length === 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800">
+                          Tiada pendaftaran diluluskan untuk sekolah ini dalam Siri {scannedData.siri}.
+                        </div>
+                      )}
+
+                      {program.length > 0 && (
+                        <div className="bg-white rounded-lg p-3 mb-3">
+                          <table className="w-full text-xs">
+                            <tbody>
+                              {program.map(pr => (
+                                <tr key={pr.badgeId} className="border-b border-gray-100 last:border-0">
+                                  <td className="py-1.5 font-bold text-gray-800">{pr.program}</td>
+                                  <td className="py-1.5 text-right text-gray-600 whitespace-nowrap">
+                                    {pr.peserta} peserta
+                                    {pr.pegawai > 0 && <span className="text-gray-400"> + {pr.pegawai} pegawai</span>}
+                                  </td>
+                                  <td className="py-1.5 pl-2 text-right">
+                                    {pr.disahkanPada
+                                      ? <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full font-bold">sudah</span>
+                                      : <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-bold">baharu</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                              <tr className="border-t-2 border-gray-200">
+                                <td className="py-1.5 font-bold text-gray-900">JUMLAH BAHARU</td>
+                                <td className="py-1.5 text-right font-bold text-gray-900 whitespace-nowrap" colSpan={2}>
+                                  {jumlahPeserta} peserta
+                                  {jumlahPegawai > 0 && <span className="text-gray-500 font-normal"> + {jumlahPegawai} pegawai</span>}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          <p className="text-[10px] text-gray-400 font-mono mt-2">Ref: {scannedData.ref}</p>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleConfirmSiri}
+                        disabled={memuatProgram || belumDisahkan.length === 0}
+                        className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 text-sm disabled:opacity-40"
+                      >
+                        <CheckCircle size={18} />
+                        {belumDisahkan.length === 0
+                          ? 'Semua program sudah disahkan'
+                          : 'Sahkan Kehadiran (' + belumDisahkan.length + ' program, ' + jumlahPeserta + ' peserta)'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="bg-white rounded-lg p-3 mb-3">
+                        <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">Maklumat QR</p>
+                        <p className="text-xs text-gray-700">Jumlah peserta berdaftar: <strong>{scannedData.totalParticipants}</strong></p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-1">Ref: {scannedData.ref}</p>
+                      </div>
+
+                      <button
+                        onClick={handleConfirmAttendance}
+                        className="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 text-sm"
+                      >
+                        <CheckCircle size={18} /> Sahkan Kehadiran ({scannedData.totalParticipants} peserta)
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 

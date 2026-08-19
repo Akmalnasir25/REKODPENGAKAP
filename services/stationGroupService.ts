@@ -24,6 +24,15 @@ export interface JadualStesen {
   year: number;
   siri: number;
   bilKumpulan: number;
+  /**
+   * Label setiap stesen, mengikut susunan.
+   *
+   * Disimpan bersama larian, bukan dikira semula setiap kali: label yang
+   * sudah dicetak tidak boleh berubah kerana seseorang menukar format
+   * kemudian. Larian lama tiada label tersimpan dan jatuh kembali kepada
+   * formula asal.
+   */
+  label: string[];
   createdAt: string;
   sekolah: SekolahStesen[];
   /**
@@ -42,15 +51,48 @@ export interface JadualStesen {
   pengujiDiperlukan: number | null;
 }
 
-/** Label mengikut bahagian: 12 kumpulan = 1A-6A + 1B-6B. */
-export const labelStesen = (bilKumpulan: number): string[] => {
+export type FormatLabel = 'bahagian' | 'nombor' | 'huruf' | 'tersuai';
+
+/** A, B, ... Z, AA, AB — sama seperti lajur hamparan. */
+const hurufKe = (i: number): string => {
+  let n = i, keluar = '';
+  do { keluar = String.fromCharCode(65 + (n % 26)) + keluar; n = Math.floor(n / 26) - 1; }
+  while (n >= 0);
+  return keluar;
+};
+
+/**
+ * Bahagian sesuatu label, untuk pemisahan halaman cetakan.
+ *
+ * Hanya label bentuk nombor+huruf (1A, 2B) mempunyai bahagian. 'A' atau '3'
+ * tidak: kalau setiap huruf dianggap bahagian, format A-B-C dengan 18 stesen
+ * akan mencetak 18 halaman.
+ */
+export const bahagianLabel = (label: string): string => {
+  const m = String(label).match(/^\d+([A-Za-z]+)$/);
+  return m ? m[1].toUpperCase() : '';
+};
+
+/**
+ * Label lalai bagi sesuatu format.
+ *
+ * 'bahagian' — 1A..6A, 1B..6B, enam setiap bahagian (asal)
+ * 'nombor'   — 1, 2, 3 ...
+ * 'huruf'    — A, B, C ...
+ *
+ * 'tersuai' tidak dijana di sini; admin membekalkan senarainya sendiri.
+ */
+export const labelStesen = (bilKumpulan: number, format: FormatLabel = 'bahagian'): string[] => {
+  const n = Math.max(1, bilKumpulan);
+  if (format === 'nombor') return Array.from({ length: n }, (_, i) => String(i + 1));
+  if (format === 'huruf') return Array.from({ length: n }, (_, i) => hurufKe(i));
+
   const perBahagian = 6;
-  const bahagian = Math.ceil(bilKumpulan / perBahagian);
-  const huruf = 'ABCDEFGH'.split('');
+  const bahagian = Math.ceil(n / perBahagian);
   const keluar: string[] = [];
   for (let b = 0; b < bahagian; b++) {
-    for (let i = 1; i <= perBahagian && keluar.length < bilKumpulan; i++) {
-      keluar.push(`${i}${huruf[b]}`);
+    for (let i = 1; i <= perBahagian && keluar.length < n; i++) {
+      keluar.push(`${i}${hurufKe(b)}`);
     }
   }
   return keluar;
@@ -135,10 +177,11 @@ export const ambilSekolahLayak = async (
 export const simpanJadual = async (
   badgeName: string, year: number, siri: number, bilKumpulan: number,
   agihan: { school_id: string; station_label: string; peserta: number }[],
+  label: string[],
 ): Promise<string> => {
   const { data, error } = await supabase.rpc('simpan_kumpulan_stesen', {
     p_badge_name: badgeName, p_year: year, p_siri: siri,
-    p_bil_kumpulan: bilKumpulan, p_agihan: agihan, p_nota: null,
+    p_bil_kumpulan: bilKumpulan, p_agihan: agihan, p_nota: null, p_label: label,
   });
   if (error) throw error;
   return data as string;
@@ -150,7 +193,7 @@ export const ambilJadual = async (
 ): Promise<JadualStesen | null> => {
   const { data, error } = await supabase
     .from('station_group_runs')
-    .select(`id, year, siri, bil_kumpulan, created_at, program_gabung, penguji_diperlukan,
+    .select(`id, year, siri, bil_kumpulan, created_at, program_gabung, penguji_diperlukan, label_stesen,
              badge:badge_id(name),
              sekolah:station_group_schools(station_label, peserta_snapshot, school:school_id(id, name))`)
     .eq('year', year).eq('siri', siri);
@@ -169,6 +212,9 @@ export const ambilJadual = async (
     year: (baris as any).year,
     siri: (baris as any).siri,
     bilKumpulan: (baris as any).bil_kumpulan,
+    label: (baris as any).label_stesen?.length
+      ? (baris as any).label_stesen
+      : labelStesen((baris as any).bil_kumpulan),
     createdAt: (baris as any).created_at,
     programGabung: (baris as any).program_gabung || [],
     pengujiDiperlukan: (baris as any).penguji_diperlukan ?? null,
@@ -260,6 +306,7 @@ export interface RingkasanPenguji {
   runId: string;
   badgeName: string;
   bilKumpulan: number;
+  label: string[];
   kuota: number | null;
   ditempatkan: number;
 }
@@ -281,7 +328,7 @@ export const ambilRingkasanPenguji = async (
 ): Promise<RingkasanPenguji[]> => {
   const [larian, penguji] = await Promise.all([
     supabase.from('station_group_runs')
-      .select('id, bil_kumpulan, penguji_diperlukan, badge:badge_id(name)')
+      .select('id, bil_kumpulan, penguji_diperlukan, label_stesen, badge:badge_id(name)')
       .eq('year', year).eq('siri', siri),
     supabase.from('station_group_examiners')
       .select('run_id').eq('year', year).eq('siri', siri),
@@ -300,6 +347,7 @@ export const ambilRingkasanPenguji = async (
       runId: r.id,
       badgeName: b?.name || '-',
       bilKumpulan: r.bil_kumpulan,
+      label: r.label_stesen?.length ? r.label_stesen : labelStesen(r.bil_kumpulan),
       kuota: r.penguji_diperlukan ?? null,
       ditempatkan: kira.get(r.id) || 0,
     };
@@ -374,9 +422,8 @@ export const pilihPenguji = (
  * sekolah sendiri selalunya mustahil dipenuhi (keputusan P2).
  */
 export const bahagikanPenguji = (
-  penguji: PengujiLayak[], bilKumpulan: number,
+  penguji: PengujiLayak[], label: string[],
 ): { personIc: string; stesen: string }[] => {
-  const label = labelStesen(bilKumpulan);
   // Disusun ikut nama supaya jana semula memberi hasil yang sama, bukan
   // susunan rawak yang berubah setiap kali tanpa sebab.
   const susun = [...penguji].sort((a, b) => a.nama.localeCompare(b.nama));

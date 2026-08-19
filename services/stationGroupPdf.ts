@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { JadualStesen } from './stationGroupService';
+import { JadualStesen, bahagianLabel } from './stationGroupService';
 
 interface Stesen {
   label: string;
@@ -46,9 +46,12 @@ export const muatTurunPdfStesen = (
   }
 
   // Dikumpulkan mengikut huruf bahagian, mengekalkan susunan label.
+  // Label tanpa bahagian (1, 2, 3 atau A, B, C) menjadi satu kumpulan
+  // tunggal berkunci ''. Tanpa ini, format A-B-C dengan 18 stesen akan
+  // mencetak 18 halaman, satu label setiap helaian.
   const bahagian = new Map<string, Stesen[]>();
   stesen.forEach(s => {
-    const h = s.label.slice(-1);
+    const h = bahagianLabel(s.label);
     bahagian.set(h, [...(bahagian.get(h) || []), s]);
   });
 
@@ -88,7 +91,9 @@ export const muatTurunPdfStesen = (
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(255);
-    doc.text(`BAHAGIAN ${huruf}  (STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label})`,
+    doc.text(huruf
+      ? `BAHAGIAN ${huruf}  (STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label})`
+      : `STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label}`,
       TEPI + 3, y + 4.8);
     if (!sembunyiKiraan) {
       doc.text(`${jumBahagian} peserta`, lebar - TEPI - 3, y + 4.8, { align: 'right' });
@@ -202,7 +207,7 @@ export const muatTurunPdfPenguji = (
 
   const bahagian = new Map<string, StesenPenguji[]>();
   stesen.forEach(s => {
-    const h = s.label.slice(-1);
+    const h = bahagianLabel(s.label);
     bahagian.set(h, [...(bahagian.get(h) || []), s]);
   });
 
@@ -227,7 +232,9 @@ export const muatTurunPdfPenguji = (
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
-    doc.text(`BAHAGIAN ${huruf}  (STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label})`, TEPI, y);
+    doc.text(huruf
+      ? `BAHAGIAN ${huruf}  (STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label})`
+      : `STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label}`, TEPI, y);
     y += 5;
 
     ls.forEach(s => {

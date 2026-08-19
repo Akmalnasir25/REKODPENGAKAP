@@ -306,3 +306,56 @@ kerana penguji yang sama sudah disahkan layak ketika dia mula-mula
 ditempatkan.
 
 **Migrasi 067.**
+
+## 16. Label dipilih admin, dan pepijat 18-jadi-12
+
+### Pepijat: bilangan kumpulan tidak diikut
+
+Admin menetapkan 18 kumpulan; 12 terhasil. Puncanya satu baris:
+
+```ts
+onChange={e => setBilKumpulan(... Number(e.target.value) || 12)}
+```
+
+Medan itu terkawal. Memadam '12' untuk menaip '18' menghasilkan rentetan
+kosong seketika, `Number('')` ialah 0, dan `|| 12` menulis semula **12** ke
+dalam kotak pada ketukan kekunci itu juga. Tiada apa yang kelihatan salah,
+dan 12 itulah yang dihantar ke pangkalan data.
+
+Medan kini dibenarkan kosong semasa menaip dan hanya kembali kepada 12 bila
+fokus keluar. Nilai lalai tidak lagi menulis ganti apa yang admin taip.
+
+### Label menjadi data
+
+Empat pilihan format:
+
+| Format | 18 kumpulan menghasilkan |
+|---|---|
+| `bahagian` | 1A…6A, 1B…6B, 1C…6C (asal) |
+| `nombor` | 1, 2, 3 … 18 |
+| `huruf` | A, B, C … R (dan AA, AB selepas Z) |
+| `tersuai` | apa sahaja yang ditaip, dipisah koma |
+
+Yang disimpan ialah **senarai label itu sendiri**, bukan nama formatnya.
+Dua sebab: format tersuai tidak boleh dijana semula daripada nama, dan label
+yang sudah dicetak tidak boleh berubah kerana seseorang menukar tetapan
+kemudian. Larian lama mempunyai NULL dan terus menggunakan formula asal,
+jadi tiada jadual sedia ada berubah labelnya.
+
+Jana menolak senarai yang salah bilangan atau mempunyai label berulang.
+Kekangan yang sama ditegakkan sekali lagi di dalam
+`simpan_kumpulan_stesen`, kerana menu pemindahan stesen dibina daripada
+label ini — label yang kurang bermakna baris tanpa tempat untuk dipindahkan.
+
+### Bahagian hanya wujud bila label berbentuk nombor+huruf
+
+Pemisahan halaman cetakan (§ sebelum ini) mengumpulkan mengikut huruf akhir.
+Kalau peraturan itu dibiarkan, format A-B-C dengan 18 stesen akan mencetak
+**18 halaman**, satu label setiap helaian.
+
+Jadi bahagian dikenal pasti hanya daripada corak nombor+huruf: `1A` ada
+bahagian A, manakala `7` dan `C` tiada. Tanpa bahagian, cetakan mengalir
+sebagai satu senarai. Disahkan dengan merender: 18 stesen menghasilkan 3
+halaman bagi format bahagian, satu halaman bagi nombor dan huruf.
+
+**Migrasi 068.**

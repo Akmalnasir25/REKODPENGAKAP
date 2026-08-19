@@ -3,7 +3,7 @@ import { Grid3x3, RefreshCw, Download, AlertTriangle, Users, RotateCcw } from 'l
 import { Badge } from '../types';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import {
-  labelStesen, bahagikanSekolah, ambilSekolahLayak,
+  labelStesen, bahagikanSekolah, ambilSekolahLayak, FormatLabel,
   simpanJadual, ambilJadual, pindahSekolah, JadualStesen,
   ambilPengujiLayak, bahagikanPenguji, simpanPenguji, ambilPenguji,
   pindahPenguji, ambilNamaStesen, simpanNamaStesen, simpanProgramGabung,
@@ -27,7 +27,12 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const [badgeName, setBadgeName] = useState('');
   const [year, setYear] = useState(tahunKini);
   const [siri, setSiri] = useState(2);
-  const [bilKumpulan, setBilKumpulan] = useState(12);
+  // Dibenarkan kosong semasa menaip. Versi lama menukar medan kosong kepada
+  // 12 pada setiap ketukan kekunci, jadi memadam '12' untuk menaip '18'
+  // menulis semula 12 tanpa sebarang tanda — dan 12 itulah yang dijana.
+  const [bilKumpulan, setBilKumpulan] = useState<number | ''>(12);
+  const [format, setFormat] = useState<FormatLabel>('bahagian');
+  const [labelTersuai, setLabelTersuai] = useState('');
 
   const [jadual, setJadual] = useState<JadualStesen | null>(null);
   const [paparan, setPaparan] = useState<'peserta' | 'penguji'>('peserta');
@@ -93,7 +98,8 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const jana = async () => {
     if (!badgeName) return;
     if (jadual && !confirm(
-      `Jadual bagi ${badgeName} Siri ${siri} ${year} sudah wujud.\n\n`
+      `Jadual bagi ${badgeName} Siri ${siri} ${year} sudah wujud (${jadual.bilKumpulan} stesen).\n\n`
+      + `Jadual baharu akan mempunyai ${bilangan} stesen.\n\n`
       + 'Menjana semula MEMADAM jadual sedia ada, termasuk sebarang pelarasan '
       + 'manual yang kau buat. Senarai yang sudah dicetak akan menjadi lapuk.\n\nTeruskan?'
     )) return;
@@ -105,8 +111,16 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         setRalat(`Tiada peserta diluluskan untuk ${badgeName} Siri ${siri} ${year}.`);
         return;
       }
-      const bakul = bahagikanSekolah(sekolah, bilKumpulan);
-      const label = labelStesen(bilKumpulan);
+      const label = labelDijana;
+      if (label.length !== bilangan) {
+        setRalat(`${label.length} label diberi untuk ${bilangan} kumpulan. Betulkan senarai label dahulu.`);
+        return;
+      }
+      if (new Set(label).size !== label.length) {
+        setRalat('Ada label yang berulang. Setiap stesen perlu label yang berbeza.');
+        return;
+      }
+      const bakul = bahagikanSekolah(sekolah, bilangan);
       const ikutId = new Map(sekolah.map(s => [s.schoolId, s]));
 
       const agihan = bakul.flatMap((ids, i) => ids.map(id => ({
@@ -115,7 +129,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         peserta: ikutId.get(id)?.peserta ?? 0,
       })));
 
-      await simpanJadual(badgeName, year, siri, bilKumpulan, agihan);
+      await simpanJadual(badgeName, year, siri, bilangan, agihan, label);
       await muat();
     } catch (e: any) {
       setRalat(e.message || 'Gagal menjana kumpulan.');
@@ -138,7 +152,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       // Kuota mengehadkan berapa yang diambil; selebihnya kekal dalam kolam
       // untuk program lain dalam siri ini.
       const dipilih = pilihPenguji(boleh, badgeName, kuota === '' ? null : kuota);
-      const agih = bahagikanPenguji(dipilih, jadual.bilKumpulan);
+      const agih = bahagikanPenguji(dipilih, jadual.label);
       const ikutIc = new Map(dipilih.map(p => [p.personIc, p]));
       await simpanPenguji(jadual.runId, year, siri, agih.map(a => ({
         personIc: a.personIc,
@@ -209,7 +223,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   // sentiasa mendahului 1B..6B tanpa mengira susunan baris dari pangkalan data.
   const stesen = useMemo(() => {
     if (!jadual) return [];
-    const label = labelStesen(jadual.bilKumpulan);
+    const label = jadual.label;
     return label.map(l => ({
       label: l,
       sekolah: jadual.sekolah.filter(s => s.stesen === l)
@@ -228,7 +242,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
 
   const stesenPenguji = useMemo(() => {
     if (!jadual) return [];
-    return labelStesen(jadual.bilKumpulan).map(l => ({
+    return jadual.label.map(l => ({
       label: l,
       nama: namaStesen[l] || '',
       penguji: penguji.filter(x => x.stesen === l).sort((m, n) => m.nama.localeCompare(n.nama)),
@@ -264,6 +278,15 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const jumlah = saiz.reduce((a, b) => a + b, 0);
   const jurang = saiz.length ? Math.max(...saiz) - Math.min(...saiz) : 0;
 
+  // Label yang AKAN digunakan bila Jana ditekan. Dipaparkan sebelum menjana
+  // supaya admin nampak apa yang dia dapat, bukan selepas jadual dibina.
+  const bilangan = bilKumpulan === '' ? 12 : bilKumpulan;
+  const labelDijana = useMemo(() => (
+    format === 'tersuai'
+      ? labelTersuai.split(',').map(x => x.trim()).filter(Boolean)
+      : labelStesen(bilangan, format)
+  ), [format, labelTersuai, bilangan]);
+
   const kelasPilih = 'p-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none';
 
   return (
@@ -293,8 +316,32 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
           <label className="block">
             <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Bil. Kumpulan</span>
             <input type="number" min="1" max="60" className={`${kelasPilih} w-24`} value={bilKumpulan}
-                   onChange={e => setBilKumpulan(Math.min(60, Math.max(1, Number(e.target.value) || 12)))} />
+                   onChange={e => setBilKumpulan(
+                     e.target.value === '' ? '' : Math.min(60, Math.max(1, Number(e.target.value))))}
+                   onBlur={() => { if (bilKumpulan === '') setBilKumpulan(12); }} />
           </label>
+
+          <label className="block">
+            <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Format Label</span>
+            <select className={`${kelasPilih} w-40`} value={format}
+                    onChange={e => setFormat(e.target.value as FormatLabel)}>
+              <option value="bahagian">1A · 2A … 1B · 2B</option>
+              <option value="nombor">1 · 2 · 3</option>
+              <option value="huruf">A · B · C</option>
+              <option value="tersuai">Tersuai…</option>
+            </select>
+          </label>
+
+          {format === 'tersuai' && (
+            <label className="block flex-1 min-w-[220px]">
+              <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                Label, pisah dengan koma ({labelDijana.length}/{bilangan})
+              </span>
+              <input className={`${kelasPilih} w-full`} value={labelTersuai}
+                     placeholder="cth: A1, A2, A3, B1, B2, B3"
+                     onChange={e => setLabelTersuai(e.target.value)} />
+            </label>
+          )}
 
           <button onClick={jana} disabled={menjana || !badgeName}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
@@ -512,7 +559,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                               onChange={e => pindah(x.schoolId, e.target.value)}
                               title={`Pindahkan ${x.sekolah} ke stesen lain`}
                             >
-                              {labelStesen(jadual.bilKumpulan).map(l => <option key={l} value={l}>{l}</option>)}
+                              {jadual.label.map(l => <option key={l} value={l}>{l}</option>)}
                             </select>
                           </li>
                         ))}
@@ -661,7 +708,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                               >
                                 {ringkasan.map(r => (
                                   <optgroup key={r.runId} label={r.badgeName}>
-                                    {labelStesen(r.bilKumpulan).map(l => (
+                                    {r.label.map(l => (
                                       <option key={`${r.runId}|${l}`} value={`${r.runId}|${l}`}>
                                         {r.runId === jadual.runId ? l : `${r.badgeName} ${l}`}
                                       </option>

@@ -746,9 +746,12 @@ const getParticipantRoleMeta = (participant?: Pick<SubmissionData, 'role' | 'isP
 };
 
 const getNameFontSize = (name: string): number => {
-  if (name.length > 34) return 10.4;
-  if (name.length > 27) return 11.6;
-  if (name.length > 18) return 13.1;
+  const longestWord = Math.max(0, ...String(name || '').split(/\s+/).map(word => word.length));
+  if (longestWord > 16) return 9.2;
+  if (longestWord > 13) return 10;
+  if (name.length > 34) return 10.2;
+  if (name.length > 27) return 11.2;
+  if (name.length > 18) return 12.8;
   return 14.8;
 };
 
@@ -1122,7 +1125,9 @@ const buildParticipantCardsDocument = (
     font-weight: 900;
     line-height: 1.06;
     text-wrap: balance;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
     letter-spacing: 0;
     text-shadow: 0 0.25mm 0.7mm rgba(255,255,255,0.78);
   }
@@ -1959,7 +1964,7 @@ export const ParticipantQRGenerator: React.FC<ParticipantQRGeneratorProps> = ({
                       </div>
                     </div>
                     <div className="mt-5 min-h-[72px] flex flex-col justify-center">
-                      <div className="inline-block self-center rounded-md bg-white/65 px-2 py-1 font-black text-slate-950 leading-tight break-words uppercase shadow-sm" style={{ fontSize: getNameFontSize(selectedCardName) + 2, textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>
+                      <div className="inline-block max-w-full self-center rounded-md bg-white/65 px-2 py-1 font-black text-slate-950 leading-tight uppercase shadow-sm" style={{ fontSize: getNameFontSize(selectedCardName) + 2, textShadow: '0 1px 3px rgba(255,255,255,0.78)', overflowWrap: 'normal', wordBreak: 'keep-all', hyphens: 'none' }}>
                         {selectedCardName}
                       </div>
                     </div>

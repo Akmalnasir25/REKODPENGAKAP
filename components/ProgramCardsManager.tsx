@@ -282,9 +282,19 @@ const waitForRenderableAssets = async (root: HTMLElement) => {
 const getVisualTitle = (record: ProgramCardRecord): string =>
   record.cardType === 'urusetia' ? (record.displayName || record.title) : (record.title || 'KAD UMUM');
 
+const getAccessTitleFontSize = (title: string): number => {
+  const clean = String(title || '').trim();
+  const longestWord = Math.max(0, ...clean.split(/\s+/).map(word => word.length));
+  if (longestWord > 16) return 9.4;
+  if (longestWord > 13) return 10.2;
+  if (clean.length > 34) return 10.2;
+  if (clean.length > 27) return 10.8;
+  return 11.6;
+};
+
 const getVisualSubtitle = (record: ProgramCardRecord): string => {
   if (record.cardType === 'urusetia') return record.tag || record.programName || 'URUSETIA';
-  return record.displayName && record.displayName !== record.title ? record.displayName : (record.tag || record.programName || '');
+  return '';
 };
 
 const getSpineLabel = (record: ProgramCardRecord): string =>
@@ -297,6 +307,12 @@ const buildProgramAccessCardHtml = (record: ProgramCardRecord, qrDataUrl: string
   const visualSubtitle = getVisualSubtitle(record).toUpperCase();
   const programLine = [record.programName, record.siri ? `Siri ${record.siri}` : '', record.programYear ? String(record.programYear) : ''].filter(Boolean).join(' | ');
   const cardBackgroundUrl = normalizePrintableUrl(CARD_SCOUT_CAMP_BG_URL);
+  const infoBoxHtml = record.cardType === 'urusetia'
+    ? `<section class="info-box">
+          ${programLine ? `<div class="info-line">${escapeHtml(programLine)}</div>` : '<div class="info-line">TAG URUSETIA</div>'}
+          ${detailEntries.map(([key, value]) => `<div class="info-small"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</div>`).join('')}
+        </section>`
+    : '';
 
   return `
     <article class="program-access-card" style="--accent:${palette.accent}; --accent-dark:${palette.accentDark}; --accent-soft:${palette.accentSoft}; --trim:${palette.trim}; --card-bg:url(${escapeHtml(cardBackgroundUrl)});">
@@ -312,15 +328,12 @@ const buildProgramAccessCardHtml = (record: ProgramCardRecord, qrDataUrl: string
           </div>
         </header>
         <section class="identity">
-          <div class="access-title">${escapeHtml(visualTitle)}</div>
+          <div class="access-title" style="font-size:${getAccessTitleFontSize(visualTitle)}pt">${escapeHtml(visualTitle)}</div>
           ${record.cardNumber ? `<div class="access-number">${escapeHtml(record.cardNumber)}</div>` : ''}
           ${visualSubtitle ? `<div class="access-subtitle">${escapeHtml(visualSubtitle)}</div>` : ''}
         </section>
-        <section class="info-box">
-          ${programLine ? `<div class="info-line">${escapeHtml(programLine)}</div>` : `<div class="info-line">${escapeHtml(record.cardType === 'urusetia' ? 'TAG URUSETIA' : 'PAS PROGRAM')}</div>`}
-          ${detailEntries.map(([key, value]) => `<div class="info-small"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}</div>`).join('')}
-        </section>
-        <section class="qr-box"><img class="access-qr" src="${qrDataUrl}" alt="QR kad" /></section>
+        ${infoBoxHtml}
+        <section class="qr-box"><img class="access-qr" src="${qrDataUrl}" alt="" /></section>
         <div class="bottom-trim"><span></span><span></span><span></span></div>
       </div>
     </article>
@@ -475,7 +488,9 @@ const buildProgramCardsDocument = (cards: string[], mode: 'single' | 'grid'): st
     line-height: 1.04;
     font-weight: 900;
     text-wrap: balance;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
     letter-spacing: 0;
     text-shadow: 0 0.25mm 0.7mm rgba(255,255,255,0.78);
   }
@@ -1171,17 +1186,19 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                       </div>
                     </div>
                     <div className="mt-5 flex min-h-[100px] flex-col justify-center">
-                      <div className="inline-block max-w-full self-center break-words rounded-md bg-white/65 px-2 py-1 text-[17px] font-black uppercase leading-tight text-slate-950 shadow-sm" style={{ textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>
+                      <div className="inline-block max-w-full self-center rounded-md bg-white/65 px-2 py-1 font-black uppercase leading-tight text-slate-950 shadow-sm" style={{ fontSize: Math.round(getAccessTitleFontSize(getVisualTitle(previewCard)) * 1.45), textShadow: '0 1px 3px rgba(255,255,255,0.78)', overflowWrap: 'normal', wordBreak: 'keep-all', hyphens: 'none' }}>
                         {getVisualTitle(previewCard)}
                       </div>
                       {previewCard.cardNumber && <div className="mt-2 inline-block max-w-full self-center rounded-md bg-white/70 px-2 py-1 text-[24px] font-black leading-none shadow-sm" style={{ color: previewPalette.accentDark, textShadow: '0 1px 3px rgba(255,255,255,0.78)' }}>{previewCard.cardNumber}</div>}
                       {getVisualSubtitle(previewCard) && <div className="mt-2 inline-block max-w-full self-center rounded bg-white/60 px-2 py-0.5 line-clamp-2 text-[10px] font-extrabold uppercase leading-tight text-slate-600">{getVisualSubtitle(previewCard)}</div>}
                     </div>
-                    <div className="mt-1 rounded-lg border bg-white/85 px-2.5 py-1.5 text-left text-[9px] font-extrabold leading-tight text-slate-800" style={{ borderLeftWidth: 4, borderLeftColor: previewPalette.trim }}>
-                      {[previewCard.programName, previewCard.siri ? `Siri ${previewCard.siri}` : '', previewCard.programYear ? String(previewCard.programYear) : ''].filter(Boolean).join(' | ') || (previewCard.cardType === 'urusetia' ? 'TAG URUSETIA' : 'PAS PROGRAM')}
-                    </div>
+                    {previewCard.cardType === 'urusetia' && (
+                      <div className="mt-1 rounded-lg border bg-white/85 px-2.5 py-1.5 text-left text-[9px] font-extrabold leading-tight text-slate-800" style={{ borderLeftWidth: 4, borderLeftColor: previewPalette.trim }}>
+                        {[previewCard.programName, previewCard.siri ? `Siri ${previewCard.siri}` : '', previewCard.programYear ? String(previewCard.programYear) : ''].filter(Boolean).join(' | ') || 'TAG URUSETIA'}
+                      </div>
+                    )}
                     <div className="mx-auto mt-2 flex min-h-[112px] w-[112px] items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
-                      {selectedPreviewQr ? <img src={selectedPreviewQr} alt="QR kad" className="h-[100px] w-[100px]" /> : <div className="text-[9px] font-bold text-slate-400">Menjana QR...</div>}
+                      {selectedPreviewQr ? <img src={selectedPreviewQr} alt="" className="h-[100px] w-[100px]" /> : <div className="text-[9px] font-bold text-slate-400">Menjana QR...</div>}
                     </div>
                     <div className="mt-auto flex h-3 items-end gap-1.5">
                       <span className="h-1 w-8 rounded-full" style={{ background: previewPalette.accentDark }} />

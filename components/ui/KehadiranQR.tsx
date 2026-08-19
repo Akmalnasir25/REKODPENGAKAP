@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import QRCode from "qrcode";
 import { QrCode, Printer, X } from "lucide-react";
 import { SubmissionData } from "../../types";
 
@@ -66,7 +67,30 @@ export const KehadiranQRGenerator: React.FC<KehadiranQRGeneratorProps> = ({ data
     icNumber: item.icNumber || '',
   });
 
-  const handlePrintAll = () => {
+  // QR dijana TEMPATAN. Versi asal memuatkannya dari api.qrserver.com,
+  // bermakna setiap kod memerlukan internet pada saat ia dipapar — dan ia
+  // dipapar di tapak perkhemahan, tempat talian paling tidak boleh dipercayai.
+  // Pustaka qrcode sudah ada dalam projek dan digunakan oleh penjana kad.
+  const janaQr = (item: any, saiz: number) =>
+    QRCode.toDataURL(buildQrPayload(item), { width: saiz, margin: 1 });
+
+  // Muatan berubah bila peserta bertukar, jadi imej dijana semula. Bendera
+  // batal menghalang hasil panggilan lama menimpa yang baharu.
+  const [qrTerpilih, setQrTerpilih] = useState('');
+  useEffect(() => {
+    if (!selectedParticipant) { setQrTerpilih(''); return; }
+    let batal = false;
+    janaQr(selectedParticipant, 400).then(url => { if (!batal) setQrTerpilih(url); })
+      .catch(() => { if (!batal) setQrTerpilih(''); });
+    return () => { batal = true; };
+  }, [selectedParticipant]);
+
+  const handlePrintAll = async () => {
+    // Semua imej dijana SEBELUM HTML dibina — templat itu rentetan biasa,
+    // jadi ia tidak boleh menunggu janji di dalam map().
+    const senarai = await Promise.all(
+      filteredParticipants.map(async p => ({ p, qrUrl: await janaQr(p, 200) })),
+    );
     const html = `<!DOCTYPE html><html><head><title>QR Peserta</title>
 <style>
   @page { size: A4; margin: 10mm; }
@@ -81,9 +105,7 @@ export const KehadiranQRGenerator: React.FC<KehadiranQRGeneratorProps> = ({ data
   .card .label { font-size: 7px; color: #aaa; margin-top: 1mm; }
 </style></head><body>
   <div class="grid">
-    ${filteredParticipants.map(p => {
-      const payload = encodeURIComponent(buildQrPayload(p));
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${payload}`;
+    ${senarai.map(({ p, qrUrl }) => {
       return `<div class="card">
         <img src="${qrUrl}" alt="QR" />
         <div class="name">${(p.student || '').toUpperCase()}</div>
@@ -100,9 +122,8 @@ export const KehadiranQRGenerator: React.FC<KehadiranQRGeneratorProps> = ({ data
     if (w) { w.document.write(html); w.document.close(); }
   };
 
-  const handlePrintSingle = (p: SubmissionData) => {
-    const payload = encodeURIComponent(buildQrPayload(p));
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${payload}`;
+  const handlePrintSingle = async (p: SubmissionData) => {
+    const qrUrl = await janaQr(p, 400);
     const html = `<!DOCTYPE html><html><head><title>QR ${p.student}</title>
 <style>
   @page { size: A4; margin: 15mm; }
@@ -161,7 +182,7 @@ export const KehadiranQRGenerator: React.FC<KehadiranQRGeneratorProps> = ({ data
                 </button>
                 <div className="border-2 border-gray-300 rounded-lg p-6 bg-white text-center max-w-sm w-full">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(buildQrPayload(selectedParticipant))}`}
+                    src={qrTerpilih}
                     alt="QR"
                     className="mx-auto"
                     style={{ width: '70mm', height: '70mm' }}

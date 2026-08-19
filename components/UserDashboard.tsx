@@ -25,6 +25,7 @@ import { BulkImportModal } from './BulkImportModal';
 import { NotificationBell } from './ui/NotificationCenter';
 import { PDFExportButton } from './ui/PDFExportButton';
 import { SchoolQRGenerator } from './ui/QRVerification';
+import { KehadiranQRGenerator } from './ui/KehadiranQR';
 import { WithdrawalsList } from './WithdrawalsList';
 import { SchoolLeaderRequestsTab } from './SchoolLeaderRequestsTab';
 import { FloatedStudentsTab } from './FloatedStudentsTab';
@@ -2002,6 +2003,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                             />
                             {filteredData.length > 0 && (
                               <SchoolQRGenerator data={filteredData} year={selectedYear} />
+                            )}
+                            {/* QR per peserta untuk kehadiran dan tarik diri. Berasingan
+                                daripada QR kad: kad guna token kekal, ini muatan
+                                type participant yang WithdrawalScanner jangka. */}
+                            {filteredData.length > 0 && (
+                              <KehadiranQRGenerator data={filteredData} year={selectedYear} />
                             )}
                         </div>
                     </div>

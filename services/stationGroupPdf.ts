@@ -55,11 +55,33 @@ export const muatTurunPdfStesen = (
   let y = daerahName ? 39 : 33;
   const LEBAR_KOL = (lebar - TEPI * 2 - 6) / 2;
 
+  // Setiap bahagian bermula pada halaman sendiri.
+  //
+  // Dahulunya bahagian mengalir bersambungan, jadi 1B boleh bermula di
+  // tengah halaman yang sama dengan 6A dan bakinya melimpah ke halaman
+  // berikut. Helaian itu diberikan kepada kumpulan yang berlainan pada hari
+  // ujian — bahagian yang terbelah antara dua helaian bermakna satu
+  // kumpulan memegang separuh senarai kumpulan yang lain.
+  let bahagianPertama = true;
+
   bahagian.forEach((ls, huruf) => {
     const jumBahagian = ls.reduce(
       (n, s) => n + s.sekolah.reduce((m, x) => m + x.peserta, 0), 0);
 
-    if (y > tinggi - 50) { doc.addPage(); y = 18; }
+    if (!bahagianPertama) {
+      doc.addPage();
+      y = 18;
+      // Halaman ini berdiri sendiri di tangan seseorang, jadi ia mesti
+      // menyebut program dan siri; tajuk penuh hanya ada pada halaman satu.
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(`${jadual.badgeName.toUpperCase()} ${jadual.year} — SIRI ${jadual.siri}`,
+        lebar / 2, y, { align: 'center' });
+      doc.setTextColor(0);
+      y += 7;
+    } else if (y > tinggi - 50) { doc.addPage(); y = 18; }
+    bahagianPertama = false;
 
     doc.setFillColor(30, 41, 59);
     doc.rect(TEPI, y, lebar - TEPI * 2, 7, 'F');
@@ -186,8 +208,23 @@ export const muatTurunPdfPenguji = (
 
   let y = daerahName ? 39 : 33;
 
+  // Sama seperti cetakan peserta: satu bahagian, satu helaian.
+  let bahagianPertama = true;
+
   bahagian.forEach((ls, huruf) => {
-    if (y > tinggi - 45) { doc.addPage(); y = 18; }
+    if (!bahagianPertama) {
+      doc.addPage();
+      y = 18;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(`${jadual.badgeName.toUpperCase()} ${jadual.year} — SIRI ${jadual.siri}`,
+        lebar / 2, y, { align: 'center' });
+      doc.setTextColor(0);
+      y += 7;
+    } else if (y > tinggi - 45) { doc.addPage(); y = 18; }
+    bahagianPertama = false;
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
     doc.text(`BAHAGIAN ${huruf}  (STESEN ${ls[0]?.label} – ${ls[ls.length - 1]?.label})`, TEPI, y);

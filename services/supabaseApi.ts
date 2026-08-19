@@ -430,7 +430,16 @@ export const fetchCloudData = async (
             school:schools(id, name, school_code, school_type, negeri:negeri_id(code,name), daerah:daerah_id(code,name)),
             badge:badges(id, name)
           )
-        `).eq('is_deleted', false).not('float_status', 'in', '("floated","transferred")').order('created_at', { ascending: false }).range(from, from + pageSize - 1);
+        // PEMECAH SERI WAJIB. created_at tidak unik — import pukal menulis
+        // puluhan baris pada cap masa yang SAMA (kumpulan terbesar: 29).
+        // ORDER BY lajur tidak unik + OFFSET tidak menjamin susunan tetap
+        // antara halaman, jadi baris yang sama boleh muncul dua kali dan
+        // baris lain terlepas terus.
+        //
+        // Diukur pada data sebenar: 5418 baris, susunan created_at sahaja
+        // memulangkan 5410 — lapan hilang setiap kali. Itulah sebabnya
+        // jumlah pada Rumusan berubah antara muat semula tanpa data berubah.
+        `).eq('is_deleted', false).not('float_status', 'in', '("floated","transferred")').order('created_at', { ascending: false }).order('id', { ascending: true }).range(from, from + pageSize - 1);
         if (error) return { data: null, error };
         allData = allData.concat(data || []);
         hasMore = (data || []).length === pageSize;

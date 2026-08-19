@@ -374,6 +374,19 @@ const writeDevScanCache = (record: ProgramCardRecord) => {
   }
 };
 
+const removeDevScanCache = (tokens: string[]) => {
+  if (!isDevPreview() || tokens.length === 0) return;
+  try {
+    const cache = JSON.parse(localStorage.getItem(DEV_CARD_SCAN_CACHE_KEY) || '{}') || {};
+    tokens.forEach(token => {
+      delete cache[token];
+    });
+    localStorage.setItem(DEV_CARD_SCAN_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Local preview cache is best effort.
+  }
+};
+
 const createLocalProgramCards = (inputs: ProgramCardInput[]): ProgramCardRecord[] => {
   const now = new Date().toISOString();
   const records = inputs.map(input => ({
@@ -402,8 +415,10 @@ const updateLocalProgramCard = (cardId: string, patch: Partial<ProgramCardInput>
 
 const revokeLocalProgramCard = (cardId: string): boolean => {
   const records = readLocalProgramCards();
+  const removed = records.find(card => card.id === cardId);
   const next = records.filter(card => card.id !== cardId);
   saveLocalProgramCards(next);
+  if (removed?.token) removeDevScanCache([removed.token]);
   return next.length !== records.length;
 };
 
@@ -854,6 +869,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
   const [dbUnavailable, setDbUnavailable] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [bulkFileName, setBulkFileName] = useState('');
+  const [bulkRevokeLoading, setBulkRevokeLoading] = useState(false);
   const qrCacheRef = useRef<Record<string, string>>({});
 
   const titleLabel = cardType === 'urusetia' ? 'Kad Urusetia' : 'Kad Umum Bernombor';
@@ -1202,6 +1218,53 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
     }
   };
 
+  const handleRevokeFiltered = async () => {
+    if (filteredCards.length === 0) return;
+    const label = cardType === 'urusetia' ? 'kad urusetia' : 'kad umum';
+    const confirmed = window.confirm(
+      `Padam ${filteredCards.length} ${label} yang sedang dipaparkan?\n\n` +
+      'Tindakan ini ikut carian/filter semasa dan QR kad tersebut akan dibatalkan.'
+    );
+    if (!confirmed) return;
+
+    setBulkRevokeLoading(true);
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const cardsToRemove = [...filteredCards];
+      let successCount = 0;
+
+      if (dbUnavailable && isDevPreview()) {
+        successCount = cardsToRemove.filter(card => revokeLocalProgramCard(card.id)).length;
+      } else {
+        for (let index = 0; index < cardsToRemove.length; index += 10) {
+          const batch = cardsToRemove.slice(index, index + 10);
+          const results = await Promise.all(
+            batch.map(card => revokeProgramCard(card.id, 'Dibatalkan pukal oleh admin').catch(() => false))
+          );
+          successCount += results.filter(Boolean).length;
+        }
+      }
+
+      if (successCount === 0) throw new Error('Tiada kad berjaya dipadam.');
+
+      const removedIds = new Set(cardsToRemove.map(card => card.id));
+      removeDevScanCache(cardsToRemove.map(card => card.token));
+      setCards(prev => prev.filter(card => !removedIds.has(card.id)));
+      if (selectedCard && removedIds.has(selectedCard.id)) setSelectedCardId('');
+      setNotice(`${successCount} daripada ${cardsToRemove.length} ${label} berjaya dipadam.`);
+      if (successCount < cardsToRemove.length) {
+        setError(`${cardsToRemove.length - successCount} ${label} gagal dipadam. Cuba refresh dan ulang untuk baki kad.`);
+      }
+    } catch (err: any) {
+      setError(String(err?.message || 'Gagal memadam kad pukal.'));
+    } finally {
+      setBulkRevokeLoading(false);
+      setSaving(false);
+    }
+  };
+
   const previewCard = selectedCard;
   const previewPalette = previewCard ? getRecordPalette(previewCard) : getColorPreset(DEFAULT_COLOR_BY_TYPE[cardType]);
 
@@ -1361,7 +1424,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
           <button
             type="button"
             onClick={handleCreate}
-            disabled={saving}
+            disabled={saving || bulkRevokeLoading}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50"
           >
             <Plus size={16} /> {saving ? 'Menjana...' : cardType === 'general' ? `Jana ${form.quantity || 1} Kad` : bulkUrusetiaEntries.length > 0 ? `Jana ${bulkUrusetiaEntries.length} Kad Urusetia` : 'Jana Kad Urusetia'}
@@ -1381,7 +1444,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                 <button
                   type="button"
                   onClick={handleDownloadPdf}
-                  disabled={filteredCards.length === 0 || pdfLoading || printing}
+                  disabled={filteredCards.length === 0 || pdfLoading || printing || bulkRevokeLoading}
                   className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   <Download size={14} /> {pdfLoading ? 'PDF...' : `PDF (${filteredCards.length})`}
@@ -1389,10 +1452,18 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => handlePrint(filteredCards)}
-                  disabled={filteredCards.length === 0 || pdfLoading || printing}
+                  disabled={filteredCards.length === 0 || pdfLoading || printing || bulkRevokeLoading}
                   className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-black text-white hover:bg-amber-700 disabled:opacity-50"
                 >
                   <Printer size={14} /> {printing ? 'Menjana...' : `Cetak (${filteredCards.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRevokeFiltered}
+                  disabled={filteredCards.length === 0 || saving || pdfLoading || printing || bulkRevokeLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-black text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Trash2 size={14} /> {bulkRevokeLoading ? 'Memadam...' : `Padam (${filteredCards.length})`}
                 </button>
               </div>
             </div>
@@ -1507,7 +1578,7 @@ export const ProgramCardsManager: React.FC<ProgramCardsManagerProps> = ({
                     <button type="button" onClick={handleSaveSelected} disabled={saving} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50">
                       <Save size={14} /> Simpan
                     </button>
-                    <button type="button" onClick={() => handlePrint([previewCard], 'single')} disabled={printing} className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-black text-white hover:bg-amber-700 disabled:opacity-50">
+                    <button type="button" onClick={() => handlePrint([previewCard], 'single')} disabled={printing || bulkRevokeLoading} className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-black text-white hover:bg-amber-700 disabled:opacity-50">
                       <Printer size={14} /> Cetak
                     </button>
                     <button type="button" onClick={handleRevokeSelected} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100 disabled:opacity-50">

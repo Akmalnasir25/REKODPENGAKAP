@@ -103,12 +103,17 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     (async () => {
       try {
         const { supabase } = await import('../services/supabaseClient');
+        // 'approved' sahaja — sama seperti apa yang imbasan QR sanggup rekod
+        // (migrasi 066). Sekolah 'submitted' tidak boleh diimbas langsung,
+        // jadi memasukkannya dalam penyebut mengekalkannya dalam "Belum Scan"
+        // selama-lamanya. Lajur siri dibawa: setiap siri ialah barisnya
+        // sendiri sejak migrasi 027.
         const { data, error } = await supabase
           .from('school_badge_status')
-          .select('school_id, status, school:school_id(id, name, school_code, negeri:negeri_id(code), daerah:daerah_id(code))')
+          .select('school_id, status, siri, school:school_id(id, name, school_code, negeri:negeri_id(code), daerah:daerah_id(code))')
           .eq('badge_id', selectedAttendanceBadgeId)
           .eq('year', new Date().getFullYear())
-          .in('status', ['submitted', 'approved', 'locked', 'reopened']);
+          .eq('status', 'approved');
         if (error) throw error;
         // Filter by negeri
         const filtered = (data || []).filter((r: any) => r.school?.negeri?.code === negeriCode);
@@ -124,12 +129,36 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
 
-  // Siri yang wujud dalam rekod kehadiran bagi program dipilih — kawal keterlihatan penapis Siri.
+  // Program dipilih ialah program berperingkat? Penapis siri dipapar
+  // berdasarkan ini, bukan berdasarkan apa yang kebetulan sudah diimbas.
+  const selectedBadgeSiriEnabled = useMemo(() => {
+    const badge = badges.find((b: any) => b.id === selectedAttendanceBadgeId);
+    return programSettings.some(p => p.badgeName === badge?.name && p.siriEnabled);
+  }, [badges, selectedAttendanceBadgeId, programSettings]);
+
+  // Siri yang WUJUD bagi program dipilih: daripada pendaftaran diluluskan,
+  // digabung dengan siri yang sudah ada rekod imbasan.
+  //
+  // Dahulunya senarai ini dibina daripada rekod imbasan sahaja. Akibatnya
+  // siri yang belum ada sebarang imbasan tiada dalam senarai — iaitu justru
+  // siri yang paling perlu dilihat pada pagi pertamanya, kerana di situlah
+  // senarai "Belum Scan" bermakna.
   const availableAttendanceSiris = useMemo(() => {
     const set = new Set<number>();
+    registeredSchools.forEach((r: any) => set.add(r.siri || 1));
     attendanceRecords.forEach((r: any) => set.add(r.siri || 1));
     return Array.from(set).sort((a, b) => a - b);
-  }, [attendanceRecords]);
+  }, [registeredSchools, attendanceRecords]);
+
+  // Penapis yang tersembunyi tidak boleh dibiarkan hidup. Bila pilihan siri
+  // tidak lagi wujud dalam senarai, dropdownnya lenyap dari skrin sementara
+  // nilainya kekal menapis segala-galanya keluar — statistik menjadi sifar
+  // tanpa sebarang kawalan untuk memulihkannya.
+  useEffect(() => {
+    if (selectedAttendanceSiri !== '' && !availableAttendanceSiris.includes(selectedAttendanceSiri)) {
+      setSelectedAttendanceSiri('');
+    }
+  }, [availableAttendanceSiris, selectedAttendanceSiri]);
 
   const attendanceRecordsFiltered = useMemo(() => {
     if (selectedAttendanceSiri === '') return attendanceRecords;
@@ -142,12 +171,21 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       return { scanned: 0, notScanned: 0, total: 0, percentage: 0, totalParticipants: 0, scannedSchools: [], notScannedSchools: [] };
     }
     const scannedSchoolIds = new Set(attendanceRecordsFiltered.map((r: any) => r.school?.school_code).filter(Boolean));
-    const registeredSchoolList = registeredSchools.map((r: any) => ({
-      id: r.school.id,
-      code: r.school.school_code,
-      name: r.school.name,
-      daerah: r.school?.daerah?.code || '-',
-    }));
+    // Penyebut mengikut siri dipilih. Sekolah yang mendaftar program sama
+    // dalam dua siri mempunyai dua baris; mod "Semua Siri" mengiranya
+    // sebagai SATU sekolah, bukan dua, supaya peratus kemajuan tidak jatuh
+    // separuh semata-mata kerana program itu berperingkat.
+    const dalamSiri = selectedAttendanceSiri === ''
+      ? registeredSchools
+      : registeredSchools.filter((r: any) => (r.siri || 1) === selectedAttendanceSiri);
+    const seen = new Set<string>();
+    const registeredSchoolList = dalamSiri.reduce((list: any[], r: any) => {
+      const code = r.school?.school_code;
+      if (!code || seen.has(code)) return list;
+      seen.add(code);
+      list.push({ id: r.school.id, code, name: r.school.name, daerah: r.school?.daerah?.code || '-' });
+      return list;
+    }, []);
     const scannedSchools = registeredSchoolList.filter((s: any) => scannedSchoolIds.has(s.code));
     const notScannedSchools = registeredSchoolList.filter((s: any) => !scannedSchoolIds.has(s.code));
     const total = registeredSchoolList.length;
@@ -163,7 +201,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       scannedSchools,
       notScannedSchools,
     };
-  }, [attendanceRecordsFiltered, registeredSchools, selectedAttendanceBadgeId]);
+  }, [attendanceRecordsFiltered, registeredSchools, selectedAttendanceBadgeId, selectedAttendanceSiri]);
 
   const handleDeleteAttendance = async (record: any) => {
     if (!confirm(`Padam rekod kehadiran untuk ${record.school?.name || ''} (${record.badge?.name || ''})?`)) return;
@@ -995,7 +1033,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                         </option>
                       ))}
                     </select>
-                    {availableAttendanceSiris.length > 1 && (
+                    {selectedAttendanceBadgeId && (selectedBadgeSiriEnabled || availableAttendanceSiris.length > 1) && (
                       <div className="mt-2">
                         <label className="block text-xs font-bold text-purple-600 uppercase mb-1">Penapis Siri</label>
                         <select
@@ -1086,18 +1124,27 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                           ) : (
                             <div className="space-y-2 max-h-60 overflow-y-auto">
                               {attendanceStats.scannedSchools.map((s: any, i: number) => {
-                                const record = attendanceRecordsFiltered.find((r: any) => r.school?.school_code === s.code);
+                                // Sekolah boleh mempunyai rekod dalam lebih
+                                // daripada satu siri. Mengambil yang pertama
+                                // sahaja menyembunyikan yang lain tanpa
+                                // sebarang tanda.
+                                const recs = attendanceRecordsFiltered.filter((r: any) => r.school?.school_code === s.code);
+                                const peserta = recs.reduce((n: number, r: any) => n + (r.participant_count || 0), 0);
+                                const siriList = Array.from(new Set(recs.map((r: any) => r.siri || 1))).sort((a: any, b: any) => a - b);
+                                const terakhir = recs.reduce((t: any, r: any) => (!t || new Date(r.verified_at) > new Date(t.verified_at) ? r : t), null as any);
                                 return (
                                   <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-4 py-2">
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
                                       <p className="text-[10px] text-slate-500">
-                                        <span className="font-mono">{s.code}</span> · {s.daerah} · <span className="text-green-700 font-bold">{record?.participant_count || 0} peserta</span>
-                                        {(record?.siri || 1) > 1 && <span className="text-purple-600 font-bold"> · Siri {record.siri}</span>}
+                                        <span className="font-mono">{s.code}</span> · {s.daerah} · <span className="text-green-700 font-bold">{peserta} peserta</span>
+                                        {(siriList.length > 1 || Number(siriList[0]) > 1) && (
+                                          <span className="text-purple-600 font-bold"> · Siri {siriList.join(', ')}</span>
+                                        )}
                                       </p>
                                     </div>
                                     <span className="text-[10px] text-green-600 font-mono">
-                                      {record && new Date(record.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
+                                      {terakhir && new Date(terakhir.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                   </div>
                                 );

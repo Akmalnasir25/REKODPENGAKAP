@@ -17,6 +17,7 @@ import { WithdrawalsList } from './WithdrawalsList';
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { ParticipantCardsTab } from './ParticipantCardsTab';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+import { StatistikKehadiranProgram } from './ui/StatistikKehadiranProgram';
 import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
 import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminRegionalPassword, recordAttendanceVerification, getAttendanceVerifications, deleteAttendanceVerification, addDaerah, updateDaerah, deleteDaerah, getProgramSettings, ProgramSetting } from '../services/supabaseApi';
@@ -75,133 +76,27 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [deletingAttendanceId, setDeletingAttendanceId] = useState<string | null>(null);
-  const [selectedAttendanceBadgeId, setSelectedAttendanceBadgeId] = useState<string>('');
-  const [selectedAttendanceSiri, setSelectedAttendanceSiri] = useState<number | ''>('');
   const [attendanceScanSiri, setAttendanceScanSiri] = useState(1);
   const [programSettings, setProgramSettings] = useState<ProgramSetting[]>([]);
   useEffect(() => { getProgramSettings(new Date().getFullYear()).then(setProgramSettings); }, []);
-  const [registeredSchools, setRegisteredSchools] = useState<any[]>([]);
 
   const loadAttendanceRecords = useCallback(async () => {
     setAttendanceLoading(true);
     try {
-      const records = await getAttendanceVerifications(new Date().getFullYear(), undefined, negeriCode, selectedAttendanceBadgeId || undefined);
+      const records = await getAttendanceVerifications(new Date().getFullYear(), undefined, negeriCode);
       setAttendanceRecords(records);
     } catch (e) {
       console.error('Failed to load attendance:', e);
     } finally {
       setAttendanceLoading(false);
     }
-  }, [negeriCode, selectedAttendanceBadgeId]);
+  }, [negeriCode]);
 
-  // Load registered schools for selected badge (from school_badge_status)
-  useEffect(() => {
-    if (!selectedAttendanceBadgeId) {
-      setRegisteredSchools([]);
-      return;
-    }
-    (async () => {
-      try {
-        const { supabase } = await import('../services/supabaseClient');
-        // 'approved' sahaja — sama seperti apa yang imbasan QR sanggup rekod
-        // (migrasi 066). Sekolah 'submitted' tidak boleh diimbas langsung,
-        // jadi memasukkannya dalam penyebut mengekalkannya dalam "Belum Scan"
-        // selama-lamanya. Lajur siri dibawa: setiap siri ialah barisnya
-        // sendiri sejak migrasi 027.
-        const { data, error } = await supabase
-          .from('school_badge_status')
-          .select('school_id, status, siri, school:school_id(id, name, school_code, negeri:negeri_id(code), daerah:daerah_id(code))')
-          .eq('badge_id', selectedAttendanceBadgeId)
-          .eq('year', new Date().getFullYear())
-          .eq('status', 'approved');
-        if (error) throw error;
-        // Filter by negeri
-        const filtered = (data || []).filter((r: any) => r.school?.negeri?.code === negeriCode);
-        setRegisteredSchools(filtered);
-      } catch (e) {
-        console.error('Failed to load registered schools:', e);
-        setRegisteredSchools([]);
-      }
-    })();
-  }, [selectedAttendanceBadgeId, negeriCode]);
 
   useEffect(() => {
     if (tab === 'attendance') loadAttendanceRecords();
   }, [tab, loadAttendanceRecords]);
 
-  // Program dipilih ialah program berperingkat? Penapis siri dipapar
-  // berdasarkan ini, bukan berdasarkan apa yang kebetulan sudah diimbas.
-  const selectedBadgeSiriEnabled = useMemo(() => {
-    const badge = badges.find((b: any) => b.id === selectedAttendanceBadgeId);
-    return programSettings.some(p => p.badgeName === badge?.name && p.siriEnabled);
-  }, [badges, selectedAttendanceBadgeId, programSettings]);
-
-  // Siri yang WUJUD bagi program dipilih: daripada pendaftaran diluluskan,
-  // digabung dengan siri yang sudah ada rekod imbasan.
-  //
-  // Dahulunya senarai ini dibina daripada rekod imbasan sahaja. Akibatnya
-  // siri yang belum ada sebarang imbasan tiada dalam senarai — iaitu justru
-  // siri yang paling perlu dilihat pada pagi pertamanya, kerana di situlah
-  // senarai "Belum Scan" bermakna.
-  const availableAttendanceSiris = useMemo(() => {
-    const set = new Set<number>();
-    registeredSchools.forEach((r: any) => set.add(r.siri || 1));
-    attendanceRecords.forEach((r: any) => set.add(r.siri || 1));
-    return Array.from(set).sort((a, b) => a - b);
-  }, [registeredSchools, attendanceRecords]);
-
-  // Penapis yang tersembunyi tidak boleh dibiarkan hidup. Bila pilihan siri
-  // tidak lagi wujud dalam senarai, dropdownnya lenyap dari skrin sementara
-  // nilainya kekal menapis segala-galanya keluar — statistik menjadi sifar
-  // tanpa sebarang kawalan untuk memulihkannya.
-  useEffect(() => {
-    if (selectedAttendanceSiri !== '' && !availableAttendanceSiris.includes(selectedAttendanceSiri)) {
-      setSelectedAttendanceSiri('');
-    }
-  }, [availableAttendanceSiris, selectedAttendanceSiri]);
-
-  const attendanceRecordsFiltered = useMemo(() => {
-    if (selectedAttendanceSiri === '') return attendanceRecords;
-    return attendanceRecords.filter((r: any) => (r.siri || 1) === selectedAttendanceSiri);
-  }, [attendanceRecords, selectedAttendanceSiri]);
-
-  // Calculate attendance statistics
-  const attendanceStats = useMemo(() => {
-    if (!selectedAttendanceBadgeId) {
-      return { scanned: 0, notScanned: 0, total: 0, percentage: 0, totalParticipants: 0, scannedSchools: [], notScannedSchools: [] };
-    }
-    const scannedSchoolIds = new Set(attendanceRecordsFiltered.map((r: any) => r.school?.school_code).filter(Boolean));
-    // Penyebut mengikut siri dipilih. Sekolah yang mendaftar program sama
-    // dalam dua siri mempunyai dua baris; mod "Semua Siri" mengiranya
-    // sebagai SATU sekolah, bukan dua, supaya peratus kemajuan tidak jatuh
-    // separuh semata-mata kerana program itu berperingkat.
-    const dalamSiri = selectedAttendanceSiri === ''
-      ? registeredSchools
-      : registeredSchools.filter((r: any) => (r.siri || 1) === selectedAttendanceSiri);
-    const seen = new Set<string>();
-    const registeredSchoolList = dalamSiri.reduce((list: any[], r: any) => {
-      const code = r.school?.school_code;
-      if (!code || seen.has(code)) return list;
-      seen.add(code);
-      list.push({ id: r.school.id, code, name: r.school.name, daerah: r.school?.daerah?.code || '-' });
-      return list;
-    }, []);
-    const scannedSchools = registeredSchoolList.filter((s: any) => scannedSchoolIds.has(s.code));
-    const notScannedSchools = registeredSchoolList.filter((s: any) => !scannedSchoolIds.has(s.code));
-    const total = registeredSchoolList.length;
-    const scanned = scannedSchools.length;
-    const totalParticipants = attendanceRecordsFiltered.reduce((sum, r) => sum + (r.participant_count || 0), 0);
-    const percentage = total > 0 ? Math.round((scanned / total) * 100) : 0;
-    return {
-      scanned,
-      notScanned: notScannedSchools.length,
-      total,
-      percentage,
-      totalParticipants,
-      scannedSchools,
-      notScannedSchools,
-    };
-  }, [attendanceRecordsFiltered, registeredSchools, selectedAttendanceBadgeId, selectedAttendanceSiri]);
 
   const handleDeleteAttendance = async (record: any) => {
     if (!confirm(`Padam rekod kehadiran untuk ${record.school?.name || ''} (${record.badge?.name || ''})?`)) return;
@@ -260,11 +155,17 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     });
   }, [badges, negeriCode]);
 
+  // Had siri bagi kad lama (v2/v3) yang muatannya tidak membawa siri.
+  // Dahulunya had ini diambil daripada program yang dipilih dalam bahagian
+  // STATISTIK — dua bahagian skrin yang tiada kaitan, terikat melalui satu
+  // pemboleh ubah. Kini ia daripada tetapan program dalam skop ini.
   const scanTargetMaxSiri = useMemo(() => {
-    const badge = attendanceBadges.find((b: any) => b.id === selectedAttendanceBadgeId);
-    const s = programSettings.find(p => p.badgeName === badge?.name && p.siriEnabled);
-    return s?.maxSiri || 5;
-  }, [attendanceBadges, selectedAttendanceBadgeId, programSettings]);
+    const namaDalamSkop = new Set(attendanceBadges.map((b: any) => b.name));
+    const had = programSettings
+      .filter(p => p.siriEnabled && namaDalamSkop.has(p.badgeName))
+      .reduce((n, p) => Math.max(n, p.maxSiri || 0), 0);
+    return had || 5;
+  }, [attendanceBadges, programSettings]);
   useEffect(() => { if (attendanceScanSiri > scanTargetMaxSiri) setAttendanceScanSiri(1); }, [scanTargetMaxSiri]);
 
   const filteredData = useMemo(() => selectedDaerahFilter === 'ALL'
@@ -1008,183 +909,14 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                   />
                 </div>
 
-                {/* Badge Filter with Full Statistics */}
-                <div className="bg-white rounded-xl shadow p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                      <BarChart3 size={18} className="text-indigo-600" /> Statistik Kehadiran Mengikut Program
-                    </h3>
-                    <button onClick={loadAttendanceRecords} disabled={attendanceLoading} className="text-blue-600 hover:bg-blue-50 p-2 rounded-full transition">
-                      <RefreshCw size={14} className={attendanceLoading ? 'animate-spin' : ''} />
-                    </button>
-                  </div>
-
-                  <div className="mb-6">
-                    <label className="block text-xs font-bold text-slate-600 uppercase mb-2">Pilih Program/Badge</label>
-                    <select
-                      value={selectedAttendanceBadgeId}
-                      onChange={(e) => { setSelectedAttendanceBadgeId(e.target.value); setSelectedAttendanceSiri(''); }}
-                      className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                      <option value="">-- Sila Pilih Program --</option>
-                      {attendanceBadges.map((b: any) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedAttendanceBadgeId && (selectedBadgeSiriEnabled || availableAttendanceSiris.length > 1) && (
-                      <div className="mt-2">
-                        <label className="block text-xs font-bold text-purple-600 uppercase mb-1">Penapis Siri</label>
-                        <select
-                          value={selectedAttendanceSiri}
-                          onChange={(e) => setSelectedAttendanceSiri(e.target.value ? Number(e.target.value) : '')}
-                          className="w-full p-2 border border-purple-200 rounded-lg text-sm bg-purple-50 text-purple-700 font-bold focus:ring-2 focus:ring-purple-500"
-                        >
-                          <option value="">Semua Siri</option>
-                          {availableAttendanceSiris.map(s => <option key={s} value={s}>Siri {s}</option>)}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-
-                  {selectedAttendanceBadgeId ? (
-                    attendanceLoading ? (
-                      <div className="text-center py-8">
-                        <LoadingSpinner size="lg" color="border-indigo-500" />
-                        <p className="text-xs text-slate-400 mt-3">Memuatkan statistik...</p>
-                      </div>
-                    ) : (
-                      <div>
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                          <div className="bg-green-50 rounded-lg p-4 text-center border border-green-100">
-                            <p className="text-2xl font-bold text-green-700">{attendanceStats.scanned}</p>
-                            <p className="text-xs text-green-600 font-medium">Dah Scan</p>
-                          </div>
-                          <div className="bg-orange-50 rounded-lg p-4 text-center border border-orange-100">
-                            <p className="text-2xl font-bold text-orange-700">{attendanceStats.notScanned}</p>
-                            <p className="text-xs text-orange-600 font-medium">Belum Scan</p>
-                          </div>
-                          <div className="bg-indigo-50 rounded-lg p-4 text-center border border-indigo-100">
-                            <p className="text-2xl font-bold text-indigo-700">{attendanceStats.percentage}%</p>
-                            <p className="text-xs text-indigo-600 font-medium">Kemajuan</p>
-                          </div>
-                          <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-100">
-                            <p className="text-2xl font-bold text-blue-700">{attendanceStats.totalParticipants}</p>
-                            <p className="text-xs text-blue-600 font-medium">Jumlah Peserta</p>
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="mb-6">
-                          <div className="flex justify-between text-xs text-slate-600 mb-1">
-                            <span>Kemajuan Scan ({attendanceStats.scanned} / {attendanceStats.total} Sekolah)</span>
-                            <span className="font-bold">{attendanceStats.percentage}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                            <div
-                              className="bg-gradient-to-r from-green-500 to-indigo-600 h-3 rounded-full transition-all duration-500"
-                              style={{ width: `${attendanceStats.percentage}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Tab: Dah Scan / Belum Scan */}
-                        <div className="border-b border-slate-200 mb-4">
-                          <nav className="flex gap-6">
-                            <button
-                              className="py-2 px-1 border-b-2 border-green-500 text-green-700 font-bold text-sm flex items-center gap-2"
-                              onClick={() => {
-                                const el = document.getElementById('scanned-tab');
-                                el?.scrollIntoView({ behavior: 'smooth' });
-                              }}
-                            >
-                              <CheckCircle size={14} /> Dah Scan ({attendanceStats.scanned})
-                            </button>
-                            <button
-                              className="py-2 px-1 border-b-2 border-orange-500 text-orange-700 font-bold text-sm flex items-center gap-2"
-                              onClick={() => {
-                                const el = document.getElementById('not-scanned-tab');
-                                el?.scrollIntoView({ behavior: 'smooth' });
-                              }}
-                            >
-                              <AlertTriangle size={14} /> Belum Scan ({attendanceStats.notScanned})
-                            </button>
-                          </nav>
-                        </div>
-
-                        {/* Dah Scan List */}
-                        <div id="scanned-tab" className="mb-6">
-                          <h4 className="text-xs font-bold text-slate-700 uppercase mb-3 flex items-center gap-2">
-                            <CheckCircle size={12} className="text-green-500" /> Sekolah Yang Dah Scan
-                          </h4>
-                          {attendanceStats.scannedSchools.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic p-4 bg-slate-50 rounded">Belum ada sekolah yang telah scan kehadiran untuk program ini.</p>
-                          ) : (
-                            <div className="space-y-2 max-h-60 overflow-y-auto">
-                              {attendanceStats.scannedSchools.map((s: any, i: number) => {
-                                // Sekolah boleh mempunyai rekod dalam lebih
-                                // daripada satu siri. Mengambil yang pertama
-                                // sahaja menyembunyikan yang lain tanpa
-                                // sebarang tanda.
-                                const recs = attendanceRecordsFiltered.filter((r: any) => r.school?.school_code === s.code);
-                                const peserta = recs.reduce((n: number, r: any) => n + (r.participant_count || 0), 0);
-                                const siriList = Array.from(new Set(recs.map((r: any) => r.siri || 1))).sort((a: any, b: any) => a - b);
-                                const terakhir = recs.reduce((t: any, r: any) => (!t || new Date(r.verified_at) > new Date(t.verified_at) ? r : t), null as any);
-                                return (
-                                  <div key={i} className="flex items-center justify-between bg-green-50 border border-green-100 rounded-lg px-4 py-2">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
-                                      <p className="text-[10px] text-slate-500">
-                                        <span className="font-mono">{s.code}</span> · {s.daerah} · <span className="text-green-700 font-bold">{peserta} peserta</span>
-                                        {(siriList.length > 1 || Number(siriList[0]) > 1) && (
-                                          <span className="text-purple-600 font-bold"> · Siri {siriList.join(', ')}</span>
-                                        )}
-                                      </p>
-                                    </div>
-                                    <span className="text-[10px] text-green-600 font-mono">
-                                      {terakhir && new Date(terakhir.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Belum Scan List */}
-                        <div id="not-scanned-tab">
-                          <h4 className="text-xs font-bold text-slate-700 uppercase mb-3 flex items-center gap-2">
-                            <AlertTriangle size={12} className="text-orange-500" /> Sekolah Yang Belum Scan
-                          </h4>
-                          {attendanceStats.notScannedSchools.length === 0 ? (
-                            <p className="text-xs text-green-600 italic p-4 bg-green-50 rounded border border-green-100 font-bold">🎉 Semua sekolah telah scan kehadiran untuk program ini!</p>
-                          ) : (
-                            <div className="space-y-2 max-h-60 overflow-y-auto">
-                              {attendanceStats.notScannedSchools.map((s: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-lg px-4 py-2">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-slate-800 truncate">{s.name}</p>
-                                    <p className="text-[10px] text-slate-500">
-                                      <span className="font-mono">{s.code}</span> · {s.daerah}
-                                    </p>
-                                  </div>
-                                  <span className="text-[10px] text-orange-600 font-bold">Belum Scan</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  ) : (
-                    <div className="text-center py-12">
-                      <ScanLine size={48} className="mx-auto text-slate-200 mb-3" />
-                      <p className="text-sm text-slate-400">Sila pilih program di atas untuk lihat statistik kehadiran penuh.</p>
-                    </div>
-                  )}
-                </div>
+                <StatistikKehadiranProgram
+                  badges={attendanceBadges}
+                  records={attendanceRecords}
+                  loading={attendanceLoading}
+                  onRefresh={loadAttendanceRecords}
+                  negeriCode={negeriCode}
+                  tunjukDaerah
+                />
 
                 {/* Today's Records */}
                 <div className="bg-white rounded-xl shadow p-6">

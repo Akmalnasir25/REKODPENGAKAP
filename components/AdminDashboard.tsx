@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { SubmissionData, School, Badge, UserProfile, SchoolType } from '../types';
-import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, TrendingUp, MapPin, X, Layers } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Trash2, Search, User, Shield, GraduationCap, Calendar, Phone, Crown, School as SchoolIcon, Users, ListFilter, PieChart, AlertCircle, Eye, EyeOff, Printer, CheckCircle, Award, Archive, Medal, MapPin, X, Layers } from 'lucide-react';
 import { getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { ProgramSummaryView } from './ProgramSummaryView';
 import { LoadingSpinner } from './ui/LoadingSpinner';
@@ -11,7 +11,6 @@ import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
 import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
 import { FloatStudentModal } from './FloatStudentModal';
 import { safeGetYear, deduplicateRecords, computeRoleStats, parseBadgeStatusKey, gabungPegawaiSiri } from '../utils/dataProcessing';
-import { LOGO_URL } from '../constants';
 
 interface AdminDashboardProps {
   data: SubmissionData[];
@@ -38,8 +37,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDelete,
   onFloat,
   readOnlyBadges,
-  logoUrl = LOGO_URL,
-  issuerLabel = 'PENGAKAP MALAYSIA',
 }) => {
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState(currentYear);
@@ -510,10 +507,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const TabButton = ({ id, label, icon: Icon, colorClass }: { id: TabType, label: string, icon: any, colorClass: string }) => (
       <button
         onClick={() => setActiveTab(id)}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+        className={`admin-dashboard-tab flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition whitespace-nowrap ${
             activeTab === id 
             ? `${colorClass} text-white shadow-md` 
-            : 'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'
+            : 'bg-slate-50 text-slate-600 hover:bg-white border border-slate-200'
         }`}
       >
           <Icon size={14} /> {label}
@@ -580,7 +577,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         
         {/* PENDING APPROVAL ALERT */}
         {pendingCount > 0 && !showDrafts && (
-            <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg shadow-sm flex items-start gap-3 animate-[fadeIn_0.5s_ease-out]">
+            <div className="admin-pro-panel-card border-l-4 border-yellow-500 p-4 rounded-xl flex items-start gap-3 animate-[fadeIn_0.5s_ease-out]">
                 <AlertCircle className="text-yellow-600 shrink-0 mt-0.5" />
                 <div>
                     <h3 className="text-yellow-800 font-bold text-sm">Menunggu Pengesahan</h3>
@@ -594,43 +591,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Filters Bar */}
         {activeTab !== 'archive' && (
-            <div className="flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-3 bg-white p-4 rounded-xl shadow">
-                <div className="flex items-center gap-2">
-                    <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                        <Calendar size={14}/> Tahun Semasa:
-                    </label>
-                    <select 
-                        className="p-2 border rounded-lg font-bold text-blue-800 outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50 text-sm"
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                    >
-                        {availableYears.map(y => (
-                            <option key={y} value={y}>{y}</option>
-                        ))}
-                    </select>
+            <div className="admin-dashboard-filter-card admin-pro-panel-card p-4 md:p-5 rounded-xl">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                    <div>
+                        <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                            <ListFilter size={16} className="text-emerald-700" /> Tapisan Data
+                        </h2>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">Susun paparan ikut tahun, program, siri, jenis, unit dan sekolah.</p>
+                    </div>
+                    <div className="admin-dashboard-filter-actions">
+                        <button
+                            onClick={() => setShowDrafts(!showDrafts)}
+                            className={`admin-dashboard-filter-toggle admin-dashboard-filter-toggle-inline ${showDrafts ? 'is-on' : 'is-off'}`}
+                            title={showDrafts ? "Sembunyikan data draft/pending" : "Paparkan semua data termasuk draft"}
+                        >
+                            {showDrafts ? <Eye size={14} /> : <EyeOff size={14} />}
+                            {showDrafts ? 'Semua Data' : 'Disahkan Sahaja'}
+                        </button>
+                        <div className="admin-dashboard-filter-count">
+                            <span>Rekod Dipaparkan</span>
+                            <strong>{submittedData.length}</strong>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="w-px h-8 bg-gray-200 hidden md:block"></div>
-
-                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                    <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                        Program:
+                <div className="admin-dashboard-filter-grid">
+                    <label className="admin-dashboard-filter-field">
+                        <span><Calendar size={14} /> Tahun Semasa</span>
+                        <select
+                            className="admin-dashboard-filter-input admin-dashboard-filter-input-blue"
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        >
+                            {availableYears.map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
                     </label>
-                    <select
-                        className="p-2 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full md:w-auto"
-                        value={selectedBadgeFilter}
-                        onChange={(e) => { setSelectedBadgeFilter(e.target.value); setSelectedSiriFilter(''); }}
-                    >
-                        <option value="">Semua Program</option>
-                        {availableBadges.map((b, i) => (
-                            <option key={i} value={b}>{b}</option>
-                        ))}
-                    </select>
+
+                    <label className="admin-dashboard-filter-field md:col-span-2 xl:col-span-2">
+                        <span><Medal size={14} /> Program</span>
+                        <select
+                            className="admin-dashboard-filter-input"
+                            value={selectedBadgeFilter}
+                            onChange={(e) => { setSelectedBadgeFilter(e.target.value); setSelectedSiriFilter(''); }}
+                        >
+                            <option value="">Semua Program</option>
+                            {availableBadges.map((b, i) => (
+                                <option key={i} value={b}>{b}</option>
+                            ))}
+                        </select>
+                    </label>
+
                     {siriEnabledBadgeNames.size > 0 && (
-                        <div className="flex items-center gap-1">
-                            <Layers size={14} className="text-purple-500" />
+                        <label className="admin-dashboard-filter-field">
+                            <span><Layers size={14} /> Siri</span>
                             <select
-                                className="p-2 border rounded-lg text-purple-700 outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50 text-sm font-bold w-full md:w-auto"
+                                className="admin-dashboard-filter-input admin-dashboard-filter-input-purple"
                                 value={selectedSiriFilter}
                                 onChange={(e) => setSelectedSiriFilter(e.target.value ? Number(e.target.value) : '')}
                                 title="Tapis ikut Siri — merentas semua program yang aktifkan Siri jika Program tak dipilih"
@@ -638,196 +655,175 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <option value="">Semua Siri</option>
                                 {Array.from({ length: selectedBadgeFilter ? maxSiriForBadge(selectedBadgeFilter) : maxSiriAcrossEnabled }, (_, i) => i + 1).map(s => <option key={s} value={s}>Siri {s}</option>)}
                             </select>
-                        </div>
+                        </label>
                     )}
-                    <select
-                        className="p-2 border rounded-lg text-teal-700 outline-none focus:ring-2 focus:ring-teal-500 bg-teal-50 text-sm font-bold w-full md:w-auto"
-                        value={selectedTypeFilter}
-                        onChange={(e) => setSelectedTypeFilter(e.target.value as SchoolType | '')}
-                        title="Tapis ikut jenis sekolah — SR dan SM boleh mempunyai kadar yuran berbeza"
-                    >
-                        <option value="">Semua Jenis</option>
-                        <option value="rendah">SR — Sekolah Rendah</option>
-                        <option value="menengah">SM — Sekolah Menengah</option>
-                        <option value="lain">Lain-lain</option>
-                    </select>
-                    {/* Unit hanya diisi bagi PESERTA, jadi memilih satu unit
-                        menyingkirkan setiap pegawai daripada SEMUA tab — bukan
-                        hanya carta. Tajuk menyatakannya supaya senarai Pemimpin
-                        yang tiba-tiba kosong tidak kelihatan seperti pepijat. */}
-                    <select
-                        className="p-2 border rounded-lg text-orange-700 outline-none focus:ring-2 focus:ring-orange-500 bg-orange-50 text-sm font-bold w-full md:w-auto"
-                        value={selectedUnitFilter}
-                        onChange={(e) => setSelectedUnitFilter(e.target.value)}
-                        title="Tapis ikut unit — peserta sahaja mempunyai unit, jadi pegawai tersembunyi apabila satu unit dipilih"
-                    >
-                        <option value="">Semua Unit</option>
-                        <option value="Perdana">Perdana</option>
-                        <option value="Udara">Udara</option>
-                        <option value="Laut">Laut</option>
-                        <option value="PPKI">PPKI</option>
-                        <option value="PPKI Udara">PPKI Udara</option>
-                    </select>
-                </div>
 
-                <div className="w-px h-8 bg-gray-200 hidden md:block"></div>
-
-                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-                    <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                        Sekolah:
+                    <label className="admin-dashboard-filter-field">
+                        <span><SchoolIcon size={14} /> Jenis</span>
+                        <select
+                            className="admin-dashboard-filter-input admin-dashboard-filter-input-teal"
+                            value={selectedTypeFilter}
+                            onChange={(e) => setSelectedTypeFilter(e.target.value as SchoolType | '')}
+                            title="Tapis ikut jenis sekolah — SR dan SM boleh mempunyai kadar yuran berbeza"
+                        >
+                            <option value="">Semua Jenis</option>
+                            <option value="rendah">SR — Sekolah Rendah</option>
+                            <option value="menengah">SM — Sekolah Menengah</option>
+                            <option value="lain">Lain-lain</option>
+                        </select>
                     </label>
-                    <div className="relative w-full md:w-64">
-                        <input
-                            type="text"
-                            list="schoolFilterList"
-                            value={selectedSchoolFilter}
-                            onChange={(e) => setSelectedSchoolFilter(e.target.value)}
-                            placeholder="Taip atau pilih sekolah..."
-                            className="p-2 pr-7 border rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 text-sm w-full"
-                        />
-                        {selectedSchoolFilter && (
-                            <button
-                                type="button"
-                                onClick={() => setSelectedSchoolFilter('')}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-0.5"
-                                title="Kosongkan"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
-                        <datalist id="schoolFilterList">
-                            {schoolFilterOptions.map((name, i) => (
-                                <option key={i} value={name} />
-                            ))}
-                        </datalist>
-                    </div>
-                </div>
 
-                <div className="flex flex-col items-end gap-1">
-                    <button
-                        onClick={() => setShowDrafts(!showDrafts)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold transition border ${
-                            showDrafts 
-                            ? 'bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200' 
-                            : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
-                        }`}
-                        title={showDrafts ? "Sembunyikan data draft/pending" : "Paparkan semua data termasuk draft"}
-                    >
-                        {showDrafts ? <Eye size={12}/> : <EyeOff size={12}/>}
-                        {showDrafts ? 'Semua Data Dipaparkan' : 'Hanya Data Disahkan'}
-                    </button>
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
-                        Rekod Dipaparkan: <strong>{submittedData.length}</strong>
-                    </span>
+                    <label className="admin-dashboard-filter-field">
+                        <span><Users size={14} /> Unit</span>
+                        <select
+                            className="admin-dashboard-filter-input admin-dashboard-filter-input-orange"
+                            value={selectedUnitFilter}
+                            onChange={(e) => setSelectedUnitFilter(e.target.value)}
+                            title="Tapis ikut unit — peserta sahaja mempunyai unit, jadi pegawai tersembunyi apabila satu unit dipilih"
+                        >
+                            <option value="">Semua Unit</option>
+                            <option value="Perdana">Perdana</option>
+                            <option value="Udara">Udara</option>
+                            <option value="Laut">Laut</option>
+                            <option value="PPKI">PPKI</option>
+                            <option value="PPKI Udara">PPKI Udara</option>
+                        </select>
+                    </label>
+
+                    <label className="admin-dashboard-filter-field md:col-span-2 xl:col-span-2">
+                        <span><SchoolIcon size={14} /> Sekolah</span>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                list="schoolFilterList"
+                                value={selectedSchoolFilter}
+                                onChange={(e) => setSelectedSchoolFilter(e.target.value)}
+                                placeholder="Taip atau pilih sekolah..."
+                                className="admin-dashboard-filter-input pr-8"
+                            />
+                            {selectedSchoolFilter && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedSchoolFilter('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-0.5"
+                                    title="Kosongkan"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                            <datalist id="schoolFilterList">
+                                {schoolFilterOptions.map((name, i) => (
+                                    <option key={i} value={name} />
+                                ))}
+                            </datalist>
+                        </div>
+                    </label>
+
                 </div>
             </div>
         )}
 
         {/* STATS SUMMARY CARDS (Aggregated Counts) */}
         {activeTab !== 'archive' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-6 animate-[fadeIn_0.3s_ease-out]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4 animate-[fadeIn_0.3s_ease-out]">
                 {/* SEKOLAH CARD (NEW) */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-orange-500 relative overflow-hidden">
-                    <div className="flex justify-between items-start z-10 relative">
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Sekolah</p>
-                            <h3 className="text-3xl font-black text-gray-800">{schoolStats.length}</h3>
-                            <p className="text-xs text-orange-600 font-semibold mt-1">Sekolah Terlibat</p>
+                <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-orange p-4 rounded-lg relative overflow-hidden">
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="admin-dashboard-kpi-label">Jumlah Sekolah</p>
+                            <h3 className="admin-dashboard-kpi-value">{schoolStats.length}</h3>
+                            <p className="admin-dashboard-kpi-note">Sekolah Terlibat</p>
                         </div>
-                        <div className="p-3 bg-orange-50 rounded-lg text-orange-600">
+                        <div className="admin-dashboard-kpi-icon">
                             <SchoolIcon size={24} />
                         </div>
                     </div>
-                    <SchoolIcon size={100} className="absolute -bottom-4 -right-4 text-orange-50 opacity-50 z-0" />
                 </div>
 
                 {/* PESERTA CARD */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500 relative overflow-hidden">
-                    <div className="flex justify-between items-start z-10 relative">
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Peserta</p>
-                            <h3 className="text-3xl font-black text-gray-800">{totals.students}</h3>
-                            <p className="text-xs text-blue-600 font-semibold mt-1">Lelaki: {totals.male} | Perempuan: {totals.female}</p>
+                <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-blue p-4 rounded-lg relative overflow-hidden">
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="admin-dashboard-kpi-label">Jumlah Peserta</p>
+                            <h3 className="admin-dashboard-kpi-value">{totals.students}</h3>
+                            <p className="admin-dashboard-kpi-note">Lelaki {totals.male} · Perempuan {totals.female}</p>
                         </div>
-                        <div className="p-3 bg-blue-50 rounded-lg text-blue-600">
+                        <div className="admin-dashboard-kpi-icon">
                             <Users size={24} />
                         </div>
                     </div>
-                    {/* Decorative bg */}
-                    <Users size={100} className="absolute -bottom-4 -right-4 text-blue-50 opacity-50 z-0" />
                 </div>
 
                 {/* PEMIMPIN CARD */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-indigo-500 relative overflow-hidden">
-                    <div className="flex justify-between items-start z-10 relative">
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Pemimpin</p>
-                            <h3 className="text-3xl font-black text-gray-800">{totals.leaders}</h3>
-                            <p className="text-xs text-indigo-600 font-semibold mt-1">Ketua Pemimpin</p>
+                <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-indigo p-4 rounded-lg relative overflow-hidden">
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="admin-dashboard-kpi-label">Jumlah Pemimpin</p>
+                            <h3 className="admin-dashboard-kpi-value">{totals.leaders}</h3>
+                            <p className="admin-dashboard-kpi-note">Ketua Pemimpin</p>
                         </div>
-                        <div className="p-3 bg-indigo-50 rounded-lg text-indigo-600">
+                        <div className="admin-dashboard-kpi-icon">
                             <Crown size={24} />
                         </div>
                     </div>
-                    <Crown size={100} className="absolute -bottom-4 -right-4 text-indigo-50 opacity-50 z-0" />
                 </div>
 
                 {/* PENOLONG CARD */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-sky-500 relative overflow-hidden">
-                    <div className="flex justify-between items-start z-10 relative">
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Penolong</p>
-                            <h3 className="text-3xl font-black text-gray-800">{totals.assistants}</h3>
-                            <p className="text-xs text-sky-600 font-semibold mt-1">Penolong Pemimpin</p>
+                <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-sky p-4 rounded-lg relative overflow-hidden">
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="admin-dashboard-kpi-label">Jumlah Penolong</p>
+                            <h3 className="admin-dashboard-kpi-value">{totals.assistants}</h3>
+                            <p className="admin-dashboard-kpi-note">Penolong Pemimpin</p>
                         </div>
-                        <div className="p-3 bg-sky-50 rounded-lg text-sky-600">
+                        <div className="admin-dashboard-kpi-icon">
                             <Shield size={24} />
                         </div>
                     </div>
-                    <Shield size={100} className="absolute -bottom-4 -right-4 text-sky-50 opacity-50 z-0" />
                 </div>
 
                 {/* PEMBANTU CARD */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-teal-500 relative overflow-hidden">
-                    <div className="flex justify-between items-start z-10 relative">
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Pembantu</p>
-                            <h3 className="text-3xl font-black text-gray-800">{totals.pembantu}</h3>
-                            <p className="text-xs text-teal-600 font-semibold mt-1">Pembantu Bertugas</p>
+                <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-teal p-4 rounded-lg relative overflow-hidden">
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="admin-dashboard-kpi-label">Jumlah Pembantu</p>
+                            <h3 className="admin-dashboard-kpi-value">{totals.pembantu}</h3>
+                            <p className="admin-dashboard-kpi-note">Pembantu Bertugas</p>
                         </div>
-                        <div className="p-3 bg-teal-50 rounded-lg text-teal-600">
+                        <div className="admin-dashboard-kpi-icon">
                             <Users size={24} />
                         </div>
                     </div>
-                    <Users size={100} className="absolute -bottom-4 -right-4 text-teal-50 opacity-50 z-0" />
                 </div>
 
                 {/* PENGUJI CARD */}
-                <div className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-green-500 relative overflow-hidden">
-                    <div className="flex justify-between items-start z-10 relative">
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Jumlah Penguji</p>
-                            <h3 className="text-3xl font-black text-gray-800">{totals.examiners}</h3>
-                            <p className="text-xs text-green-600 font-semibold mt-1">Lantikan Khas</p>
+                <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-green p-4 rounded-lg relative overflow-hidden">
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="admin-dashboard-kpi-label">Jumlah Penguji</p>
+                            <h3 className="admin-dashboard-kpi-value">{totals.examiners}</h3>
+                            <p className="admin-dashboard-kpi-note">Lantikan Khas</p>
                         </div>
-                        <div className="p-3 bg-green-50 rounded-lg text-green-600">
+                        <div className="admin-dashboard-kpi-icon">
                             <GraduationCap size={24} />
                         </div>
                     </div>
-                    <GraduationCap size={100} className="absolute -bottom-4 -right-4 text-green-50 opacity-50 z-0" />
                 </div>
             </div>
         )}
 
         {/* Statistics Table (SCHOOLS) - Only if NOT in archive tab */}
         {activeTab !== 'archive' && (
-            <div className="bg-white p-6 rounded-xl shadow overflow-hidden">
-                <div className="flex justify-between items-center mb-6">
+            <div className="admin-dashboard-table-card admin-pro-panel-card p-5 md:p-6 rounded-xl overflow-hidden">
+                <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 mb-6">
+                <div>
                 <h2 className="font-bold flex items-center gap-2 text-gray-800">
                     <BarChart3 size={20} className="text-blue-600" /> Statistik Pendaftaran {showDrafts ? '(Semua)' : '(Disahkan Sahaja)'} {selectedYear}
                     {selectedBadgeFilter && <span className="text-sm font-normal text-blue-700 ml-2 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">({selectedBadgeFilter})</span>}
                     {selectedSchoolFilter && <span className="text-sm font-normal text-emerald-700 ml-2 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">🏫 {selectedSchoolFilter}</span>}
                 </h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">Susunan sekolah tertinggi dahulu, ikut jumlah rekod dalam tapisan semasa.</p>
+                </div>
                 <div className="flex flex-wrap gap-2">
                     <PDFExportButton 
                         data={displayedData} 
@@ -858,9 +854,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                 )}
                 
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left border rounded-lg">
-                    <thead className="bg-blue-50 uppercase text-xs font-bold text-blue-900 border-b border-blue-100">
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="admin-dashboard-table w-full text-sm text-left">
+                    <thead className="bg-slate-900 uppercase text-xs font-bold text-slate-100">
                         <tr>
                             <th className="px-4 py-3 min-w-[200px]">Nama Sekolah</th>
                             <th className="px-4 py-3 text-center w-20 text-blue-600">Peserta (L)</th>
@@ -1039,10 +1035,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* DETAILED DATA TABLE */}
         {activeTab !== 'archive' && (
-            <div className="bg-white p-6 rounded-xl shadow overflow-hidden">
+            <div className="admin-dashboard-table-card admin-pro-panel-card p-5 md:p-6 rounded-xl overflow-hidden">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
-                    <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-4 mb-6">
+                    <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
+                        <div>
+                            <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                                <Database size={20} className="text-emerald-700" /> Senarai Rekod
+                            </h2>
+                            <p className="mt-1 text-xs font-semibold text-slate-500">
+                                {displayedData.length.toLocaleString('ms-MY')} rekod dalam kategori semasa.
+                            </p>
+                        </div>
+
+                        <div className="relative w-full md:w-72">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                className="w-full pl-9 p-2.5 border rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                                placeholder="Cari nama, KP, sekolah..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="admin-dashboard-list-tabs flex flex-wrap gap-2">
                         <TabButton id="all" label="Semua" icon={ListFilter} colorClass="bg-gray-800" />
                         <TabButton id="students" label="Peserta" icon={Users} colorClass="bg-blue-600" />
                         <TabButton id="leaders" label="Pemimpin" icon={Crown} colorClass="bg-purple-600" />
@@ -1051,23 +1069,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <TabButton id="examiners" label="Penguji" icon={GraduationCap} colorClass="bg-green-600" />
                         <TabButton id="principals" label="GB/Pengetua" icon={SchoolIcon} colorClass="bg-amber-600" />
                     </div>
-
-                    <div className="relative w-full md:w-64">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input 
-                            type="text" 
-                            className="w-full pl-9 p-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none transition" 
-                            placeholder="Cari nama, KP, sekolah..." 
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 uppercase text-xs text-slate-600 font-bold border-b border-slate-200">
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="admin-dashboard-table w-full text-sm text-left">
+                        <thead className="bg-slate-900 uppercase text-xs text-slate-100 font-bold">
                             <tr>
                                 <th className="px-4 py-3">Nama</th>
                                 <th className="px-4 py-3">Kad Pengenalan</th>

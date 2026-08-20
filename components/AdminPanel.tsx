@@ -234,8 +234,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     <button 
       onClick={onClick} 
       className={`
-          w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition rounded-lg my-1
-          ${isActive ? 'bg-blue-900 text-white shadow-lg border-l-4 border-amber-500 shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-amber-400'} 
+          admin-pro-nav-item w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition rounded-lg my-1
+          ${isActive ? 'admin-pro-nav-active' : 'admin-pro-nav-idle'}
           ${!isDesktopSidebarOpen ? 'md:justify-center md:px-0 md:w-10 md:h-10 md:mx-auto' : ''}
           ${className}
       `}
@@ -249,10 +249,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
+    <div className="admin-pro-shell min-h-screen font-sans flex flex-col md:flex-row print:bg-white">
       
       {/* MOBILE HEADER */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600">
+      <div className="admin-pro-mobile-bar md:hidden text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2">
           <div className="flex items-center gap-2">
               <Settings size={20} className="text-amber-500" />
               <div className="text-sm font-bold">Panel Admin</div>
@@ -262,38 +262,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
       </div>
 
-      {/* SIDEBAR NAVIGATION (DARK & LUXURY) */}
+      {/* SIDEBAR NAVIGATION */}
       <aside className={`
-          fixed inset-y-0 left-0 z-50 bg-slate-900 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r border-slate-800 flex flex-col
-          md:relative md:translate-x-0 print:hidden
+          admin-pro-sidebar fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
+          md:relative md:translate-x-0 md:shrink-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
       `}>
-          {/* Sidebar Toggle Button (Desktop Only) */}
-          <div className="hidden md:flex justify-end p-2 border-b border-slate-800">
-                <button 
+          <div className="relative hidden md:flex justify-end p-2 border-b border-white/10">
+                <button
                     onClick={() => setIsDesktopSidebarOpen(!isDesktopSidebarOpen)}
-                    className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition"
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+                    title={isDesktopSidebarOpen ? "Sembunyikan Sidebar" : "Buka Sidebar"}
                 >
                     {isDesktopSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
                 </button>
           </div>
 
-          <div className="p-6 border-b border-slate-800 flex flex-col items-center text-center overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 shadow-lg ${role === 'district' ? 'bg-amber-500 shadow-amber-900/50' : 'bg-blue-600 shadow-blue-900/50'}`}>
-                  {role === 'district' ? <Shield size={24} className="text-slate-900" /> : <Briefcase size={24} className="text-white" />}
+          <div className="admin-pro-brand relative p-6 border-b flex flex-col items-center text-center overflow-hidden">
+              <div className="admin-pro-logo w-12 h-12 rounded-xl flex items-center justify-center mb-3">
+                  {role === 'district' ? <Shield size={24} className="text-amber-700" /> : <Briefcase size={24} className="text-sky-800" />}
               </div>
               {isDesktopSidebarOpen && (
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-lg tracking-tight">Panel Admin</h2>
-                    <p className={`text-[10px] font-mono mt-1 tracking-wider uppercase px-2 py-0.5 rounded ${role === 'district' ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-300'}`}>
+                    <p className="admin-pro-role-chip text-[10px] font-mono mt-1 tracking-wider uppercase px-2 py-0.5 rounded">
                         {role === 'district' ? 'PENTADBIR DAERAH' : 'PENYELARAS'}
                     </p>
                   </div>
               )}
           </div>
 
-          <div className="p-4 space-y-1 overflow-y-auto flex-1">
+          <div className="relative p-4 space-y-1 overflow-y-auto flex-1">
               {menuItems.filter(i => i.allowed).map((item) => (
                   <SidebarItem 
                     key={item.id}
@@ -313,7 +313,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
           </div>
 
-          <div className="p-4 border-t border-slate-800 bg-slate-900">
+          <div className="relative p-4 border-t border-white/10 bg-slate-950/35">
               <SidebarItem 
                 icon={LogOut} 
                 label="Log Keluar" 
@@ -324,20 +324,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 overflow-hidden flex flex-col h-screen overflow-y-auto bg-slate-50">
+      <main className="admin-pro-main flex-1 min-w-0 overflow-hidden flex flex-col h-screen overflow-y-auto">
         
         {/* TOP BAR / HEADER */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40 shadow-sm print:hidden">
+        <header className="admin-pro-topbar border-b px-6 py-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sticky top-0 z-40 print:hidden">
             <div>
                 <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                     {menuItems.find(i => i.id === tab)?.label}
                 </h1>
+                <p className="mt-1 text-[11px] font-semibold text-slate-500">Pusat kawalan operasi dan data pendaftaran</p>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
                 {/* Master Switch */}
-                <div className="flex items-center gap-3 bg-gray-100 pl-3 pr-1.5 py-1 rounded-full border border-gray-200">
-                    <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Status Sistem</span>
+                <div className="admin-pro-status-wrap flex items-center gap-3 pl-3 pr-1.5 py-1 rounded-full">
+                    <span className="admin-pro-status-label text-[10px] font-extrabold uppercase tracking-wider">Status Sistem</span>
                     <button 
                         onClick={handleToggleRegistration}
                         disabled={togglingStatus}
@@ -352,7 +353,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </header>
 
         {/* CONTENT BODY */}
-        <div className="p-4 md:p-8 max-w-[1600px] mx-auto w-full">
+        <div className="admin-pro-content p-4 md:p-8 max-w-[1600px] mx-auto w-full">
             {tab === 'config' && canAccessConfig && (
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-6 animate-[fadeIn_0.2s_ease-out] print:hidden">
                 <h2 className="font-bold text-lg text-gray-800 flex items-center gap-2">

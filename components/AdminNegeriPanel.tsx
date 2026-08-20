@@ -526,8 +526,8 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
     <button 
       onClick={onClick} 
       className={`
-          w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition rounded-lg my-1
-          ${isActive ? 'bg-blue-900 text-white shadow-lg border-l-4 border-amber-500 shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-amber-400'} 
+          admin-pro-nav-item w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition rounded-lg my-1
+          ${isActive ? 'admin-pro-nav-active' : 'admin-pro-nav-idle'}
           ${!isDesktopSidebarOpen ? 'md:justify-center md:px-0 md:w-10 md:h-10 md:mx-auto' : ''}
           ${className}
       `}
@@ -541,10 +541,10 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row print:bg-white">
+    <div className="admin-pro-shell min-h-screen font-sans flex flex-col md:flex-row print:bg-white">
       
       {/* MOBILE HEADER */}
-      <div className="md:hidden text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2 border-amber-600" style={{ background: '#07012C' }}>
+      <div className="admin-pro-mobile-bar md:hidden text-white p-4 flex justify-between items-center shadow-md print:hidden sticky top-0 z-50 border-b-2">
           <div className="flex items-center gap-2">
               <Settings size={20} className="text-amber-500" />
               <div className="text-sm font-bold">Admin Negeri - {negeriName}</div>
@@ -554,38 +554,37 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
           </button>
       </div>
 
-      {/* SIDEBAR NAVIGATION (DARK & LUXURY) */}
+      {/* SIDEBAR NAVIGATION */}
       <aside
-          style={{ background: 'linear-gradient(180deg, #230F5C 0%, #07012C 60%, #04011E 100%)', borderColor: '#1a0a47' }}
           className={`
-          fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
+          admin-pro-sidebar fixed inset-y-0 left-0 z-50 text-slate-300 shadow-2xl transform transition-all duration-300 ease-in-out border-r flex flex-col
           md:relative md:translate-x-0 md:shrink-0 print:hidden
           ${isMobileSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full'}
           ${isDesktopSidebarOpen ? 'md:w-64' : 'md:w-20'}
       `}>
-          {/* Sidebar Toggle Button (Desktop Only) */}
-          <div className="hidden md:flex justify-end p-2 border-b border-slate-800">
-                <button 
+          <div className="relative hidden md:flex justify-end p-2 border-b border-white/10">
+                <button
                     onClick={() => setIsDesktopSidebarOpen(!isDesktopSidebarOpen)}
-                    className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-white transition"
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+                    title={isDesktopSidebarOpen ? "Sembunyikan Sidebar" : "Buka Sidebar"}
                 >
                     {isDesktopSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
                 </button>
           </div>
 
-          <div className="p-6 border-b border-slate-800 flex flex-col items-center text-center overflow-hidden bg-gradient-to-b from-slate-900 to-slate-800">
-              <img src={negeriLogoUrl || LOGO_URL} alt="Logo" className="h-14 w-auto mb-3 drop-shadow-md" />
+          <div className="admin-pro-brand relative p-6 border-b flex flex-col items-center text-center overflow-hidden">
+              <img src={negeriLogoUrl || LOGO_URL} alt="Logo" className="admin-pro-logo h-14 w-14 rounded-2xl object-contain p-2 mb-3" />
               {isDesktopSidebarOpen && (
                   <div className="animate-[fadeIn_0.2s_ease-out]">
                     <h2 className="font-bold text-white text-lg tracking-tight">Panel Admin</h2>
-                    <p className="text-[10px] font-mono mt-1 tracking-wider uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                    <p className="admin-pro-role-chip text-[10px] font-mono mt-1 tracking-wider uppercase px-2 py-0.5 rounded">
                         {negeriName}
                     </p>
                   </div>
               )}
           </div>
 
-          <div className="p-4 space-y-1 overflow-y-auto flex-1">
+          <div className="relative p-4 space-y-1 overflow-y-auto flex-1">
               {menuItems.filter(i => i.allowed).map((item) => (
                   <SidebarItem 
                     key={item.id}
@@ -597,7 +596,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
               ))}
           </div>
 
-          <div className="p-4 border-t border-slate-800 bg-slate-900">
+          <div className="relative p-4 border-t border-white/10 bg-slate-950/35">
               <SidebarItem 
                 icon={LogOut} 
                 label="Log Keluar" 
@@ -608,17 +607,17 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 min-w-0 overflow-hidden flex flex-col h-screen overflow-y-auto bg-slate-50">
+      <main className="admin-pro-main flex-1 min-w-0 overflow-hidden flex flex-col h-screen overflow-y-auto">
         
         {/* TOP BAR / HEADER */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sticky top-0 z-40 shadow-sm print:hidden">
+        <header className="admin-pro-topbar border-b px-6 py-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sticky top-0 z-40 print:hidden">
             <div>
                 <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                     {menuItems.find(i => i.id === tab)?.label}
                 </h1>
                 {showDaerahFilter && (
                   <p className="text-[11px] text-gray-500 mt-1 flex items-center gap-1.5">
-                    <MapPin size={11} className="text-blue-600" />
+                    <MapPin size={11} className="text-emerald-700" />
                     Skop: <span className="font-semibold text-gray-700">{activeDaerahName}</span>
                     <span className="text-gray-400">·</span>
                     {filteredSchools.length} sekolah · {filteredData.length} rekod
@@ -629,13 +628,13 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
             <div className="flex flex-wrap items-center gap-3">
                 {/* Filter by Daerah - hanya untuk tab yang scoped */}
                 {showDaerahFilter && (
-                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 pl-3 pr-1.5 py-1 rounded-full">
-                      <MapPin size={14} className="text-blue-600 shrink-0" />
-                      <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider hidden md:inline">Filter Daerah</span>
+                  <div className="admin-pro-status-wrap flex items-center gap-2 pl-3 pr-1.5 py-1 rounded-full">
+                      <MapPin size={14} className="text-emerald-700 shrink-0" />
+                      <span className="admin-pro-status-label text-[10px] font-extrabold uppercase tracking-wider hidden md:inline">Filter Daerah</span>
                       <select
                           value={selectedDaerahFilter}
                           onChange={(e) => setSelectedDaerahFilter(e.target.value)}
-                          className="bg-white border border-blue-200 rounded-full px-3 py-1.5 text-xs font-bold text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-400 max-w-[200px]"
+                          className="bg-white border border-slate-200 rounded-full px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 max-w-[200px]"
                           title="Filter data berdasarkan daerah"
                       >
                           <option value="ALL">Semua Daerah ({filteredDaerah.length})</option>
@@ -647,8 +646,8 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
                 )}
 
                 {/* Master Switch */}
-                <div className="flex items-center gap-3 bg-gray-100 pl-3 pr-1.5 py-1 rounded-full border border-gray-200">
-                    <span className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">Status Sistem</span>
+                <div className="admin-pro-status-wrap flex items-center gap-3 pl-3 pr-1.5 py-1 rounded-full">
+                    <span className="admin-pro-status-label text-[10px] font-extrabold uppercase tracking-wider">Status Sistem</span>
                     <button 
                         onClick={handleToggleRegistration}
                         disabled={togglingStatus}
@@ -663,7 +662,7 @@ export const AdminNegeriPanel: React.FC<AdminNegeriPanelProps> = ({
         </header>
 
         {/* CONTENT BODY */}
-        <div className="p-4 md:p-8 max-w-[1600px] mx-auto w-full">
+        <div className="admin-pro-content p-4 md:p-8 max-w-[1600px] mx-auto w-full">
             {/* TAB DAERAH - Senarai semua daerah dalam negeri */}
             {tab === 'daerah' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">

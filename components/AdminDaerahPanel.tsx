@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User, MapPin, Wallet, QrCode, Grid3x3 } from 'lucide-react';
+import { Settings, ArrowLeft, Database, School, Link as LinkIcon, Lock, AlertTriangle, ChevronLeft, ChevronRight, Medal, RefreshCw, ToggleLeft, ToggleRight, ArrowLeftRight, Menu, LayoutDashboard, LogOut, Key, History, Shield, Briefcase, Trash2, Users, Download, FileSpreadsheet, FileJson, X, BarChart3, ScanLine, CheckCircle, FileText, Eye, Image, Upload, User, MapPin, Wallet, QrCode, Grid3x3, Link2 } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminSchools } from './AdminSchools';
 import { AdminBadges } from './AdminBadges'; 
@@ -9,6 +9,7 @@ import { AdminDataAudit } from './AdminDataAudit';
 import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { PengesahanTab } from './PengesahanTab';
 import { StationGroupsTab } from './StationGroupsTab';
+import { PracticalGroupsTab } from './PracticalGroupsTab';
 import { AdminPaymentsTab } from './AdminPaymentsTab';
 import { SubmissionData, Badge, School as SchoolType, UserProfile } from '../types';
 import { APP_VERSION, LOCAL_STORAGE_KEYS, DEFAULT_SERVER_URL, LOGO_URL } from '../constants';
@@ -42,7 +43,7 @@ interface AdminDaerahPanelProps {
 export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({ 
   daerahCode, daerahName, negeriCode, adminSession, onBack, scriptUrl, setScriptUrl, data, schools, badges, userProfiles = [], isRegistrationOpen, refreshData, deleteData 
 }) => {
-  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'bayaran' | 'history' | 'audit' | 'attendance' | 'participantCards' | 'withdrawals' | 'courses' | 'stesen' | 'profile'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'analytics' | 'schools' | 'badges' | 'pengesahan' | 'bayaran' | 'history' | 'audit' | 'attendance' | 'participantCards' | 'withdrawals' | 'courses' | 'stesen' | 'amali' | 'profile'>('dashboard');
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
@@ -461,6 +462,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     { id: 'bayaran', label: 'Rumusan Bayaran', icon: Wallet, allowed: true },
     { id: 'attendance', label: 'Kehadiran', icon: ScanLine, allowed: true },
     { id: 'stesen', label: 'Kumpulan Stesen', icon: Grid3x3, allowed: true },
+    { id: 'amali', label: 'Kumpulan Amali', icon: Link2, allowed: true },
     { id: 'participantCards', label: 'Kad Peserta', icon: QrCode, allowed: true },
     { id: 'withdrawals', label: 'Status Peserta', icon: AlertTriangle, allowed: true },
     { id: 'floated', label: 'Murid Terapung', icon: MapPin, allowed: true },
@@ -616,6 +618,12 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
             {tab === 'stesen' && (
               <div className="animate-[fadeIn_0.2s_ease-out]">
                 <StationGroupsTab badges={badges} daerahName={daerahName} />
+              </div>
+            )}
+
+            {tab === 'amali' && (
+              <div className="animate-[fadeIn_0.2s_ease-out]">
+                <PracticalGroupsTab badges={badges} daerahName={daerahName} />
               </div>
             )}
 

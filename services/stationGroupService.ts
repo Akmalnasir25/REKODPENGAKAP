@@ -497,6 +497,53 @@ export const pindahPenguji = async (
 
 // ── Nama ujian setiap stesen ────────────────────────────────────────
 
+/**
+ * Tukar seorang penguji dengan orang lain pada stesen yang SAMA.
+ *
+ * Melalui fungsi pangkalan data kerana ia padam-dan-sisip: kalau sisipan
+ * gagal selepas padaman berjaya, stesen itu kehilangan seorang penguji dan
+ * tiada apa memberitahu sesiapa.
+ */
+export const gantiPenguji = async (
+  runId: string, icLama: string, baharu: { personIc: string; nama: string; sekolah: string },
+): Promise<void> => {
+  const { error } = await supabase.rpc('ganti_penguji_stesen', {
+    p_run_id: runId,
+    p_ic_lama: icLama,
+    p_ic_baharu: baharu.personIc,
+    p_nama_baharu: baharu.nama,
+    p_sekolah: baharu.sekolah || '',
+  });
+  if (error) throw error;
+};
+
+/** Tambah seorang penguji ke satu stesen. Satu operasi, tiada celah. */
+export const tambahPenguji = async (
+  runId: string, year: number, siri: number, stesen: string,
+  orang: { personIc: string; nama: string; sekolah: string },
+): Promise<void> => {
+  const { error } = await supabase.from('station_group_examiners').insert({
+    run_id: runId, station_label: stesen, person_ic: orang.personIc,
+    nama: orang.nama, sekolah: orang.sekolah || '', year, siri,
+  });
+  if (error) {
+    // 23505 ialah unique_violation — dia sudah berada dalam jadual lain.
+    if ((error as any).code === '23505') {
+      throw new Error(`${orang.nama} sudah ditempatkan dalam jadual lain bagi siri ini.`);
+    }
+    throw error;
+  }
+};
+
+/** Buang seorang penguji. Dia kembali ke kolam serta-merta. */
+export const buangPenguji = async (runId: string, personIc: string): Promise<void> => {
+  const { error } = await supabase
+    .from('station_group_examiners')
+    .delete()
+    .eq('run_id', runId).eq('person_ic', personIc);
+  if (error) throw error;
+};
+
 export const ambilNamaStesen = async (runId: string): Promise<Record<string, string>> => {
   const { data, error } = await supabase
     .from('station_group_stations').select('label, nama').eq('run_id', runId);

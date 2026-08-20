@@ -359,3 +359,51 @@ sebagai satu senarai. Disahkan dengan merender: 18 stesen menghasilkan 3
 halaman bagi format bahagian, satu halaman bagi nombor dan huruf.
 
 **Migrasi 068.**
+
+## 17. Sunting penguji tanpa menjana semula
+
+Penguji berubah selepas jadual dibuat: seorang menarik diri, sekolah
+menghantar nama ganti, seorang lagi ditambah lewat. Satu-satunya alat yang
+ada ialah **Agih Penguji**, yang membuang segalanya dan mengagih semula —
+jadi setiap pelarasan manual yang sudah dibuat hilang, dan kerja itu perlu
+diulang.
+
+Tiga tindakan bersasar ditambah, semuanya pada baris penguji itu sendiri:
+
+| Tindakan | Kesan |
+|---|---|
+| **Ganti** | Penguji itu keluar, orang lain dari kolam masuk ke stesen yang SAMA |
+| **Tambah** | Seorang dari kolam masuk ke stesen tertentu |
+| **Buang** | Penguji itu keluar dan kembali ke kolam |
+
+Susunan setiap stesen lain tidak disentuh. Menjana semula kekal wujud untuk
+bila jadual memang perlu dibina semula dari awal.
+
+### Siapa yang boleh dipilih sebagai ganti
+
+Hanya penguji yang **layak dan belum ditempatkan** — layak bermakna dia
+mendaftar dalam salah satu program yang digabungkan (§13), dan belum
+ditempatkan bermakna tiada jadual lain dalam siri itu sudah mengambilnya.
+
+Senarai itu sudah dibaca oleh skrin (`penguji_layak_stesen`); yang berubah
+hanyalah ia kini ditawarkan sebagai pilihan, bukan hanya dikira.
+
+### Kenapa Ganti mesti satu fungsi pangkalan data
+
+Ganti ialah padam-dan-sisip, dan kekangan `unique (year, siri, person_ic)`
+tidak menghalangnya kerana dua orang berbeza terlibat. Jadi masalahnya bukan
+kekangan — ia kegagalan separuh jalan. Kalau sisipan gagal selepas padaman
+berjaya, stesen itu kehilangan seorang penguji dan tiada apa memberitahu
+sesiapa. Satu transaksi menutup celah itu.
+
+Tambah dan Buang masing-masing satu operasi, jadi ia tidak memerlukan
+perlindungan yang sama.
+
+### Nama dan sekolah diambil dari kolam
+
+Bukan ditaip. Penguji yang masuk mesti orang sebenar dalam pendaftaran siri
+itu, bukan nama yang ditaip bebas — jika tidak, jadual penguji akan
+mengandungi orang yang tiada dalam sistem, dan tiada apa yang boleh
+menyemaknya kemudian.
+
+**Migrasi 071.**

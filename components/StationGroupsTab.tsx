@@ -8,6 +8,7 @@ import {
   ambilPengujiLayak, bahagikanPenguji, simpanPenguji, ambilPenguji,
   pindahPenguji, ambilNamaStesen, simpanNamaStesen, simpanProgramGabung,
   simpanKuotaPenguji, pilihPenguji, ambilRingkasanPenguji, kosongkanPenguji,
+  gantiPenguji, tambahPenguji, buangPenguji,
   RingkasanPenguji,
   PengujiLayak, PengujiStesen,
 } from '../services/stationGroupService';
@@ -204,6 +205,47 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
     catch (e: any) { setRalat(e.message || 'Gagal menyimpan gabungan program.'); }
   };
 
+  // Ketiga-tiganya memuat semula selepas berjaya. Susunan stesen lain tidak
+  // disentuh — itulah keseluruhan sebab tindakan ini wujud, menggantikan
+  // 'Agih Penguji' yang membuang setiap pelarasan manual.
+  const ganti = async (icLama: string, icBaharu: string) => {
+    if (!jadual) return;
+    const org = belumDitempatkan.find(x => x.personIc === icBaharu);
+    if (!org) return;
+    setMenjana(true); setRalat('');
+    try {
+      await gantiPenguji(jadual.runId, icLama, org);
+      await muat();
+    } catch (e: any) {
+      setRalat(e.message || 'Gagal menukar penguji.');
+    } finally { setMenjana(false); }
+  };
+
+  const tambah = async (stesen: string, ic: string) => {
+    if (!jadual) return;
+    const org = belumDitempatkan.find(x => x.personIc === ic);
+    if (!org) return;
+    setMenjana(true); setRalat('');
+    try {
+      await tambahPenguji(jadual.runId, year, siri, stesen, org);
+      await muat();
+    } catch (e: any) {
+      setRalat(e.message || 'Gagal menambah penguji.');
+    } finally { setMenjana(false); }
+  };
+
+  const buang = async (ic: string, nama: string) => {
+    if (!jadual) return;
+    if (!confirm(`Buang ${nama} daripada jadual ini?\n\nDia kembali ke kolam dan boleh ditempatkan semula.`)) return;
+    setMenjana(true); setRalat('');
+    try {
+      await buangPenguji(jadual.runId, ic);
+      await muat();
+    } catch (e: any) {
+      setRalat(e.message || 'Gagal membuang penguji.');
+    } finally { setMenjana(false); }
+  };
+
   const simpanNama = async (label: string, nama: string) => {
     if (!jadual) return;
     setNamaStesen(p => ({ ...p, [label]: nama }));
@@ -254,6 +296,14 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const bolehDitempatkan = useMemo(
     () => pengujiLayak.filter(p => !p.sudahDitempatkan || p.sudahDitempatkan === badgeName),
     [pengujiLayak, badgeName]);
+
+  // Siapa yang boleh dipilih sebagai ganti atau tambahan: layak, dan belum
+  // diambil oleh mana-mana jadual siri ini.
+  const belumDitempatkan = useMemo(
+    () => bolehDitempatkan
+      .filter(x => !penguji.some(pg => pg.personIc === x.personIc))
+      .sort((a, b) => a.nama.localeCompare(b.nama)),
+    [bolehDitempatkan, penguji]);
 
   // Pecahan mengikut program. Jumlahnya boleh melebihi saiz kolam kerana
   // seorang penguji boleh mendaftar dalam lebih daripada satu program.
@@ -679,6 +729,7 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                           <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5">Pemimpin (Penguji)</th>
                           <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5">Sekolah</th>
                           <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5 w-24">Stesen</th>
+                          <th className="text-right font-bold uppercase text-[9px] px-3 py-1.5 w-44">Tukar / Buang</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -717,11 +768,60 @@ export const StationGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
                                 ))}
                               </select>
                             </td>
+                            <td className="px-3 py-1.5">
+                              <div className="flex justify-end items-center gap-1.5">
+                                {/* Menu ini menetapkan semula kepada '' selepas
+                                    setiap pilihan, jadi ia berkelakuan seperti
+                                    butang tindakan, bukan medan yang menyimpan
+                                    nilai. */}
+                                <select
+                                  className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white max-w-[130px]"
+                                  value=""
+                                  disabled={menjana || belumDitempatkan.length === 0}
+                                  onChange={e => { const v = e.target.value; e.target.value = ''; if (v) ganti(pg.personIc, v); }}
+                                >
+                                  <option value="">
+                                    {belumDitempatkan.length === 0 ? 'Tiada ganti' : 'Ganti dengan…'}
+                                  </option>
+                                  {belumDitempatkan.map(x => (
+                                    <option key={x.personIc} value={x.personIc}>{x.nama}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => buang(pg.personIc, pg.nama)}
+                                  disabled={menjana}
+                                  title={`Buang ${pg.nama} daripada jadual`}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold border border-rose-200 text-rose-700 hover:bg-rose-50 transition disabled:opacity-40"
+                                >
+                                  &times;
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                         {st.penguji.length === 0 && (
-                          <tr><td colSpan={4} className="px-3 py-2 text-slate-300 italic text-[11px]">Tiada penguji</td></tr>
+                          <tr><td colSpan={5} className="px-3 py-2 text-slate-300 italic text-[11px]">Tiada penguji</td></tr>
                         )}
+                        <tr className="border-t border-slate-100 bg-slate-50/60">
+                          <td />
+                          <td className="px-3 py-1.5" colSpan={4}>
+                            <select
+                              className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-white max-w-[220px]"
+                              value=""
+                              disabled={menjana || belumDitempatkan.length === 0}
+                              onChange={e => { const v = e.target.value; e.target.value = ''; if (v) tambah(st.label, v); }}
+                            >
+                              <option value="">
+                                {belumDitempatkan.length === 0
+                                  ? 'Semua penguji sudah ditempatkan'
+                                  : `+ Tambah penguji ke stesen ${st.label} (${belumDitempatkan.length} tersedia)`}
+                              </option>
+                              {belumDitempatkan.map(x => (
+                                <option key={x.personIc} value={x.personIc}>{x.nama} — {x.sekolah}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
                       </tbody>
                     </table>
                   </div>

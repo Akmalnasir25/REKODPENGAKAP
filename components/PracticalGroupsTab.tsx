@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Link2, RefreshCw, Download, AlertTriangle, Users } from 'lucide-react';
+import { Link2, RefreshCw, Download, AlertTriangle, Users, Plus, X, Columns3 } from 'lucide-react';
 import { Badge } from '../types';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import {
-  SAIZ_LALAI, bahagikanPeserta, ambilPesertaLayak, simpanJadualAmali,
-  ambilJadualAmali, pindahPeserta, isPpki, JadualAmali,
+  SAIZ_LALAI, LAJUR_LALAI, MAKS_LAJUR, bahagikanPeserta, ambilPesertaLayak,
+  simpanJadualAmali, ambilJadualAmali, pindahPeserta, simpanLajurBorang,
+  bersihkanLajur, isPpki, JadualAmali,
 } from '../services/practicalGroupService';
 import { muatTurunPdfAmali, susunKumpulan } from '../services/practicalGroupPdf';
 
@@ -24,6 +25,11 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const [siri, setSiri] = useState(1);
   const [saiz, setSaiz] = useState(SAIZ_LALAI);
   const [asingPpki, setAsingPpki] = useState(true);
+  // Kepala lajur tanda pada borang. Disimpan bersama larian supaya ia kekal
+  // selepas muat semula dan sama untuk setiap admin.
+  const [lajur, setLajur] = useState<string[]>([...LAJUR_LALAI]);
+  const [gunaCatatan, setGunaCatatan] = useState(true);
+  const [simpanLajur, setSimpanLajur] = useState(false);
 
   const [jadual, setJadual] = useState<JadualAmali | null>(null);
   const [memuat, setMemuat] = useState(false);
@@ -45,7 +51,11 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       setJadual(j);
       // Tetapan diselaraskan dengan jadual yang WUJUD, supaya kotak input
       // tidak mendakwa sesuatu yang berbeza daripada apa yang dipaparkan.
-      if (j) { setSaiz(j.saizKumpulan); setAsingPpki(j.asingPpki); }
+      if (j) {
+        setSaiz(j.saizKumpulan); setAsingPpki(j.asingPpki);
+        setLajur(j.lajurTanda?.length ? j.lajurTanda : [...LAJUR_LALAI]);
+        setGunaCatatan(j.gunaCatatan !== false);
+      }
     } catch (e: any) {
       setRalat(e.message || 'Gagal memuat jadual.');
       setJadual(null);
@@ -70,7 +80,8 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         return;
       }
       const kumpulan = bahagikanPeserta(peserta, saiz, asingPpki);
-      await simpanJadualAmali(badgeName, year, siri, saiz, asingPpki, kumpulan);
+      await simpanJadualAmali(badgeName, year, siri, saiz, asingPpki, kumpulan,
+                              lajur, gunaCatatan);
       await muat();
     } catch (e: any) {
       setRalat(e.message || 'Gagal menjana kumpulan.');
@@ -83,6 +94,32 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       await pindahPeserta(jadual.runId, personId, kumpulanBaharu);
       await muat();
     } catch (e: any) { setRalat(e.message || 'Gagal memindahkan peserta.'); }
+  };
+
+  // Disimpan tanpa menjana semula: menukar kepala lajur tidak menyentuh siapa
+  // berada dalam kumpulan mana, jadi memaksa jana semula untuk membetulkan satu
+  // ejaan akan memusnahkan setiap pelarasan manual yang sudah dibuat.
+  const simpanBorang = async (baharu: string[], catatan: boolean) => {
+    setLajur(baharu); setGunaCatatan(catatan);
+    if (!jadual) return;
+    setSimpanLajur(true); setRalat('');
+    try {
+      await simpanLajurBorang(jadual.runId, baharu, catatan);
+      await muat();
+    } catch (e: any) {
+      setRalat(e.message || 'Gagal menyimpan lajur borang.');
+    } finally { setSimpanLajur(false); }
+  };
+
+  const ubahLajur = (i: number, nilai: string) =>
+    setLajur(p => p.map((x, k) => (k === i ? nilai : x)));
+  const buangLajur = (i: number) => {
+    const baharu = lajur.filter((_, k) => k !== i);
+    simpanBorang(baharu.length ? baharu : [...LAJUR_LALAI], gunaCatatan);
+  };
+  const tambahLajur = () => {
+    if (lajur.length >= MAKS_LAJUR) return;
+    setLajur(p => [...p, '']);
   };
 
   const kumpulan = useMemo(() => susunKumpulan(jadual), [jadual]);
@@ -145,6 +182,66 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
               <Download size={15} /> Borang PDF
             </button>
           )}
+        </div>
+
+        {/* Lajur borang. Diletakkan di sini dan bukan dalam modal supaya admin
+            nampak apa yang akan dicetak sebelum menekan Jana, bukan selepas. */}
+        <div className="mt-4 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+              <Columns3 size={13} /> Lajur Borang ({lajur.length}/{MAKS_LAJUR})
+            </span>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={gunaCatatan} className="w-3.5 h-3.5 accent-emerald-600"
+                     onChange={e => simpanBorang(lajur, e.target.checked)} />
+              <span className="text-[11px] font-semibold text-slate-600">Lajur CATATAN</span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] text-slate-400 font-mono px-2 py-1.5 bg-slate-50 rounded border border-slate-200">
+              BIL · NAMA PESERTA
+            </span>
+            {lajur.map((x, i) => (
+              <div key={i} className="relative">
+                <input
+                  value={x}
+                  placeholder="nama lajur"
+                  maxLength={20}
+                  onChange={e => ubahLajur(i, e.target.value.toUpperCase())}
+                  onBlur={() => simpanBorang(lajur, gunaCatatan)}
+                  className="w-32 pl-2 pr-6 py-1.5 border border-slate-300 rounded text-xs font-bold uppercase bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+                {/* Lajur terakhir tidak boleh dibuang — borang tanpa petak
+                    tanda tiada guna untuk penguji. */}
+                {lajur.length > 1 && (
+                  <button onClick={() => buangLajur(i)} title="Buang lajur"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-300 hover:text-rose-600 transition">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {lajur.length < MAKS_LAJUR && (
+              <button onClick={tambahLajur}
+                className="flex items-center gap-1 px-2 py-1.5 border border-dashed border-slate-300 rounded text-[11px] font-bold text-slate-500 hover:border-emerald-500 hover:text-emerald-600 transition">
+                <Plus size={13} /> Lajur
+              </button>
+            )}
+            {gunaCatatan && (
+              <span className="text-[10px] text-slate-400 font-mono px-2 py-1.5 bg-slate-50 rounded border border-slate-200">
+                CATATAN
+              </span>
+            )}
+            {simpanLajur && <LoadingSpinner size="sm" />}
+          </div>
+
+          <p className="text-[11px] text-slate-400 mt-2">
+            Petak lajur ini dicetak <strong>kosong</strong> untuk penguji tanda di padang.
+            {jadual
+              ? ' Perubahan disimpan terus — tidak perlu jana semula.'
+              : ' Ia akan disimpan bersama jadual bila kau tekan Jana Kumpulan.'}
+          </p>
         </div>
 
         <p className="text-[11px] text-slate-400 mt-3">

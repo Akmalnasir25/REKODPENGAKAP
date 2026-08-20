@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { JadualAmali, PesertaAmali, tajukKumpulan, isPpki } from './practicalGroupService';
+import { JadualAmali, PesertaAmali, tajukKumpulan, isPpki, bersihkanLajur } from './practicalGroupService';
 
 export interface KumpulanAmali {
   nombor: number;
@@ -12,9 +12,13 @@ export interface KumpulanAmali {
  * Borang kumpulan ujian amali (ikatan).
  *
  * Ini borang KERJA, bukan senarai rujukan — penguji memegangnya di padang dan
- * menanda pada hari ujian. Kerana itu lajur SERAYA, SILANG dan TUNGKU sengaja
- * dibiarkan kosong dengan petak yang cukup besar untuk ditanda pen, dan setiap
- * baris diberi tinggi tulisan tangan.
+ * menanda pada hari ujian. Kerana itu petak tanda sengaja dibiarkan kosong
+ * dengan saiz yang cukup untuk ditanda pen, dan setiap baris diberi tinggi
+ * tulisan tangan.
+ *
+ * BIL dan NAMA PESERTA tetap. Lajur tanda datang daripada tetapan larian
+ * (migrasi 070) — satu hingga enam, dinamakan oleh admin — dan CATATAN boleh
+ * dimatikan. Lebar dikira daripada bilangan lajur, bukan ditetapkan keras.
  *
  * Satu kumpulan tidak pernah dipecahkan antara dua halaman. Borang yang
  * separuh muka surat pertama dan separuh muka surat kedua tidak boleh
@@ -35,6 +39,12 @@ export const muatTurunPdfAmali = (
   const tinggi = doc.internal.pageSize.getHeight();
   const TEPI = 14;
   const GUNA = lebar - TEPI * 2;
+
+  // Lajur datang daripada larian tersimpan (migrasi 070). bersihkanLajur
+  // melindungi cetakan daripada larian lama yang tiada nilai tersimpan, dan
+  // daripada label kosong yang akan mencetak petak tanpa kepala.
+  const lajurTanda = bersihkanLajur(jadual.lajurTanda);
+  const gunaCatatan = jadual.gunaCatatan !== false;
 
   const jumPeserta = kumpulan.reduce((n, k) => n + k.ahli.length, 0);
   const bilCampur = kumpulan.filter(k => k.tajuk.startsWith('CAMPUR')).length;
@@ -64,7 +74,7 @@ export const muatTurunPdfAmali = (
   doc.text(`${jumPeserta} peserta  •  ${kumpulan.length} kumpulan  (${pecahan})`,
     lebar / 2, 31, { align: 'center' });
   doc.setFontSize(8);
-  doc.text('Tanda pada petak ikatan yang berjaya diikat oleh peserta.',
+  doc.text('Tanda pada petak yang berjaya dilakukan oleh peserta.',
     lebar / 2, 36, { align: 'center' });
   doc.setTextColor(0);
 
@@ -87,47 +97,68 @@ export const muatTurunPdfAmali = (
     doc.text(`${k.ahli.length} orang`, lebar - TEPI, y, { align: 'right' });
     doc.setTextColor(0);
 
-    const lajurCampur = {
-      0: { cellWidth: 10, halign: 'center' as const },
-      1: { cellWidth: GUNA - 10 - 40 - 16 * 3 - 22 },
-      2: { cellWidth: 40, fontSize: 7 },
-      3: { cellWidth: 16 },
-      4: { cellWidth: 16 },
-      5: { cellWidth: 16 },
-      6: { cellWidth: 22 },
-    };
-    const lajurTulen = {
-      0: { cellWidth: 10, halign: 'center' as const },
-      1: { cellWidth: GUNA - 10 - 18 * 3 - 36 },
-      2: { cellWidth: 18 },
-      3: { cellWidth: 18 },
-      4: { cellWidth: 18 },
-      5: { cellWidth: 36 },
-    };
+    // Lebar dikira, bukan ditetapkan keras: bilangan lajur tanda kini datang
+    // daripada tetapan admin (1..6), jadi tiada satu susunan tetap yang muat
+    // untuk semuanya. NAMA PESERTA mengambil apa yang tinggal — ia satu-satunya
+    // lajur yang isinya benar-benar berubah panjang.
+    const W_BIL = 10;
+    const W_SEKOLAH = campur ? 38 : 0;
+    const W_CATATAN = gunaCatatan ? (campur ? 22 : 30) : 0;
+    // Petak tanda: cukup lebar untuk ditanda pen, tetapi mengecil bila lajur
+    // bertambah supaya nama tidak dihimpit sampai terpotong.
+    const ruangTanda = GUNA - W_BIL - W_SEKOLAH - W_CATATAN - 46;
+    const W_TANDA = Math.max(11, Math.min(20, ruangTanda / lajurTanda.length));
+    const W_NAMA = GUNA - W_BIL - W_SEKOLAH - W_CATATAN - W_TANDA * lajurTanda.length;
+
+    const gaya: Record<number, any> = { 0: { cellWidth: W_BIL, halign: 'center' } };
+    let kol = 1;
+    gaya[kol++] = { cellWidth: W_NAMA };
+    if (campur) gaya[kol++] = { cellWidth: W_SEKOLAH, fontSize: 7 };
+    lajurTanda.forEach(() => { gaya[kol++] = { cellWidth: W_TANDA }; });
+    if (gunaCatatan) gaya[kol++] = { cellWidth: W_CATATAN };
+
+    const kepala = [
+      'BIL', 'NAMA PESERTA',
+      ...(campur ? ['SEKOLAH'] : []),
+      ...lajurTanda.map(x => x.toUpperCase()),
+      ...(gunaCatatan ? ['CATATAN'] : []),
+    ];
+    // Petak tanda dan CATATAN sengaja kosong — itu kerja penguji di padang.
+    const kosong = Array(lajurTanda.length + (gunaCatatan ? 1 : 0)).fill('');
 
     autoTable(doc, {
       startY: y + 2.5,
       margin: { left: TEPI, right: TEPI },
       theme: 'grid',
-      headStyles: { fillColor: [30, 41, 59], fontSize: 7, halign: 'center', valign: 'middle' },
+      headStyles: {
+        fillColor: [30, 41, 59],
+        // Kepala mengecil bersama lajurnya supaya label panjang seperti
+        // "KEMAS DIRI" tidak terpotong pada enam lajur.
+        fontSize: lajurTanda.length >= 5 ? 6 : 7,
+        halign: 'center', valign: 'middle',
+      },
       styles: { fontSize: 8, cellPadding: 1.6, minCellHeight: 7.2, valign: 'middle' },
-      columnStyles: campur ? lajurCampur : lajurTulen,
-      head: [campur
-        ? ['BIL', 'NAMA PESERTA', 'SEKOLAH', 'SERAYA', 'SILANG', 'TUNGKU', 'CATATAN']
-        : ['BIL', 'NAMA PESERTA', 'SERAYA', 'SILANG', 'TUNGKU', 'CATATAN']],
+      columnStyles: gaya,
+      head: [kepala],
       body: k.ahli.length
-        ? k.ahli.map((a, i) => campur
-            ? [String(i + 1), a.nama, a.sekolah, '', '', '', '']
-            : [String(i + 1), a.nama, '', '', '', ''])
-        : [campur ? ['', 'Tiada peserta', '', '', '', '', ''] : ['', 'Tiada peserta', '', '', '', '']],
+        ? k.ahli.map((a, i) => [
+            String(i + 1), a.nama, ...(campur ? [a.sekolah] : []), ...kosong,
+          ])
+        : [['', 'Tiada peserta', ...(campur ? [''] : []), ...kosong]],
     });
 
     y = (doc as any).lastAutoTable.finalY + 6;
   });
 
+  // Nota lalai menamakan lajur SEBENAR. Menyenaraikan Seraya/Silang/Tungku
+  // pada borang yang mengujinya sesuatu yang lain akan mengarahkan penguji
+  // membuat ujian yang salah.
+  const senarai = lajurTanda.length === 1
+    ? lajurTanda[0]
+    : `${lajurTanda.slice(0, -1).join(', ')} dan ${lajurTanda[lajurTanda.length - 1]}`;
   const baris = nota && nota.length ? nota : [
-    'Setiap peserta diuji tiga ikatan: Seraya, Silang dan Tungku.',
-    'Tanda pada petak ikatan yang berjaya; biarkan kosong jika gagal.',
+    `Setiap peserta diuji ${lajurTanda.length} perkara: ${senarai}.`,
+    'Tanda pada petak yang berjaya; biarkan kosong jika gagal.',
     'Serahkan borang kepada urus setia sebaik ujian kumpulan selesai.',
   ];
   if (y + baris.length * 4.5 + 12 > tinggi - 12) { doc.addPage(); y = 18; }

@@ -125,8 +125,7 @@ dengan lencana kuning, supaya lebihan itu **kelihatan**, bukan disekat.
 
 `muatTurunPdfAmali` menghasilkan borang kerja, bukan senarai rujukan:
 
-- Lajur `SERAYA`, `SILANG`, `TUNGKU` dibiarkan kosong dengan petak yang cukup
-  besar untuk ditanda pen.
+- Petak tanda dibiarkan kosong dengan saiz yang cukup untuk ditanda pen.
 - Satu kumpulan tidak pernah dipecahkan antara dua halaman — borang separuh
   muka surat tidak boleh dipegang oleh seorang penguji di padang.
 - Lajur `SEKOLAH` muncul **hanya** pada kumpulan CAMPUR. Untuk kumpulan satu
@@ -134,6 +133,50 @@ dengan lencana kuning, supaya lebihan itu **kelihatan**, bukan disekat.
   daripada nama yang panjang.
 - Setiap halaman membawa cap masa dan nombor halaman, kerana helaian ini
   diedarkan berasingan kepada penguji berlainan.
+
+## 8a. Lajur borang boleh ditetapkan (migrasi 070)
+
+`SERAYA`, `SILANG`, `TUNGKU` ialah lalai, bukan peraturan. Ujian lain menguji
+kemahiran lain, dan bilangannya pun berbeza.
+
+| Perkara | Keputusan |
+|---|---|
+| Boleh ditetapkan | Lajur tanda: **1 hingga 6**, nama bebas |
+| Tetap | `BIL`, `NAMA PESERTA` |
+| Automatik | `SEKOLAH` — muncul pada kumpulan CAMPUR sahaja |
+| Pilihan | `CATATAN` boleh dimatikan |
+| Disimpan | Pada baris larian, satu set per program x tahun x siri |
+
+**Kenapa BIL dan NAMA tidak boleh ditetapkan.** Borang tanpa nama peserta bukan
+borang. Membenarkannya bermakna membenarkan admin mencetak sesuatu yang tidak
+berguna, dan sistem tidak dapat memberitahu mereka sebelum kertas itu sampai ke
+padang.
+
+**Kenapa lajur dihantar melalui RPC dan bukan dikemas kini berasingan.** Menjana
+semula ialah PADAM dan SISIP baris larian. Kalau lajur hanya disimpan pada baris
+itu tanpa dihantar semasa menjana, setiap kali admin menjana semula lajurnya
+kembali kepada lalai dan kerja menaipnya hilang. Bentuk lama
+`simpan_kumpulan_amali` DIGUGURKAN dan bukan dibiarkan bersama yang baharu —
+dua bentuk serentak bermakna pemanggil yang terlupa menghantar lajur akan
+senyap-senyap memilih bentuk lama.
+
+**Mengubah lajur tidak memerlukan jana semula.** `simpanLajurBorang` mengemas
+kini baris larian sahaja. Menukar kepala lajur tidak menyentuh siapa berada
+dalam kumpulan mana, jadi memaksa jana semula untuk membetulkan satu ejaan akan
+memusnahkan setiap pelarasan manual yang sudah dibuat.
+
+**Had 6 datang daripada lebar kertas, bukan pilihan sewenang-wenang.** Pada A4
+potret, kes paling sempit (6 lajur + kumpulan CAMPUR + CATATAN) memberi petak
+tanda 11mm dan lajur nama 46mm. Lebih daripada itu, petak menjadi terlalu kecil
+untuk ditanda pen — iaitu satu-satunya kerja borang ini.
+
+**Kekangan menggunakan fungsi, bukan ungkapan terus.** Postgres menolak subquery
+dalam `CHECK`, dan memeriksa setiap elemen array memerlukan `unnest`. Kerana itu
+`chk_lajur_tanda` memanggil `lajur_tanda_sah(text[])` yang IMMUTABLE.
+
+**Nota kaki borang menamakan lajur sebenar.** Menyenaraikan Seraya/Silang/Tungku
+pada borang yang menguji sesuatu yang lain akan mengarahkan penguji membuat
+ujian yang salah.
 
 ## 9. Yang belum dibuat
 

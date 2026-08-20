@@ -13,6 +13,10 @@ import { supabase } from './supabaseClient';
 
 export const SAIZ_LALAI = 8;
 
+/** Lajur tanda lalai bagi ujian ikatan. Kekangan DB mengehadkan 1..6. */
+export const LAJUR_LALAI = ['SERAYA', 'SILANG', 'TUNGKU'];
+export const MAKS_LAJUR = 6;
+
 export interface PesertaAmali {
   personId: string;
   nama: string;
@@ -32,6 +36,10 @@ export interface JadualAmali {
   siri: number;
   saizKumpulan: number;
   asingPpki: boolean;
+  /** Kepala lajur tanda pada borang, mengikut susunan. */
+  lajurTanda: string[];
+  /** Sama ada lajur CATATAN kosong dicetak di hujung setiap baris. */
+  gunaCatatan: boolean;
   createdAt: string;
   ahli: AhliKumpulan[];
 }
@@ -168,6 +176,43 @@ const padatkanBaki = (blok: PesertaAmali[][], n: number): PesertaAmali[][] => {
   return bakul;
 };
 
+/**
+ * Bersihkan senarai lajur sebelum ia disimpan atau dicetak.
+ *
+ * Ruang di hujung label tidak kelihatan pada skrin tetapi mengubah lebar lajur
+ * yang dicetak, dan label kosong menghasilkan petak tanpa kepala — penguji
+ * tidak tahu apa yang ditanda. Senarai yang tinggal kosong kembali kepada
+ * lalai dan bukan kepada borang tanpa lajur, kerana borang begitu tiada guna.
+ *
+ * Had 6 sepadan dengan kekangan chk_lajur_tanda dalam migrasi 070; menapisnya
+ * di sini bermakna admin nampak had itu sebagai lajur yang berhenti bertambah,
+ * bukan sebagai ralat pangkalan data selepas menekan Jana.
+ */
+export const bersihkanLajur = (lajur: string[]): string[] => {
+  const bersih = (lajur || [])
+    .map(x => (x || '').trim())
+    .filter(x => x.length > 0)
+    .slice(0, MAKS_LAJUR);
+  return bersih.length ? bersih : [...LAJUR_LALAI];
+};
+
+/**
+ * Ubah lajur borang tanpa menjana semula kumpulan.
+ *
+ * Menukar kepala lajur tidak menyentuh siapa berada dalam kumpulan mana, jadi
+ * memaksa admin menjana semula untuk membetulkan satu ejaan akan memusnahkan
+ * setiap pelarasan manual yang dia sudah buat.
+ */
+export const simpanLajurBorang = async (
+  runId: string, lajurTanda: string[], gunaCatatan: boolean,
+): Promise<void> => {
+  const { error } = await supabase
+    .from('practical_group_runs')
+    .update({ lajur_tanda: bersihkanLajur(lajurTanda), guna_catatan: gunaCatatan })
+    .eq('id', runId);
+  if (error) throw error;
+};
+
 /** Peserta yang layak: approved sahaja, PESERTA sahaja, tiada pegawai. */
 export const ambilPesertaLayak = async (
   badgeName: string, year: number, siri: number,
@@ -190,6 +235,8 @@ export const simpanJadualAmali = async (
   badgeName: string, year: number, siri: number,
   saiz: number, asingPpki: boolean,
   kumpulan: PesertaAmali[][],
+  lajurTanda: string[] = LAJUR_LALAI,
+  gunaCatatan: boolean = true,
 ): Promise<string> => {
   const ahli = kumpulan.flatMap((g, i) => g.map(p => ({
     person_id: p.personId,
@@ -202,7 +249,10 @@ export const simpanJadualAmali = async (
 
   const { data, error } = await supabase.rpc('simpan_kumpulan_amali', {
     p_badge_name: badgeName, p_year: year, p_siri: siri,
-    p_saiz: saiz, p_asing_ppki: asingPpki, p_ahli: ahli, p_nota: null,
+    p_saiz: saiz, p_asing_ppki: asingPpki, p_ahli: ahli,
+    p_lajur_tanda: bersihkanLajur(lajurTanda),
+    p_guna_catatan: gunaCatatan,
+    p_nota: null,
   });
   if (error) throw error;
   return data as string;
@@ -214,7 +264,7 @@ export const ambilJadualAmali = async (
 ): Promise<JadualAmali | null> => {
   const { data, error } = await supabase
     .from('practical_group_runs')
-    .select(`id, year, siri, saiz_kumpulan, asing_ppki, created_at,
+    .select(`id, year, siri, saiz_kumpulan, asing_ppki, lajur_tanda, guna_catatan, created_at,
              badge:badge_id(name),
              ahli:practical_group_members(kumpulan, person_id, nama, school_id, sekolah, unit)`)
     .eq('year', year).eq('siri', siri);
@@ -234,6 +284,10 @@ export const ambilJadualAmali = async (
     siri: (baris as any).siri,
     saizKumpulan: (baris as any).saiz_kumpulan,
     asingPpki: (baris as any).asing_ppki,
+    // Larian yang dijana sebelum migrasi 070 tiada lajur tersimpan.
+    lajurTanda: (baris as any).lajur_tanda?.length
+      ? (baris as any).lajur_tanda : LAJUR_LALAI,
+    gunaCatatan: (baris as any).guna_catatan ?? true,
     createdAt: (baris as any).created_at,
     ahli: ((baris as any).ahli || []).map((x: any) => ({
       kumpulan: Number(x.kumpulan),

@@ -1895,7 +1895,7 @@ export const batchLockBadgeAllSchools = async (_url: string, badgeName: string, 
   }
 };
 
-export const updateParticipantFields = async (identifier: { icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; isPenguji?: boolean; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
+export const updateParticipantFields = async (identifier: { personId?: string; icNumber?: string; membershipId?: string; name?: string }, updates: { name?: string; gender?: string; race?: string; membershipId?: string; icNumber?: string; phoneNumber?: string; role?: string; isPenguji?: boolean; category?: string; shirtSize?: string; shirtType?: string; siri?: number; unit?: string; makanan?: string; masalahKesihatan?: string; masalahKesihatanLain?: string; remarks?: string }): Promise<ApiResponse> => {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { status: 'error', message: 'Sesi anda telah tamat. Sila log masuk semula.' };
@@ -1923,8 +1923,22 @@ export const updateParticipantFields = async (identifier: { icNumber?: string; m
     if (updates.masalahKesihatanLain !== undefined) updateData.masalah_kesihatan_lain = updates.masalahKesihatanLain || null;
     if (updates.remarks !== undefined) updateData.remarks = updates.remarks || null;
 
+    // BARIS, bukan orang.
+    //
+    // Dahulunya kemas kini ini dipadankan dengan nombor KP sahaja, tanpa
+    // penapis penghantaran, program, tahun atau siri. Menyunting satu rekod
+    // 2026 menulis semula SETIAP baris orang itu, termasuk rekod tahun lepas
+    // yang tidak sepatutnya berubah lagi — dan menanda 'Penguji' pada satu
+    // program menandanya dalam semua program.
+    //
+    // Kes sebenar: NORAZEAN BINTI ARJUNA, tiga baris merentas 2025 dan 2026,
+    // ketiga-tiganya dikemas kini pada saat yang sama oleh satu suntingan.
     let query = supabase.from('submission_people').update(updateData);
-    if (identifier.icNumber) query = query.eq('ic_number', identifier.icNumber);
+    if (identifier.personId) query = query.eq('id', identifier.personId);
+    // Laluan sandaran di bawah masih menyentuh setiap baris yang sepadan.
+    // Ia dikekalkan supaya pemanggil lama tidak pecah, tetapi pemanggil yang
+    // mempunyai id baris WAJIB menghantarnya.
+    else if (identifier.icNumber) query = query.eq('ic_number', identifier.icNumber);
     else if (identifier.membershipId) query = query.eq('membership_id', normalize(identifier.membershipId));
     else if (identifier.name) query = query.eq('name', normalize(identifier.name));
     else return { status: 'error', message: 'Tiada identifier untuk kemaskini.' };

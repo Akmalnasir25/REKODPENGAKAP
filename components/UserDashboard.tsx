@@ -1041,7 +1041,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const handleSaveEdit = async (item: SubmissionData) => {
     setSavingEdit(true);
     try {
-      const identifier = { icNumber: item.icNumber, membershipId: item.id, name: item.student };
+      // id baris didahulukan supaya suntingan ini menyentuh rekod INI sahaja.
+      // Yang lain kekal sebagai sandaran untuk baris lama tanpa personId.
+      const identifier = {
+        personId: item.personId,
+        icNumber: item.icNumber, membershipId: item.id, name: item.student,
+      };
       const { isPenguji, ...medanTeks } = editFormData;
       const res = await updateParticipantFields(identifier, {
         ...medanTeks,

@@ -543,20 +543,40 @@ export const UserForm: React.FC<UserFormProps> = ({
         // Filter existing data for current year
         const yearData = existingData.filter(d => new Date(d.date).getFullYear() === currentYear);
         
+        const siriBorang = siriEnabled ? registrationSiri : 1;
+
         for (const p of allEntries) {
              if (p.icNumber && p.icNumber.trim().length > 4) {
                  const cleanIC = p.icNumber.trim().replace(/-/g, '');
+                 const peranan = String((p as any).role || 'PESERTA').toUpperCase();
                  
                  // Check if this IC exists in the database for the SAME badge in CURRENT YEAR
                  const duplicate = yearData.find(d => {
                      // SAFE STRING CONVERSION: d.icNumber might be number from Excel import
                      const dIC = String(d.icNumber || '').replace(/-/g, '');
-                     // Strict check: Same IC, Same Badge (prevents submitting for same award twice)
-                     return dIC === cleanIC && d.badge === leaderInfo.badgeType;
+                     if (dIC !== cleanIC || d.badge !== leaderInfo.badgeType) return false;
+                     // Orang yang sudah menarik diri tidak lagi memegang
+                     // tempatnya, jadi dia tidak boleh menghalang pendaftaran.
+                     if (d.isWithdrawn) return false;
+
+                     // PESERTA: satu lencana sekali setahun, tanpa mengira
+                     // siri. Peserta yang sama tidak mengambil Keris Emas
+                     // dua kali dalam tahun yang sama.
+                     if (peranan === 'PESERTA') return true;
+
+                     // PEGAWAI (pemimpin, penolong, pembantu, penguji):
+                     // mereka berkhidmat, bukan menerima lencana. Cikgu
+                     // yang sama boleh mengiringi Siri 1 dan Siri 2 bagi
+                     // program yang sama; hanya pertindihan dalam SIRI
+                     // yang sama disekat.
+                     return Number(d.siri || 1) === Number(siriBorang);
                  });
 
                  if (duplicate) {
-                     alert(`HALANGAN DUPLIKASI:\n\nPeserta ${p.name} (${p.icNumber}) telah pun didaftarkan untuk program '${leaderInfo.badgeType}' pada tahun ${currentYear} oleh sekolah ${duplicate.school}.\n\nSila padam rekod ini dari senarai untuk meneruskan.`);
+                     const siriDup = siriEnabled ? ` Siri ${duplicate.siri || 1}` : '';
+                     const nota = peranan === 'PESERTA' ? ''
+                       : '\n\nPegawai boleh didaftarkan untuk siri yang BERLAINAN bagi program yang sama — halangan ini hanya bagi siri yang sama.';
+                     alert(`HALANGAN DUPLIKASI:\n\n${p.name} (${p.icNumber}) telah pun didaftarkan untuk program '${leaderInfo.badgeType}'${siriDup} pada tahun ${currentYear} oleh sekolah ${duplicate.school}.${nota}\n\nSila padam rekod ini dari senarai untuk meneruskan.`);
                      return;
                  }
              }

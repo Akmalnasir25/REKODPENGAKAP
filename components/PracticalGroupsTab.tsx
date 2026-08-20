@@ -5,6 +5,7 @@ import { LoadingSpinner } from './ui/LoadingSpinner';
 import {
   SAIZ_LALAI, LAJUR_LALAI, MAKS_LAJUR, bahagikanPeserta, ambilPesertaLayak,
   simpanJadualAmali, ambilJadualAmali, pindahPeserta, simpanLajurBorang,
+  ambilRekodAmali, padamJadualAmali, RekodAmali,
   bersihkanLajur, isPpki, JadualAmali,
 } from '../services/practicalGroupService';
 import { muatTurunPdfAmali, susunKumpulan } from '../services/practicalGroupPdf';
@@ -32,6 +33,8 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   const [simpanLajur, setSimpanLajur] = useState(false);
 
   const [jadual, setJadual] = useState<JadualAmali | null>(null);
+  // Setiap jadual yang pernah dijana bagi tahun ini, bukan yang dibuka sahaja.
+  const [rekod, setRekod] = useState<RekodAmali[]>([]);
   const [memuat, setMemuat] = useState(false);
   const [menjana, setMenjana] = useState(false);
   const [ralat, setRalat] = useState('');
@@ -56,6 +59,7 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
         setLajur(j.lajurTanda?.length ? j.lajurTanda : [...LAJUR_LALAI]);
         setGunaCatatan(j.gunaCatatan !== false);
       }
+      setRekod(await ambilRekodAmali(year));
     } catch (e: any) {
       setRalat(e.message || 'Gagal memuat jadual.');
       setJadual(null);
@@ -85,6 +89,21 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       await muat();
     } catch (e: any) {
       setRalat(e.message || 'Gagal menjana kumpulan.');
+    } finally { setMenjana(false); }
+  };
+
+  const padam = async (r: RekodAmali) => {
+    if (!confirm(
+      `Padam jadual ${r.badgeName} Siri ${r.siri} ${year}?\n\n`
+      + `${r.bilAhli} peserta dalam ${r.bilKumpulan} kumpulan akan hilang, termasuk `
+      + 'sebarang pelarasan manual. Borang yang sudah dicetak akan menjadi lapuk.'
+    )) return;
+    setMenjana(true); setRalat('');
+    try {
+      await padamJadualAmali(r.runId);
+      await muat();
+    } catch (e: any) {
+      setRalat(e.message || 'Gagal memadam jadual.');
     } finally { setMenjana(false); }
   };
 
@@ -133,6 +152,8 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
   }, [kumpulan]);
 
   const kelasPilih = 'p-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none';
+
+  const rekodDibuka = (r: RekodAmali) => r.badgeName === badgeName && r.siri === siri;
 
   return (
     <div className="space-y-5">
@@ -258,6 +279,72 @@ export const PracticalGroupsTab: React.FC<Props> = ({ badges, daerahName }) => {
       )}
 
       {memuat && <div className="py-8 text-center"><LoadingSpinner /></div>}
+
+      {/* Rekod setiap jadual yang pernah dijana bagi tahun ini. Tanpa ini,
+          satu-satunya cara mengetahui jadual mana wujud ialah memilih program
+          dan siri satu demi satu sehingga sesuatu muncul. */}
+      {rekod.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-slate-100 px-4 py-2">
+            <span className="font-bold text-sm text-slate-800">
+              Jadual amali yang sudah dijana &mdash; {year}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5">Program</th>
+                  <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-14">Siri</th>
+                  <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-20">Kumpulan</th>
+                  <th className="text-center font-bold uppercase text-[9px] px-3 py-1.5 w-20">Peserta</th>
+                  <th className="text-left font-bold uppercase text-[9px] px-3 py-1.5 w-28">Dijana</th>
+                  <th className="text-right font-bold uppercase text-[9px] px-3 py-1.5 w-32">Tindakan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rekod.map(r => (
+                  <tr key={r.runId}
+                    className={`border-t border-slate-100 ${rekodDibuka(r) ? 'bg-emerald-50/70' : ''}`}>
+                    <td className="px-3 py-1.5 font-bold text-slate-800">{r.badgeName}</td>
+                    <td className="px-3 py-1.5 text-center text-slate-500">{r.siri}</td>
+                    <td className="px-3 py-1.5 text-center text-slate-700">{r.bilKumpulan}</td>
+                    <td className="px-3 py-1.5 text-center font-bold text-slate-800">{r.bilAhli}</td>
+                    <td className="px-3 py-1.5 text-slate-400">
+                      {new Date(r.createdAt).toLocaleDateString('ms-MY')}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <div className="flex justify-end gap-1.5">
+                        <button
+                          onClick={() => { setBadgeName(r.badgeName); setSiri(r.siri); }}
+                          disabled={rekodDibuka(r)}
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 transition disabled:opacity-40 disabled:hover:bg-transparent">
+                          {rekodDibuka(r) ? 'Dibuka' : 'Lihat'}
+                        </button>
+                        <button onClick={() => padam(r)} disabled={menjana}
+                          className="px-2 py-1 rounded-lg text-[10px] font-bold border border-rose-200 text-rose-700 hover:bg-rose-50 transition disabled:opacity-40">
+                          Padam
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                  <td className="px-3 py-1.5 font-bold text-slate-700" colSpan={3}>
+                    {rekod.length} jadual
+                  </td>
+                  <td className="px-3 py-1.5 text-center font-bold text-slate-900">
+                    {rekod.reduce((n, r) => n + r.bilAhli, 0)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
 
       {!memuat && !jadual && !ralat && (
         <div className="text-center py-12 text-slate-400">

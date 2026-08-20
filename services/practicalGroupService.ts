@@ -300,6 +300,65 @@ export const ambilJadualAmali = async (
   };
 };
 
+export interface RekodAmali {
+  runId: string;
+  badgeName: string;
+  siri: number;
+  saizKumpulan: number;
+  bilKumpulan: number;
+  bilAhli: number;
+  createdAt: string;
+}
+
+/**
+ * Setiap jadual amali yang pernah dijana bagi satu tahun.
+ *
+ * Tanpa ini, satu-satunya cara mengetahui jadual mana sudah wujud ialah
+ * memilih program dan siri satu demi satu sehingga sesuatu muncul. Larian
+ * yang dilupakan kekal tersembunyi sehingga seseorang menjananya semula dan
+ * tertanya-tanya kenapa amaran 'sudah wujud' keluar.
+ */
+export const ambilRekodAmali = async (year: number): Promise<RekodAmali[]> => {
+  const { data, error } = await supabase
+    .from('practical_group_runs')
+    .select(`id, siri, saiz_kumpulan, created_at,
+             badge:badge_id(name),
+             ahli:practical_group_members(kumpulan)`)
+    .eq('year', year);
+  if (error) throw error;
+
+  return (data || []).map((r: any) => {
+    const b = Array.isArray(r.badge) ? r.badge[0] : r.badge;
+    const ahli = r.ahli || [];
+    return {
+      runId: r.id,
+      badgeName: b?.name || '-',
+      siri: r.siri,
+      saizKumpulan: r.saiz_kumpulan,
+      // Dikira daripada ahli sebenar, bukan daripada saiz yang diminta:
+      // pemindahan manual boleh mengosongkan kumpulan terakhir.
+      bilKumpulan: new Set(ahli.map((x: any) => Number(x.kumpulan))).size,
+      bilAhli: ahli.length,
+      createdAt: r.created_at,
+    };
+  }).sort((a, b) => a.badgeName.localeCompare(b.badgeName) || a.siri - b.siri);
+};
+
+/**
+ * Padam satu jadual amali.
+ *
+ * Ahli dipadam bersama melalui cascade. Menjana semula juga menggantikan
+ * jadual sedia ada, jadi ini untuk kes yang berbeza: jadual yang memang tidak
+ * sepatutnya wujud, bukan yang perlu dibina semula.
+ */
+export const padamJadualAmali = async (runId: string): Promise<void> => {
+  const { error } = await supabase
+    .from('practical_group_runs')
+    .delete()
+    .eq('id', runId);
+  if (error) throw error;
+};
+
 /**
  * Pindahkan seorang peserta ke kumpulan lain.
  *

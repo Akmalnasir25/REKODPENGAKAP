@@ -487,18 +487,31 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       });
 
       // Dedup ikut IC HANYA bila IC ada (elak peserta tanpa IC '' terbuang sesama sendiri).
-      // Seseorang tak boleh ada > 1 entri dalam program (badge) yang SAMA pada tahun yang SAMA,
-      // tak kira siri — untuk pindah siri dalam program sama, guna "Set Siri" (kemaskini rekod
-      // sedia ada), bukan Import Naik (yang cipta rekod/ID keahlian baharu).
+      //
+      // PESERTA: tak boleh ada > 1 entri dalam program yang SAMA pada tahun yang SAMA,
+      // tak kira siri. Seorang murid menerima kad keahlian baharu setiap tahun dan
+      // mengambil satu tempat — dua entri bermakna dua tempat dan dua yuran. Untuk
+      // pindah siri, guna "Set Siri" (kemaskini rekod sedia ada), bukan Import Naik.
+      //
+      // PEGAWAI: dibenarkan dalam siri BERLAINAN bagi program yang sama. Seorang guru
+      // yang mengiringi Siri 1 dan Siri 2 ialah dua tugasan sebenar, bukan pendua —
+      // dan "Set Siri" tidak boleh dipakai di sini kerana ia MEMINDAHKAN rekod, jadi
+      // menandakan dia Siri 2 akan mengeluarkannya daripada Siri 1. Mereka juga tidak
+      // memerlukan No Kad Keahlian baharu (lihat perluIdBaharu), kerana mereka membawa
+      // keahlian sedia ada. Hanya siri SASARAN dikira pendua.
+      const pegawai = importRole !== 'PESERTA';
+      const siriSasaran = importTargetSiriEnabled ? importTargetSiri : 1;
+
       const existingIcs = new Set(
           myData
               .filter(d => d.badge === importTargetBadge
                   && d.icNumber
-                  && new Date(d.date).getFullYear() === selectedYear)
+                  && new Date(d.date).getFullYear() === selectedYear
+                  && (!pegawai || (d.siri ?? 1) === siriSasaran))
               .map(d => String(d.icNumber))
       );
       return filteredByRole.filter(c => !(c.icNumber && existingIcs.has(String(c.icNumber))));
-  }, [allData, user, selectedYear, importSourceBadge, importTargetBadge, myData, importSourceYear, importRole]);
+  }, [allData, user, selectedYear, importSourceBadge, importTargetBadge, myData, importSourceYear, importRole, importTargetSiri, importTargetSiriEnabled]);
 
   // --- ARCHIVE DATA (PESERTA SAHAJA) ---
   const myArchiveData = useMemo(() => {
@@ -1197,12 +1210,24 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       // ID keahlian boleh sama merentas program/tahun berlainan (orang yang sama).
       // Hanya halang jika ID sudah wujud untuk PROGRAM + TAHUN yang sama (cohort yang sama).
+      //
+      // Bagi PEGAWAI, siri turut dikira — atas sebab yang sama seperti penapis calon.
+      // Mereka membawa keahlian SEDIA ADA, jadi ID mereka memang sudah wujud dalam
+      // Siri 1 program yang sama. Tanpa syarat siri di sini, semakan ini akan menolak
+      // import yang penapis calon baru sahaja benarkan.
+      const siriBaharu = importTargetSiriEnabled ? importTargetSiri : 1;
       const existingId = newIds.find(id => allData.some(d =>
           String(d.id || '').trim().toUpperCase() === id &&
           d.badge === targetBadge &&
-          new Date(d.date).getFullYear() === selectedYear
+          new Date(d.date).getFullYear() === selectedYear &&
+          (perluIdBaharu || (d.siri ?? 1) === siriBaharu)
       ));
-      if (existingId) { alert(`ID keahlian "${existingId}" sudah wujud untuk program '${targetBadge}' tahun ${selectedYear}. (ID sama dibenarkan untuk program lain.)`); setIsSubmittingImport(false); return; }
+      if (existingId) {
+          alert(perluIdBaharu
+              ? `ID keahlian "${existingId}" sudah wujud untuk program '${targetBadge}' tahun ${selectedYear}. (ID sama dibenarkan untuk program lain.)`
+              : `ID keahlian "${existingId}" sudah wujud untuk program '${targetBadge}' tahun ${selectedYear} Siri ${siriBaharu}. (ID sama dibenarkan untuk siri atau program lain.)`);
+          setIsSubmittingImport(false); return;
+      }
 
       const ref = candidatesToSubmit[0];
 
@@ -2469,7 +2494,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                                 {importCandidates.length === 0 && (
                                     <tr><td colSpan={5} className="text-center py-4 text-gray-400 italic">
                                         {importSourceBadge === importTargetBadge && importSourceYear === selectedYear
-                                            ? 'Tiada calon — semua peserta di program ini tahun ini sudah didaftarkan. Untuk tukar siri dalam program yang sama, guna aksi "Set Siri" pada senarai peserta, bukan Import Naik.'
+                                            ? (importRole === 'PESERTA'
+                                                ? 'Tiada calon — semua peserta di program ini tahun ini sudah didaftarkan. Untuk tukar siri dalam program yang sama, guna aksi "Set Siri" pada senarai peserta, bukan Import Naik.'
+                                                : `Tiada calon — semua ${importRole.toLowerCase()} ini sudah didaftarkan dalam Siri ${importTargetSiriEnabled ? importTargetSiri : 1} bagi program ini. Pilih siri sasaran yang lain untuk menugaskan mereka ke siri tambahan.`)
                                             : 'Tiada calon.'}
                                     </td></tr>
                                 )}

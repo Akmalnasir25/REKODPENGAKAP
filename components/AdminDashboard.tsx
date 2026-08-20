@@ -591,15 +591,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Filters Bar */}
         {activeTab !== 'archive' && (
-            <div className="admin-dashboard-filter-card admin-pro-panel-card p-4 md:p-5 rounded-xl">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+            <details className="admin-dashboard-expander" open>
+                <summary className="admin-dashboard-expander-summary">
                     <div>
-                        <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
+                        <h2 className="admin-dashboard-expander-title">
                             <ListFilter size={16} className="text-emerald-700" /> Tapisan Data
                         </h2>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">Susun paparan ikut tahun, program, siri, jenis, unit dan sekolah.</p>
+                        <p className="admin-dashboard-expander-subtitle">Susun paparan ikut tahun, program, siri, jenis, unit dan sekolah.</p>
                     </div>
-                    <div className="admin-dashboard-filter-actions">
+                    <div className="admin-dashboard-expander-meta">
+                        <span className={`admin-dashboard-expander-pill ${showDrafts ? 'is-warn' : 'is-good'}`}>
+                            {showDrafts ? 'Semua Data' : 'Disahkan Sahaja'}
+                        </span>
+                        <span className="admin-dashboard-expander-pill">
+                            {submittedData.length.toLocaleString('ms-MY')} rekod
+                        </span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
+                    <div className="admin-dashboard-filter-card admin-pro-panel-card p-4 md:p-5 rounded-xl">
+                        <div className="admin-dashboard-filter-actions mb-4">
                         <button
                             onClick={() => setShowDrafts(!showDrafts)}
                             className={`admin-dashboard-filter-toggle admin-dashboard-filter-toggle-inline ${showDrafts ? 'is-on' : 'is-off'}`}
@@ -613,9 +625,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <strong>{submittedData.length}</strong>
                         </div>
                     </div>
-                </div>
 
-                <div className="admin-dashboard-filter-grid">
+                    <div className="admin-dashboard-filter-grid">
                     <label className="admin-dashboard-filter-field">
                         <span><Calendar size={14} /> Tahun Semasa</span>
                         <select
@@ -719,12 +730,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                     </label>
 
+                    </div>
                 </div>
-            </div>
+                </div>
+            </details>
         )}
 
         {/* STATS SUMMARY CARDS (Aggregated Counts) */}
         {activeTab !== 'archive' && (
+            <details className="admin-dashboard-expander" open>
+                <summary className="admin-dashboard-expander-summary">
+                    <div>
+                        <h2 className="admin-dashboard-expander-title">
+                            <PieChart size={16} className="text-blue-700" /> Ringkasan Utama
+                        </h2>
+                        <p className="admin-dashboard-expander-subtitle">Kad jumlah utama mengikut tapisan semasa.</p>
+                    </div>
+                    <div className="admin-dashboard-expander-meta">
+                        <span className="admin-dashboard-expander-pill">{schoolStats.length.toLocaleString('ms-MY')} sekolah</span>
+                        <span className="admin-dashboard-expander-pill">{totals.total.toLocaleString('ms-MY')} jumlah</span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6 gap-4 animate-[fadeIn_0.3s_ease-out]">
                 {/* SEKOLAH CARD (NEW) */}
                 <div className="admin-pro-panel-card admin-metric-card admin-dashboard-kpi admin-dashboard-kpi-orange p-4 rounded-lg relative overflow-hidden">
@@ -810,10 +838,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                 </div>
             </div>
+                </div>
+            </details>
         )}
 
         {/* Statistics Table (SCHOOLS) - Only if NOT in archive tab */}
         {activeTab !== 'archive' && (
+            <details className="admin-dashboard-expander">
+                <summary className="admin-dashboard-expander-summary">
+                    <div>
+                        <h2 className="admin-dashboard-expander-title">
+                            <BarChart3 size={16} className="text-sky-700" /> Statistik Sekolah
+                        </h2>
+                        <p className="admin-dashboard-expander-subtitle">Pecahan peserta dan pegawai mengikut sekolah.</p>
+                    </div>
+                    <div className="admin-dashboard-expander-meta">
+                        <span className="admin-dashboard-expander-pill">{schoolStats.length.toLocaleString('ms-MY')} sekolah</span>
+                        <span className="admin-dashboard-expander-pill">{selectedYear}</span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
             <div className="admin-dashboard-table-card admin-pro-panel-card p-5 md:p-6 rounded-xl overflow-hidden">
                 <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 mb-6">
                 <div>
@@ -918,11 +963,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </table>
                 </div>
             </div>
+                </div>
+            </details>
         )}
 
         {/* ADVANCED ANALYTICS CHARTS */}
         {activeTab !== 'archive' && displayedData.length > 0 && (
             <>
+            <details className="admin-dashboard-expander">
+                <summary className="admin-dashboard-expander-summary">
+                    <div>
+                        <h2 className="admin-dashboard-expander-title">
+                            <CheckCircle size={16} className="text-emerald-700" /> Makanan & Kesihatan
+                        </h2>
+                        <p className="admin-dashboard-expander-subtitle">Ringkasan peserta vegetarian dan maklumat kesihatan.</p>
+                    </div>
+                    <div className="admin-dashboard-expander-meta">
+                        <span className="admin-dashboard-expander-pill">
+                            Vegetarian {makananStats.details.length.toLocaleString('ms-MY')}
+                        </span>
+                        <span className="admin-dashboard-expander-pill">
+                            Kesihatan {kesihatanStats.details.length.toLocaleString('ms-MY')}
+                        </span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
             {/* RUMUSAN MAKANAN & KESIHATAN - CLICKABLE */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 {/* Makanan - Klik untuk lihat detail Vegetarian */}
@@ -1024,17 +1090,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
             )}
 
-            <AdvancedAnalytics data={displayedData} year={selectedYear} />
+                </div>
+            </details>
+
+            <details className="admin-dashboard-expander">
+                <summary className="admin-dashboard-expander-summary">
+                    <div>
+                        <h2 className="admin-dashboard-expander-title">
+                            <PieChart size={16} className="text-indigo-700" /> Analitik Lanjutan
+                        </h2>
+                        <p className="admin-dashboard-expander-subtitle">Carta dan bacaan tambahan untuk data semasa.</p>
+                    </div>
+                    <div className="admin-dashboard-expander-meta">
+                        <span className="admin-dashboard-expander-pill">{displayedData.length.toLocaleString('ms-MY')} rekod</span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
+                    <AdvancedAnalytics data={displayedData} year={selectedYear} />
+                </div>
+            </details>
             </>
         )}
 
         {/* RUMUSAN BAYARAN & SAIZ BAJU */}
         {activeTab !== 'archive' && (
-            <ProgramSummaryView records={yearData} year={selectedYear} mode="admin" />
+            <details className="admin-dashboard-expander">
+                <summary className="admin-dashboard-expander-summary">
+                    <div>
+                        <h2 className="admin-dashboard-expander-title">
+                            <Award size={16} className="text-amber-700" /> Rumusan Program
+                        </h2>
+                        <p className="admin-dashboard-expander-subtitle">Bayaran, saiz baju dan pecahan program untuk tahun semasa.</p>
+                    </div>
+                    <div className="admin-dashboard-expander-meta">
+                        <span className="admin-dashboard-expander-pill">{yearData.length.toLocaleString('ms-MY')} rekod tahun</span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
+                    <ProgramSummaryView records={yearData} year={selectedYear} mode="admin" />
+                </div>
+            </details>
         )}
 
         {/* DETAILED DATA TABLE */}
         {activeTab !== 'archive' && (
+            <details className="admin-dashboard-expander">
+                <summary className="admin-dashboard-expander-summary">
+                    <div>
+                        <h2 className="admin-dashboard-expander-title">
+                            <Database size={16} className="text-emerald-700" /> Senarai Rekod
+                        </h2>
+                        <p className="admin-dashboard-expander-subtitle">Senarai nama penuh, sekolah, peranan dan tindakan rekod.</p>
+                    </div>
+                    <div className="admin-dashboard-expander-meta">
+                        <span className="admin-dashboard-expander-pill">{displayedData.length.toLocaleString('ms-MY')} rekod</span>
+                        <span className="admin-dashboard-expander-toggle-text" aria-hidden="true"></span>
+                    </div>
+                </summary>
+                <div className="admin-dashboard-expander-body">
             <div className="admin-dashboard-table-card admin-pro-panel-card p-5 md:p-6 rounded-xl overflow-hidden">
                 {/* Header */}
                 <div className="flex flex-col gap-4 mb-6">
@@ -1160,6 +1275,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </table>
                 </div>
             </div>
+                </div>
+            </details>
         )}
 
         {/* ARCHIVE VIEW */}

@@ -210,6 +210,161 @@
     box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
   }
 
+  .admin-dashboard-expander {
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 12px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.86));
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.07);
+    overflow: hidden;
+  }
+
+  .admin-dashboard-expander + .admin-dashboard-expander {
+    margin-top: 0.9rem;
+  }
+
+  .admin-dashboard-expander-summary {
+    display: flex;
+    min-height: 4.1rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.9rem;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    list-style: none;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 245, 249, 0.9)),
+      linear-gradient(90deg, rgba(15, 118, 110, 0.08), transparent 44%);
+    transition: background 160ms ease;
+  }
+
+  .admin-dashboard-expander-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .admin-dashboard-expander-summary:hover {
+    background:
+      linear-gradient(135deg, #ffffff, rgba(240, 253, 250, 0.96)),
+      linear-gradient(90deg, rgba(15, 118, 110, 0.11), transparent 48%);
+  }
+
+  .admin-dashboard-expander-title {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.45rem;
+    color: #0f172a;
+    font-size: 0.9rem;
+    font-weight: 950;
+    line-height: 1.2;
+  }
+
+  .admin-dashboard-expander-subtitle {
+    margin-top: 0.18rem;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 750;
+    line-height: 1.25;
+  }
+
+  .admin-dashboard-expander-meta {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+  }
+
+  .admin-dashboard-expander-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.86);
+    color: #475569;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 900;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .admin-dashboard-expander-pill.is-good {
+    border-color: rgba(16, 185, 129, 0.22);
+    background: #ecfdf5;
+    color: #047857;
+  }
+
+  .admin-dashboard-expander-pill.is-warn {
+    border-color: rgba(234, 88, 12, 0.24);
+    background: #fff7ed;
+    color: #c2410c;
+  }
+
+  .admin-dashboard-expander-toggle-text {
+    display: inline-flex;
+    min-width: 4.1rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(15, 118, 110, 0.18);
+    border-radius: 9999px;
+    background: #0f766e;
+    color: #ffffff;
+    padding: 0.36rem 0.65rem;
+    font-size: 0.68rem;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .admin-dashboard-expander-toggle-text::before {
+    content: "Buka";
+  }
+
+  .admin-dashboard-expander[open] .admin-dashboard-expander-toggle-text::before {
+    content: "Tutup";
+  }
+
+  .admin-dashboard-expander-summary::after {
+    content: "";
+    width: 0.55rem;
+    height: 0.55rem;
+    flex: 0 0 auto;
+    border-right: 2px solid #0f766e;
+    border-bottom: 2px solid #0f766e;
+    transform: rotate(45deg);
+    transition: transform 160ms ease;
+  }
+
+  .admin-dashboard-expander[open] .admin-dashboard-expander-summary::after {
+    transform: rotate(-135deg);
+  }
+
+  .admin-dashboard-expander-body {
+    padding: 0.85rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(248, 250, 252, 0.56);
+  }
+
+  @media (max-width: 640px) {
+    .admin-dashboard-expander-summary {
+      position: relative;
+      flex-direction: column;
+      align-items: flex-start;
+      padding-right: 2.45rem;
+    }
+
+    .admin-dashboard-expander-summary::after {
+      position: absolute;
+      top: 1.25rem;
+      right: 1rem;
+    }
+
+    .admin-dashboard-expander-meta {
+      justify-content: flex-start;
+    }
+  }
+
   .admin-dashboard-filter-card {
     border-color: rgba(15, 118, 110, 0.16);
     background:

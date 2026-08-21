@@ -640,8 +640,15 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   />
                 </div>
 
+                {/* Statistik mengikut SEMUA badge, bukan `attendanceBadges`.
+                    Satu imbasan QR v4 mengesahkan setiap program diluluskan
+                    sekolah itu dalam siri berkenaan (PASANG-066) tanpa mengira
+                    skop badge. Menapis paparan ikut skop menjadikan imbasan
+                    yang berjaya kelihatan seperti tidak pernah berlaku.
+                    Skop admin tetap dikuatkuasakan melalui daerahCode/negeriCode
+                    di bawah, dan melalui RLS. */}
                 <StatistikKehadiranProgram
-                  badges={attendanceBadges}
+                  badges={badges}
                   records={attendanceRecords}
                   loading={attendanceLoading}
                   onRefresh={loadAttendanceRecords}

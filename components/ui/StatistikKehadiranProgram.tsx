@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart3, RefreshCw, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 import { LoadingSpinner } from './LoadingSpinner';
+import type { Badge } from '../../types';
 
 /**
  * STATISTIK KEHADIRAN — SIRI DAHULU, KEMUDIAN PROGRAM
@@ -23,8 +24,18 @@ import { LoadingSpinner } from './LoadingSpinner';
  */
 
 interface StatistikKehadiranProgramProps {
-  /** Badge yang sudah ditapis mengikut skop admin. */
-  badges: any[];
+  /**
+   * Senarai program PENUH bagi tahun semasa — bukan yang ditapis mengikut
+   * skop badge. Skop admin dikuatkuasakan oleh daerahCode/negeriCode di
+   * bawah, yang menapis SEKOLAH; menapis PROGRAM pula menyembunyikan
+   * imbasan yang sah kerana QR v4 merekod setiap program sekolah itu
+   * tanpa mengira skop badge (PASANG-066).
+   *
+   * Ditaip `Badge[]` dengan sengaja: versi `any[]` menyembunyikan fakta
+   * bahawa objek yang dihantar langsung tiada `id`, jadi `badgeIds` kosong
+   * dan seluruh senarai statistik kekal kosong tanpa sebarang ralat.
+   */
+  badges: Badge[];
   /** Rekod attendance_verifications bagi skop ini, tahun semasa, SEMUA program. */
   records: any[];
   loading: boolean;
@@ -64,13 +75,25 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
   const [badgeId, setBadgeId] = useState('');
   const [jenis, setJenis] = useState<JenisSekolah>('');
 
-  const badgeIds = useMemo(() => badges.map((b: any) => b.id).filter(Boolean), [badges]);
+  const badgeIds = useMemo(
+    () => badges.map(b => b.id).filter((id): id is string => !!id),
+    [badges],
+  );
   const kunciBadge = badgeIds.join(',');
   const namaBadge = useMemo(() => {
     const map = new Map<string, string>();
-    badges.forEach((b: any) => map.set(b.id, b.name));
+    badges.forEach(b => { if (b.id) map.set(b.id, b.name); });
     return map;
   }, [badges]);
+
+  // Kegagalan senyap yang pernah berlaku: ada program, tiada satu pun `id`,
+  // jadi skrin melaporkan "tiada sekolah diluluskan" sedangkan imbasan
+  // sebenarnya berjaya. Biar ia bersuara di konsol.
+  useEffect(() => {
+    if (badges.length > 0 && badgeIds.length === 0) {
+      console.error('Statistik kehadiran: senarai program tiada `id` — statistik tidak dapat dibina.');
+    }
+  }, [badges.length, badgeIds.length]);
 
   // Satu pertanyaan bagi seluruh skop, bukan satu bagi setiap program.
   // Hasilnya melakukan tiga kerja: ia penyebut, ia senarai program bagi
@@ -135,17 +158,17 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
   }, [siriAda, siri, siriLalai]);
 
   // Program yang ada dalam siri dipilih sahaja.
-  const programSiri = useMemo(() => {
+  const programSiri = useMemo<Badge[]>(() => {
     if (siri === null) return [];
     const ids = new Set(pendaftaran.filter((r: any) => (r.siri || 1) === siri).map((r: any) => r.badge_id));
-    return badges.filter((b: any) => ids.has(b.id));
+    return badges.filter(b => !!b.id && ids.has(b.id));
   }, [pendaftaran, siri, badges]);
 
   // Pilihan program yang tiada dalam siri baharu tidak boleh dibiarkan
   // hidup di belakang tabir; ia akan menapis semuanya keluar sedangkan
   // dropdown sudah tidak memaparkannya.
   useEffect(() => {
-    if (badgeId && !programSiri.some((b: any) => b.id === badgeId)) setBadgeId('');
+    if (badgeId && !programSiri.some(b => b.id === badgeId)) setBadgeId('');
   }, [programSiri, badgeId]);
 
   const sekolah = useMemo((): BarisSekolah[] => {
@@ -316,7 +339,7 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
             className="w-full p-3 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="">Semua Program ({programSiri.length})</option>
-            {programSiri.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {programSiri.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
 

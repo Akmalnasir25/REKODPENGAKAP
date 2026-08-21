@@ -589,6 +589,7 @@ export const fetchCloudData = async (
     const negeriList: Negeri[] = (negeriRes.data || []).map((n: any) => ({ code: n.code, name: n.name, createdDate: n.created_at }));
     const daerahList: Daerah[] = (daerahRes.data || []).map((d: any) => ({ code: d.code, name: d.name, negeriCode: d.negeri?.code || '', createdDate: d.created_at }));
     const badges: Badge[] = (badgesRes.data || []).map((b: any) => ({
+      id: b.id,
       name: b.name,
       isOpen: b.is_open,
       // Normalisasi kepada yyyy-MM-dd supaya <input type="date"> dapat papar

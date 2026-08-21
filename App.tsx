@@ -866,6 +866,7 @@ function AppContent() {
                       }));
                       setDashboardData(submissions);
                       setBadges((d.badges || []).map((b: any) => ({
+                        id: b.id,
                         name: b.name,
                         isOpen: b.is_open,
                         deadline: b.deadline ? String(b.deadline).slice(0, 10) : b.deadline,

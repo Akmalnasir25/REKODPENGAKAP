@@ -88,6 +88,13 @@ export interface SubmissionData {
 }
 
 export interface Badge {
+  /**
+   * UUID baris `badges`. Opsyenal kerana laluan sandaran lama membina Badge
+   * daripada nama sahaja (App.tsx), tetapi setiap laluan Supabase mengisinya.
+   * Tanpa medan ini, statistik kehadiran tidak dapat menanya
+   * `school_badge_status` dan senarainya kekal kosong secara senyap.
+   */
+  id?: string;
   name: string;
   isOpen: boolean;
   deadline?: string;

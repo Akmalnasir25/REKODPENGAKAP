@@ -150,6 +150,37 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     }
   };
 
+  // Padam daripada Statistik Kehadiran. Kunci lencana ialah sekolah + program
+  // + siri, jadi SETIAP baris bagi kunci itu dipadam — imbasan berganda pernah
+  // mencipta lebih daripada satu baris, dan meninggalkan satu akan mengekalkan
+  // lencana hijau selepas mesej "berjaya dipadam".
+  const handlePadamKehadiranStatistik = async (rekodIds: string[], keterangan: string) => {
+    if (rekodIds.length === 0) return;
+    const amaran = [
+      'Padam pengesahan kehadiran?',
+      '',
+      keterangan,
+      '',
+      'Sekolah ini akan kembali ke "Belum Scan" bagi program tersebut, '
+      + 'dan QR-nya boleh discan semula.',
+    ].join('\n');
+    if (!confirm(amaran)) return;
+
+    const gagal: string[] = [];
+    for (const id of rekodIds) {
+      try {
+        const res = await deleteAttendanceVerification(id);
+        if (res.status !== 'success') gagal.push(res.message || 'Ralat tidak diketahui');
+      } catch (e: any) {
+        gagal.push(e?.message || 'Ralat sambungan.');
+      }
+    }
+    // Muat semula tanpa mengira kegagalan: sebahagian mungkin sudah dipadam,
+    // dan paparan yang tidak diselaraskan akan menipu petugas.
+    await loadAttendanceRecords();
+    if (gagal.length > 0) alert('Gagal padam: ' + gagal[0]);
+  };
+
   const filteredData = useMemo(() => data.filter(d => d.daerahCode === daerahCode), [data, daerahCode]);
   const filteredSchools = useMemo(() => schools.filter(s => s.daerahCode === daerahCode), [schools, daerahCode]);
 
@@ -653,6 +684,7 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   loading={attendanceLoading}
                   onRefresh={loadAttendanceRecords}
                   daerahCode={daerahCode}
+                  onPadam={handlePadamKehadiranStatistik}
                 />
 
                 {/* Today's Records */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BarChart3, RefreshCw, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { BarChart3, RefreshCw, CheckCircle, AlertTriangle, Clock, Trash2 } from 'lucide-react';
 import { LoadingSpinner } from './LoadingSpinner';
 import type { Badge } from '../../types';
 
@@ -44,6 +44,16 @@ interface StatistikKehadiranProgramProps {
   negeriCode?: string;
   /** Panel Negeri memaparkan kod daerah pada setiap baris sekolah. */
   tunjukDaerah?: boolean;
+  /**
+   * Padam pengesahan kehadiran bagi satu sekolah + program + siri.
+   *
+   * Menerima SEMUA id bagi kunci itu, bukan satu: imbasan berganda pernah
+   * mencipta lebih daripada satu baris, dan memadam sebahagian sahaja akan
+   * mengekalkan lencana hijau selepas mesej "berjaya dipadam".
+   *
+   * Opsyenal — tanpa ia, lencana kekal label statik dan tidak boleh ditekan.
+   */
+  onPadam?: (rekodIds: string[], keterangan: string) => Promise<void> | void;
 }
 
 type JenisSekolah = '' | 'rendah' | 'menengah';
@@ -53,6 +63,8 @@ interface ProgramSekolah {
   nama: string;
   sah: boolean;
   peserta: number;
+  /** Baris attendance_verifications di sebalik lencana ini. */
+  rekodIds: string[];
 }
 
 interface BarisSekolah {
@@ -65,7 +77,7 @@ interface BarisSekolah {
 }
 
 export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps> = ({
-  badges, records, loading, onRefresh, daerahCode, negeriCode, tunjukDaerah = false,
+  badges, records, loading, onRefresh, daerahCode, negeriCode, tunjukDaerah = false, onPadam,
 }) => {
   const [pendaftaran, setPendaftaran] = useState<any[]>([]);
   const [memuatPendaftaran, setMemuatPendaftaran] = useState(false);
@@ -74,6 +86,9 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
   // '' bermakna SEMUA program dalam siri itu, bukan "belum pilih".
   const [badgeId, setBadgeId] = useState('');
   const [jenis, setJenis] = useState<JenisSekolah>('');
+  // Kunci lencana yang sedang dipadam — menghalang tekan dua kali daripada
+  // menghantar dua permintaan padam bagi baris yang sama.
+  const [padamKunci, setPadamKunci] = useState<string | null>(null);
 
   const badgeIds = useMemo(
     () => badges.map(b => b.id).filter((id): id is string => !!id),
@@ -179,12 +194,17 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
     ));
     // Kunci ialah sekolah + program: satu sekolah boleh mempunyai beberapa
     // program dalam siri yang sama, dan setiap satunya disahkan sendiri.
-    const pesertaIkutKunci = new Map<string, number>();
+    //
+    // Rekod penuh disimpan dan bukan hanya jumlahnya, kerana lencana hijau
+    // kini boleh dipadam dan padam memerlukan id barisnya.
+    const rekodIkutKunci = new Map<string, any[]>();
     rekod.forEach((r: any) => {
       const kod = r.school?.school_code;
       if (!kod) return;
       const kunci = `${kod}|${r.badge_id}`;
-      pesertaIkutKunci.set(kunci, (pesertaIkutKunci.get(kunci) || 0) + (r.participant_count || 0));
+      const senarai = rekodIkutKunci.get(kunci);
+      if (senarai) senarai.push(r);
+      else rekodIkutKunci.set(kunci, [r]);
     });
 
     const baris = pendaftaran.filter((r: any) => (
@@ -206,13 +226,13 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
         peserta: 0,
       };
       if (!sedia.program.some(p => p.id === r.badge_id)) {
-        const kunci = `${kod}|${r.badge_id}`;
-        const sah = pesertaIkutKunci.has(kunci);
+        const rekodKunci = rekodIkutKunci.get(`${kod}|${r.badge_id}`);
         sedia.program.push({
           id: r.badge_id,
           nama: namaBadge.get(r.badge_id) || 'Program',
-          sah,
-          peserta: pesertaIkutKunci.get(kunci) || 0,
+          sah: !!rekodKunci,
+          peserta: (rekodKunci || []).reduce((n, x: any) => n + (x.participant_count || 0), 0),
+          rekodIds: (rekodKunci || []).map((x: any) => x.id).filter(Boolean),
         });
       }
       map.set(kod, sedia);
@@ -258,6 +278,21 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
     { nilai: 'menengah', label: `SM (${kiraJenis.menengah})` },
   ];
 
+  // Silap imbas dijumpai di sini — "kenapa sekolah ini hijau, ia belum
+  // sampai pun" — jadi di sini juga ia ditarik balik. Skop padam ialah satu
+  // lencana: sekolah + program + siri yang sedang dipilih, supaya program
+  // lain sekolah itu yang memang betul tidak perlu diimbas semula.
+  const padamLencana = async (s: BarisSekolah, p: ProgramSekolah) => {
+    if (!onPadam || p.rekodIds.length === 0) return;
+    const kunci = `${s.kod}|${p.id}`;
+    setPadamKunci(kunci);
+    try {
+      await onPadam(p.rekodIds, `${s.nama} — ${p.nama}${siri !== null ? ` (Siri ${siri})` : ''}`);
+    } finally {
+      setPadamKunci(null);
+    }
+  };
+
   const senaraiSekolah = (senarai: BarisSekolah[], warna: 'hijau' | 'kuning' | 'jingga') => {
     const gaya = warna === 'hijau'
       ? 'bg-green-50 border-green-100'
@@ -274,16 +309,29 @@ export const StatistikKehadiranProgram: React.FC<StatistikKehadiranProgramProps>
                 {s.peserta > 0 && <> · <span className="text-green-700 font-bold">{s.peserta} peserta</span></>}
               </p>
               <div className="flex flex-wrap gap-1 mt-1">
-                {s.program.map(p => (
-                  <span
-                    key={p.id}
-                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${p.sah
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-slate-100 text-slate-400'}`}
-                  >
-                    {p.sah ? '✓ ' : ''}{p.nama}
-                  </span>
-                ))}
+                {s.program.map(p => {
+                  const gayaLencana = `text-[9px] px-1.5 py-0.5 rounded-full font-bold ${p.sah
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-slate-100 text-slate-400'}`;
+                  // Lencana kelabu bermakna belum disahkan — tiada apa untuk
+                  // ditarik balik, jadi ia kekal label dan bukan butang.
+                  if (!onPadam || !p.sah || p.rekodIds.length === 0) {
+                    return <span key={p.id} className={gayaLencana}>{p.sah ? '✓ ' : ''}{p.nama}</span>;
+                  }
+                  const sedangPadam = padamKunci === `${s.kod}|${p.id}`;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => padamLencana(s, p)}
+                      disabled={sedangPadam}
+                      title={`Padam pengesahan kehadiran — ${p.nama}`}
+                      className={`${gayaLencana} inline-flex items-center gap-1 hover:bg-red-100 hover:text-red-700 transition disabled:opacity-50`}
+                    >
+                      {sedangPadam ? '⋯' : '✓'} {p.nama}
+                      <Trash2 size={9} />
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">

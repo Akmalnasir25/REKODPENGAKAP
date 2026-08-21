@@ -17,6 +17,7 @@ import { toggleRegistration, setupDatabase, clearDatabaseSheet, changeAdminPassw
 import { QRAttendanceScanner } from './ui/QRVerification';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { StatistikKehadiranProgram } from './ui/StatistikKehadiranProgram';
+import { SenaraiScanKehadiran } from './ui/SenaraiScanKehadiran';
 import { uploadLogo, getLogoUrl } from '../services/logoService';
 import { WithdrawalScanner } from './WithdrawalScanner';
 import { WithdrawalsList } from './WithdrawalsList';
@@ -131,10 +132,9 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
     }
   };
 
+  // Pengesahan dilakukan oleh SenaraiScanKehadiran, yang tahu tarikh dan siri
+  // rekod itu. Menduakannya di sini bermakna dua dialog untuk satu tekanan.
   const handleDeleteAttendance = async (record: any) => {
-    const schoolName = record.school?.name || 'sekolah ini';
-    const badgeName = record.badge?.name || 'program ini';
-    if (!confirm(`Padam pengesahan kehadiran untuk ${schoolName} (${badgeName})?\n\nSelepas dipadam, QR boleh discan semula.`)) return;
     setDeletingAttendanceId(record.id);
     try {
       const res = await deleteAttendanceVerification(record.id);
@@ -687,45 +687,12 @@ export const AdminDaerahPanel: React.FC<AdminDaerahPanelProps> = ({
                   onPadam={handlePadamKehadiranStatistik}
                 />
 
-                {/* Today's Records */}
-                <div className="bg-white rounded-xl shadow p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                      <CheckCircle size={16} className="text-green-500" /> Senarai Scan Hari Ini
-                    </h3>
-                  </div>
-                  {(() => {
-                    const todayStr = new Date().toDateString();
-                    const todayRecords = attendanceRecords.filter((r: any) => new Date(r.verified_at).toDateString() === todayStr);
-                    if (attendanceLoading) return <p className="text-xs text-slate-400 italic">Memuatkan rekod...</p>;
-                    if (todayRecords.length === 0) return <p className="text-xs text-slate-400 italic">Belum ada kehadiran disahkan hari ini.</p>;
-                    return (
-                      <div className="space-y-2 max-h-80 overflow-y-auto">
-                        {todayRecords.map((r: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-2 gap-3">
-                            <div>
-                              <p className="text-xs font-bold text-slate-800">{r.school?.name || '-'}</p>
-                              <p className="text-[10px] text-slate-500">{r.badge?.name || '-'}{(r.siri || 1) > 1 ? ` (Siri ${r.siri})` : ''} | {r.participant_count || 0} peserta</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-green-600 font-mono">
-                                {new Date(r.verified_at).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                              <button
-                                onClick={() => handleDeleteAttendance(r)}
-                                disabled={deletingAttendanceId === r.id}
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded p-1 transition disabled:opacity-50"
-                                title="Padam pengesahan kehadiran"
-                              >
-                                {deletingAttendanceId === r.id ? <LoadingSpinner size="sm" color="border-red-500" /> : <Trash2 size={12} />}
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
+                <SenaraiScanKehadiran
+                  records={attendanceRecords}
+                  loading={attendanceLoading}
+                  padamId={deletingAttendanceId}
+                  onPadam={handleDeleteAttendance}
+                />
               </div>
             )}
 

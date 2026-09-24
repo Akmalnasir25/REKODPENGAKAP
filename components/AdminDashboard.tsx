@@ -6,6 +6,7 @@ import { getProgramSettings, ProgramSetting } from '../services/supabaseApi';
 import { ProgramSummaryView } from './ProgramSummaryView';
 import { LoadingSpinner } from './ui/LoadingSpinner';
 import { PDFExportButton } from './ui/PDFExportButton';
+import { ProgramReportButton } from './ui/ProgramReportButton';
 import { BulkWhatsApp } from './ui/BulkWhatsApp';
 import { SchoolQRGenerator, QRAttendanceScanner } from './ui/QRVerification';
 import { AdvancedAnalytics } from './ui/AdvancedAnalytics';
@@ -875,6 +876,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         year={selectedYear} 
                         badge={selectedBadgeFilter}
                         title="SENARAI PENDAFTARAN PENGAKAP"
+                    />
+                    {/* Laporan Program guna baseFilteredData, bukan displayedData:
+                        borang rasmi mengira semua peranan, bukan tab yang sedang dibuka. */}
+                    <ProgramReportButton
+                        data={baseFilteredData}
+                        year={selectedYear}
+                        badge={selectedBadgeFilter}
                     />
                     <BulkWhatsApp data={displayedData} />
                     <SchoolQRGenerator data={data} year={selectedYear} />

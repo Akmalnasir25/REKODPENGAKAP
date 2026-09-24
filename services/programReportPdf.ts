@@ -31,6 +31,49 @@ export interface ProgramReportRow {
   jumlah: number;
 }
 
+export type ProgramRoleKey = 'peserta' | 'pemimpin' | 'penolong' | 'pembantu' | 'penguji';
+
+export const PROGRAM_ROLES: ReadonlyArray<{ key: ProgramRoleKey; label: string }> = [
+  { key: 'peserta', label: 'Peserta' },
+  { key: 'pemimpin', label: 'Pemimpin' },
+  { key: 'penolong', label: 'Penolong Pemimpin' },
+  { key: 'pembantu', label: 'Pembantu' },
+  { key: 'penguji', label: 'Penguji' },
+];
+
+/**
+ * Setiap rekod jatuh ke SATU peranan sahaja. Pegawai yang turut bertugas
+ * sebagai penguji (isPenguji) tetap dikira mengikut peranan utamanya —
+ * kalau tidak, satu orang akan dikira dua kali dan JUMLAH laporan tidak
+ * lagi sepadan dengan bilangan orang yang hadir.
+ */
+export const roleKeyOf = (rec: SubmissionData): ProgramRoleKey => {
+  const r = (rec.role || 'PESERTA').toUpperCase();
+  if (r === 'PESERTA' || r === 'PENERIMA RAMBU') return 'peserta';
+  if (r === 'PEMIMPIN') return 'pemimpin';
+  if (r.includes('PENOLONG')) return 'penolong';
+  if (r === 'PEMBANTU') return 'pembantu';
+  if (r === 'PENGUJI') return 'penguji';
+  return rec.isPenguji ? 'penguji' : 'peserta';
+};
+
+export const filterByRoles = (
+  data: SubmissionData[],
+  roles: ReadonlySet<ProgramRoleKey>,
+): SubmissionData[] => data.filter(rec => roles.has(roleKeyOf(rec)));
+
+/** Bilangan rekod bagi setiap peranan — untuk label kotak pilihan. */
+export const countByRole = (data: SubmissionData[]): Record<ProgramRoleKey, number> => {
+  const count: Record<ProgramRoleKey, number> = {
+    peserta: 0, pemimpin: 0, penolong: 0, pembantu: 0, penguji: 0,
+  };
+  for (const rec of data) {
+    if (rec.isWithdrawn) continue;
+    count[roleKeyOf(rec)] += 1;
+  }
+  return count;
+};
+
 export const MOD_PELAKSANAAN = ['Bersemuka', 'Dalam Talian', 'Hibrid'] as const;
 
 export const PERINGKAT_PENYERTAAN = [

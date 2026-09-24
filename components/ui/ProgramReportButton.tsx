@@ -7,9 +7,13 @@ import {
   buildProgramReportRows,
   sumProgramReportRows,
   programReportFilename,
+  filterByRoles,
+  countByRole,
   MOD_PELAKSANAAN,
   PERINGKAT_PENYERTAAN,
+  PROGRAM_ROLES,
   ProgramReportHeader,
+  ProgramRoleKey,
 } from '../../services/programReportPdf';
 
 interface ProgramReportButtonProps {
@@ -24,6 +28,10 @@ interface ProgramReportButtonProps {
 // dalam pelayar. Admin menjana laporan yang sama berulang kali sepanjang
 // tahun dan tidak sepatutnya menaip semula setiap kali.
 const STORAGE_KEY = 'laporanProgram.header';
+const ROLES_KEY = 'laporanProgram.peranan';
+
+// Laporan rasmi mengira peserta sahaja; pegawai dihidupkan hanya bila diminta.
+const DEFAULT_ROLES: ProgramRoleKey[] = ['peserta'];
 
 const DEFAULT_HEADER: ProgramReportHeader = {
   namaProgram: '',
@@ -52,6 +60,29 @@ const saveHeader = (header: ProgramReportHeader) => {
   }
 };
 
+const loadRoles = (): Set<ProgramRoleKey> => {
+  try {
+    const raw = localStorage.getItem(ROLES_KEY);
+    if (!raw) return new Set(DEFAULT_ROLES);
+    const parsed = JSON.parse(raw);
+    const valid = Array.isArray(parsed)
+      ? parsed.filter((r: unknown): r is ProgramRoleKey =>
+          PROGRAM_ROLES.some(p => p.key === r))
+      : [];
+    return new Set(valid.length ? valid : DEFAULT_ROLES);
+  } catch {
+    return new Set(DEFAULT_ROLES);
+  }
+};
+
+const saveRoles = (roles: Set<ProgramRoleKey>) => {
+  try {
+    localStorage.setItem(ROLES_KEY, JSON.stringify(Array.from(roles)));
+  } catch {
+    // Sama seperti di atas — kegagalan storan tidak menghalang laporan.
+  }
+};
+
 export const ProgramReportButton: React.FC<ProgramReportButtonProps> = ({
   data,
   year,
@@ -61,6 +92,7 @@ export const ProgramReportButton: React.FC<ProgramReportButtonProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [header, setHeader] = useState<ProgramReportHeader>(DEFAULT_HEADER);
+  const [roles, setRoles] = useState<Set<ProgramRoleKey>>(() => new Set(DEFAULT_ROLES));
 
   // Nama program mengikut tapisan semasa supaya laporan dan data sentiasa
   // merujuk program yang sama; medan lain dikekalkan daripada kali terakhir.
@@ -68,20 +100,38 @@ export const ProgramReportButton: React.FC<ProgramReportButtonProps> = ({
     if (!isOpen) return;
     const saved = loadHeader();
     setHeader({ ...saved, namaProgram: badge || saved.namaProgram });
+    setRoles(loadRoles());
   }, [isOpen, badge]);
+
+  const toggleRole = (key: ProgramRoleKey) => {
+    setRoles(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const set = (key: keyof ProgramReportHeader) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
   ) => setHeader(prev => ({ ...prev, [key]: e.target.value }));
 
+  const roleCounts = useMemo(() => countByRole(data), [data]);
+
+  const selectedData = useMemo(() => filterByRoles(data, roles), [data, roles]);
+
   const preview = useMemo(() => {
-    const rows = buildProgramReportRows(data);
+    const rows = buildProgramReportRows(selectedData);
     return { rows: rows.length, total: sumProgramReportRows(rows) };
-  }, [data]);
+  }, [selectedData]);
 
   const handleExport = (action: 'download' | 'preview') => {
-    if (data.length === 0) {
-      alert('Tiada data untuk dijana.');
+    if (roles.size === 0) {
+      alert('Sila tanda sekurang-kurangnya satu peranan.');
+      return;
+    }
+    if (selectedData.length === 0) {
+      alert('Tiada data untuk peranan yang ditanda.');
       return;
     }
     if (!header.namaProgram.trim()) {
@@ -91,7 +141,8 @@ export const ProgramReportButton: React.FC<ProgramReportButtonProps> = ({
     setGenerating(true);
     try {
       saveHeader(header);
-      const doc = generateProgramReport(data, header);
+      saveRoles(roles);
+      const doc = generateProgramReport(selectedData, header);
       if (action === 'download') downloadPDF(doc, programReportFilename(header.namaProgram, year));
       else previewPDF(doc);
       setIsOpen(false);
@@ -194,9 +245,45 @@ export const ProgramReportButton: React.FC<ProgramReportButtonProps> = ({
                 </div>
               </div>
 
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">
+                  Peranan yang dikira dalam laporan
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {PROGRAM_ROLES.map(r => {
+                    const checked = roles.has(r.key);
+                    const bil = roleCounts[r.key];
+                    return (
+                      <label
+                        key={r.key}
+                        className={`flex items-center gap-2 px-3 py-2 border-2 rounded-lg cursor-pointer transition text-xs
+                          ${checked ? 'bg-indigo-50 border-indigo-400' : 'border-gray-200 hover:border-gray-300'}
+                          ${bil === 0 ? 'opacity-50' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleRole(r.key)}
+                          className="rounded"
+                        />
+                        <span className="font-bold">{r.label}</span>
+                        <span className="text-[10px] font-bold bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">
+                          {bil}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {roles.size === 0 && (
+                  <p className="mt-2 text-[11px] font-bold text-red-600">
+                    Tanda sekurang-kurangnya satu peranan.
+                  </p>
+                )}
+              </div>
+
               <div className="bg-slate-50 border rounded-lg p-3 text-xs">
                 <strong className="text-gray-700">7.0 Butiran Penyertaan</strong>
-                <span className="text-gray-500"> — dikira automatik daripada tapisan semasa</span>
+                <span className="text-gray-500"> — dikira automatik daripada peranan ditanda</span>
                 <div className="mt-2 text-gray-700">
                   {preview.rows} sekolah · {preview.total.jumlah} orang
                   {' '}(L: {preview.total.lelaki} · P: {preview.total.perempuan})
@@ -218,14 +305,14 @@ export const ProgramReportButton: React.FC<ProgramReportButtonProps> = ({
               </button>
               <button
                 onClick={() => handleExport('preview')}
-                disabled={generating}
+                disabled={generating || roles.size === 0}
                 className="px-3 py-2 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 flex items-center gap-1 font-bold disabled:opacity-50"
               >
                 <Eye size={14} /> Pratonton
               </button>
               <button
                 onClick={() => handleExport('download')}
-                disabled={generating}
+                disabled={generating || roles.size === 0}
                 className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1 font-bold disabled:opacity-50"
               >
                 <Download size={14} /> {generating ? 'Menjana...' : 'Muat Turun'}
